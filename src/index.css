@@ -287,46 +287,102 @@ kbd { font-family: inherit; font-size: 11px; padding: 1px 6px; border: 1px solid
 
 .speedo { position: absolute; right: var(--gutter); bottom: var(--gutter); display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
 
-/* ── Analog gauge ───────────────────────────────────────────────────── */
-.gauge { width: clamp(150px, 19vw, 230px); aspect-ratio: 1; filter: drop-shadow(0 6px 18px rgba(0, 0, 0, 0.55)); }
+/* ── Instrument cluster (NFS-style neon) ───────────────────────────── */
+.speedo { flex-direction: row; align-items: flex-end; gap: 4px; }
+.speedo__side { display: flex; flex-direction: column; align-items: center; gap: 2px; margin-bottom: 6px; }
+.gauge { --neon: #3fdcff; --neon-glow: rgba(63, 220, 255, 0.85); position: relative; filter: drop-shadow(0 4px 14px rgba(0, 0, 0, 0.5)); }
 .gauge svg { width: 100%; height: 100%; display: block; overflow: visible; }
-.gauge__bezel { fill: #0b0f17; stroke: rgba(200, 215, 240, 0.35); stroke-width: 2; }
-.gauge__face { fill: rgba(6, 9, 15, 0.86); stroke: rgba(255, 255, 255, 0.06); stroke-width: 1; }
-.gauge__band { fill: none; stroke: rgba(255, 255, 255, 0.08); stroke-width: 2; }
-.gauge__tick { stroke: rgba(255, 255, 255, 0.55); stroke-width: 1.2; }
-.gauge__tick--major { stroke: #fff; stroke-width: 2.4; }
-.gauge__num { fill: #f2f4f8; font-family: var(--font-display); font-weight: 700; font-style: italic; font-size: 12px; text-shadow: none; }
-.gauge__tach-track { fill: none; stroke: rgba(255, 255, 255, 0.1); stroke-width: 5; }
-.gauge__tach-red { fill: none; stroke: rgba(255, 59, 59, 0.75); stroke-width: 5; }
-.gauge__tach-tick { stroke: rgba(255, 255, 255, 0.35); stroke-width: 1; }
-.gauge__tach-fill { fill: none; stroke: var(--accent); stroke-width: 5; stroke-linecap: butt; transition: d 0.08s linear; }
-.gauge--redline .gauge__tach-fill { stroke: var(--danger); }
-.gauge__tach-label { fill: var(--muted); font-family: var(--font-display); font-size: 7px; letter-spacing: 0.12em; text-transform: uppercase; }
-.gauge__needle { transform-origin: 100px 100px; transition: transform 0.09s linear; }
-.gauge__needle polygon { fill: #ff3b1f; filter: drop-shadow(0 0 4px rgba(255, 70, 30, 0.9)); }
-.gauge--nitro .gauge__needle polygon { fill: var(--accent-2); filter: drop-shadow(0 0 6px rgba(25, 195, 255, 1)); }
-.gauge__hub { fill: #0d1119; stroke: rgba(255, 255, 255, 0.18); stroke-width: 1.5; }
-.gauge__speed { fill: #fff; font-family: var(--font-display); font-weight: 900; font-style: italic; font-size: 26px; font-variant-numeric: tabular-nums; }
-.gauge__unit { fill: var(--muted); font-family: var(--font-display); font-weight: 700; font-size: 8px; letter-spacing: 0.14em; text-transform: uppercase; }
-.gauge__gear-box { fill: var(--accent); }
-.gauge--redline .gauge__gear-box { fill: var(--danger); }
-.gauge__gear { fill: var(--accent-ink); font-family: var(--font-display); font-weight: 900; font-style: italic; font-size: 20px; }
+.gauge--speed { width: clamp(170px, 20vw, 260px); aspect-ratio: 1; }
+.gauge--small { width: clamp(84px, 9vw, 120px); aspect-ratio: 1; }
+
+.gauge__track { fill: none; stroke: rgba(63, 220, 255, 0.12); stroke-width: 2; }
+.gauge__trail { fill: none; stroke: var(--neon); stroke-width: 2.4; filter: drop-shadow(0 0 4px var(--neon-glow)); transition: d 0.12s linear; }
+.gauge__tick { stroke: rgba(63, 220, 255, 0.28); stroke-width: 1.6; stroke-linecap: round; transition: stroke 0.15s, filter 0.15s; }
+.gauge__tick--major { stroke-width: 3; }
+.gauge__tick.is-lit { stroke: var(--neon); filter: drop-shadow(0 0 3px var(--neon-glow)); }
+.gauge__tick--red { stroke: rgba(255, 60, 60, 0.45); }
+.gauge__tick--red.is-lit { stroke: #ff3b3b; filter: drop-shadow(0 0 4px rgba(255, 60, 60, 0.95)); }
+.gauge__num { fill: rgba(200, 240, 255, 0.92); font-family: var(--font-display); font-weight: 700; font-style: italic; font-size: 15px; text-shadow: 0 0 6px rgba(63, 220, 255, 0.6); }
+.gauge__num--small { font-size: 10px; }
+.gauge__num--red { fill: #ff5a4a; text-shadow: 0 0 6px rgba(255, 60, 60, 0.7); }
+
+/* Needle: red with a hot glow; eases with a touch of overshoot between 20 Hz updates. */
+.gauge__needle { transform-box: view-box; transition: transform 0.14s cubic-bezier(0.34, 1.5, 0.64, 1); }
+.gauge--speed .gauge__needle { transform-origin: 100px 100px; }
+.gauge--small .gauge__needle { transform-origin: 60px 60px; }
+.gauge__needle polygon { fill: #ff2d1f; filter: drop-shadow(0 0 4px rgba(255, 60, 30, 1)); }
+.gauge__sweep { transform-box: view-box; }
+.gauge--speed .gauge__sweep { transform-origin: 100px 100px; }
+.gauge--small .gauge__sweep { transform-origin: 60px 60px; }
+.gauge--sweep .gauge__sweep { animation: gauge-sweep 1.4s ease-in-out 0.2s both; }
+.gauge--small.gauge--sweep .gauge__sweep { animation-name: gauge-sweep-small; }
+@keyframes gauge-sweep { 0%, 100% { transform: rotate(0deg); } 45% { transform: rotate(250deg); } }
+@keyframes gauge-sweep-small { 0%, 100% { transform: rotate(0deg); } 45% { transform: rotate(240deg); } }
+
+.gauge__hub { fill: rgba(4, 10, 22, 0.9); stroke: rgba(63, 220, 255, 0.35); stroke-width: 1.5; }
+.gauge__hub--small { stroke-width: 1; }
+.gauge__gear {
+  fill: #ff3b2b; font-family: var(--font-display); font-weight: 800; font-size: 36px;
+  filter: drop-shadow(0 0 6px rgba(255, 50, 30, 0.9));
+  transform-box: fill-box; transform-origin: center; animation: gauge-gear-pop 0.32s cubic-bezier(0.2, 1.6, 0.4, 1);
+}
+@keyframes gauge-gear-pop { 0% { transform: scale(1.7); opacity: 0.3; } 100% { transform: scale(1); opacity: 1; } }
+.gauge--shift .gauge__gear { animation: gauge-shift 0.16s steps(2) infinite; }
+@keyframes gauge-shift { 50% { fill: #fff; filter: drop-shadow(0 0 10px rgba(255, 80, 60, 1)); } }
+
+/* Digital speed: a lit LCD window, like the NFS cluster. */
+.gauge__lcd { fill: rgba(170, 225, 255, 0.88); stroke: rgba(255, 255, 255, 0.6); stroke-width: 1; filter: drop-shadow(0 0 6px rgba(120, 210, 255, 0.7)); }
+.gauge__speed { fill: #0c2a44; font-family: var(--font-display); font-weight: 800; font-size: 24px; font-variant-numeric: tabular-nums; letter-spacing: 0.04em; }
+.gauge__unit { fill: rgba(200, 240, 255, 0.9); font-family: var(--font-display); font-weight: 700; font-size: 11px; letter-spacing: 0.1em; }
+
+.gauge__small-face { fill: rgba(4, 10, 22, 0.55); stroke: rgba(63, 220, 255, 0.14); stroke-width: 1; }
+.gauge__label { fill: rgba(200, 240, 255, 0.92); font-family: var(--font-display); font-weight: 800; font-size: 11px; letter-spacing: 0.08em; }
+.gauge__sublabel { fill: var(--muted); font-family: var(--font-display); font-size: 7px; letter-spacing: 0.1em; }
+.gauge__redzone { fill: none; stroke: rgba(255, 50, 40, 0.75); stroke-width: 3; }
+.gauge--rpm.gauge--shift .gauge__small-face { animation: gauge-shift-ring 0.16s steps(2) infinite; }
+@keyframes gauge-shift-ring { 50% { stroke: #ff3b2b; stroke-width: 3; fill: rgba(80, 6, 4, 0.6); } }
+
+/* N₂O: blue fill arc; glows when ready, pulses while boosting. */
+.gauge__n2o-track { fill: none; stroke: rgba(63, 120, 255, 0.15); stroke-width: 6; }
+.gauge__n2o-fill { fill: none; stroke: #2f7dff; stroke-width: 6; opacity: 0.75; transition: d 0.15s linear, stroke 0.2s; }
+.gauge__tick--n2o { stroke: rgba(120, 170, 255, 0.5); }
+.gauge--nitro-ready .gauge__n2o-fill { stroke: #46a8ff; opacity: 1; filter: drop-shadow(0 0 4px rgba(70, 170, 255, 0.9)); }
+.gauge--nitro-active .gauge__n2o-fill { stroke: #8fe3ff; opacity: 1; animation: gauge-n2o-pulse 0.35s ease-in-out infinite alternate; }
+.gauge--nitro-active .gauge__small-face { stroke: #46a8ff; stroke-width: 2; }
+@keyframes gauge-n2o-pulse { from { filter: drop-shadow(0 0 3px rgba(80, 180, 255, 0.8)); } to { filter: drop-shadow(0 0 10px rgba(140, 220, 255, 1)); } }
+.gauge__hint { position: absolute; left: 50%; bottom: -4px; transform: translateX(-50%); font-size: 10px; animation: gauge-hint 1s ease-in-out infinite; }
+@keyframes gauge-hint { 50% { opacity: 0.45; } }
+
+/* Boosting: the big dial runs hot blue-white. */
+.gauge--speed.gauge--nitro { --neon: #9fe8ff; --neon-glow: rgba(150, 220, 255, 1); }
+.gauge--speed.gauge--nitro .gauge__needle polygon { fill: #8fe3ff; filter: drop-shadow(0 0 6px rgba(140, 220, 255, 1)); }
 
 /* ── Minimap ────────────────────────────────────────────────────────── */
 .hud-tr { position: absolute; top: var(--gutter); right: var(--gutter); display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
 .hud-tr .hud-fps { position: static; }
 /* Minimap bottom-left, opposite the speedometer (NFS-style). */
 .hud-bl { position: absolute; left: var(--gutter); bottom: var(--gutter); }
-.minimap {
-  width: clamp(110px, 15vw, 190px); aspect-ratio: 1; padding: 6px;
-  background: var(--glass-flat); border: 1px solid var(--line);
-  clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
+.minimap { position: relative; width: clamp(150px, 17vw, 240px); }
+.minimap svg {
+  width: 100%; aspect-ratio: 1; display: block; overflow: hidden;
+  /* No frame: the map fades out into the scene, like NFS. */
+  -webkit-mask-image: radial-gradient(circle at 50% 62%, #000 42%, transparent 70%);
+  mask-image: radial-gradient(circle at 50% 62%, #000 42%, transparent 70%);
 }
-.minimap svg { width: 100%; height: 100%; display: block; }
-.minimap__edge { fill: none; stroke: rgba(0, 0, 0, 0.75); stroke-width: 5; stroke-linejoin: round; }
-.minimap__track { fill: none; stroke: rgba(235, 240, 250, 0.9); stroke-width: 2.4; stroke-linejoin: round; }
-.minimap__start { stroke: var(--accent); stroke-width: 1.6; }
-.minimap__car path { fill: var(--accent); stroke: #000; stroke-width: 0.8; filter: drop-shadow(0 0 2px rgba(255, 210, 0, 0.9)); }
+.minimap__edge { fill: none; stroke: rgba(0, 0, 0, 0.55); stroke-width: 7px; stroke-linejoin: round; }
+.minimap__track { fill: none; stroke: rgba(225, 236, 250, 0.85); stroke-width: 3px; stroke-linejoin: round; }
+.minimap__route {
+  fill: none; stroke: #3fdcff; stroke-width: 4px; stroke-linejoin: round; stroke-linecap: round;
+  filter: drop-shadow(0 0 3px rgba(63, 220, 255, 0.9));
+}
+.minimap__start { stroke: #fff; stroke-width: 3px; }
+.minimap__car circle { fill: rgba(10, 40, 60, 0.6); stroke: #3fdcff; stroke-width: 0.9; filter: drop-shadow(0 0 2px rgba(63, 220, 255, 0.9)); }
+.minimap__car path { fill: #fff; }
+.minimap__dist {
+  position: absolute; left: 0; right: 0; bottom: 4%; text-align: center;
+  font-size: clamp(15px, 1.5vw, 20px); font-weight: 600; color: #3fdcff; letter-spacing: 0.04em;
+  text-shadow: 0 0 8px rgba(63, 220, 255, 0.7), 0 1px 2px #000;
+}
 
 /* ── Wrong way ──────────────────────────────────────────────────────── */
 .hud-wrongway {
@@ -393,14 +449,14 @@ html, body { overscroll-behavior: none; }
 
 /* HUD rearranged around the thumbs: speed top-centre, fps under the buttons. */
 .overlay--touch .speedo { top: max(6px, env(safe-area-inset-top)); bottom: auto; right: 50%; transform: translateX(50%); align-items: center; }
-.overlay--touch .gauge { width: 118px; }
-.overlay--touch .speedo .ui-meter { width: 118px; }
-.overlay--touch .speedo .ui-meter__hint { display: none; }
+.overlay--touch .gauge--speed { width: 124px; }
+.overlay--touch .gauge--small { width: 58px; }
+.overlay--touch .gauge__hint { display: none; }
 .overlay--touch .hud-tr { top: max(8px, env(safe-area-inset-top)); right: max(var(--gutter), env(safe-area-inset-right)); }
 /* Bottom-left is the steering thumb's area on touch, so the map stays top-right there. */
 .overlay--touch .hud-bl { left: auto; bottom: auto; top: max(8px, env(safe-area-inset-top)); right: max(var(--gutter), env(safe-area-inset-right)); }
-.overlay--touch .hud-tr { top: calc(max(8px, env(safe-area-inset-top)) + 104px); }
-.overlay--touch .minimap { width: 96px; }
+.overlay--touch .hud-tr { top: calc(max(8px, env(safe-area-inset-top)) + 126px); }
+.overlay--touch .minimap { width: 120px; }
 /* Touch reset/pause sit left of the minimap. */
-.overlay--touch .touch-top { right: calc(max(var(--gutter), env(safe-area-inset-right)) + 108px); top: max(8px, env(safe-area-inset-top)); }
+.overlay--touch .touch-top { right: calc(max(var(--gutter), env(safe-area-inset-right)) + 132px); top: max(8px, env(safe-area-inset-top)); }
 .overlay--touch .hud-tl { transform: scale(0.8); transform-origin: top left; }

@@ -29,7 +29,7 @@ export interface GameState {
   trackName: string
   /** 0..1 while a track is loading. */
   loadProgress: number
-  /** Track outline for the minimap: centreline [x, z] pairs, start line first. Set on track load. */
+  /** Track outline for the minimap: the full centreline as [x, z] pairs, start line first. Set on track load. */
   minimap: { points: [number, number][]; gates: [number, number][] } | null
   error: string | null
   settings: Settings

@@ -26,6 +26,10 @@ export interface Telemetry {
   carX: number
   carZ: number
   heading: number
+  /** Nearest centreline point (index into GameState.minimap.points), for the minimap route. */
+  trackIndex: number
+  /** Meters of racing left to the finish, over all remaining laps. */
+  distanceLeft: number
   /** Driving against the race direction for a moment. */
   wrongWay: boolean
 }
@@ -49,6 +53,8 @@ export const initialTelemetry: Telemetry = {
   carX: 0,
   carZ: 0,
   heading: 0,
+  trackIndex: 0,
+  distanceLeft: 0,
   wrongWay: false,
 }
 

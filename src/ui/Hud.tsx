@@ -1,8 +1,7 @@
 import { formatTime } from '../racing/LapTimer'
 import { useGame, useTelemetry } from './hooks'
-import { Meter } from './kit'
 import { Minimap } from './Minimap'
-import { Speedometer } from './Speedometer'
+import { NitroGauge, RpmGauge, Speedometer } from './Speedometer'
 
 /** Dial full scale. Comfortably above the 911's ~306 km/h top speed. */
 const DIAL_MAX_KMH = 340
@@ -16,6 +15,9 @@ function gearLabel(gear: number): string {
 export function Hud() {
   const t = useTelemetry((s) => s)
   const phase = useGame((s) => s.phase)
+  // Shift light just under the redline; needles sweep once on the start countdown.
+  const shift = t.gear > 0 && t.rpm >= t.redlineRpm * 0.94
+  const sweep = phase === 'countdown'
 
   return (
     <div className={t.nitroActive ? 'hud hud--nitro' : 'hud'}>
@@ -53,13 +55,11 @@ export function Hud() {
       )}
 
       <div className="speedo">
-        <Speedometer speedKmh={t.speedKmh} maxKmh={DIAL_MAX_KMH} rpm={t.rpm} redlineRpm={t.redlineRpm} gear={gearLabel(t.gear)} nitro={t.nitroActive} />
-        <Meter
-          label="Nitro"
-          value={t.nitro}
-          state={t.nitroActive ? 'active' : t.nitroReady ? 'ready' : 'empty'}
-          hint={t.nitroReady && !t.nitroActive ? <kbd>Shift</kbd> : undefined}
-        />
+        <div className="speedo__side">
+          <RpmGauge rpm={t.rpm} redlineRpm={t.redlineRpm} shift={shift} sweep={sweep} />
+          <NitroGauge level={t.nitro} active={t.nitroActive} ready={t.nitroReady} sweep={sweep} />
+        </div>
+        <Speedometer speedKmh={t.speedKmh} maxKmh={DIAL_MAX_KMH} gear={gearLabel(t.gear)} shift={shift} nitro={t.nitroActive} sweep={sweep} />
       </div>
     </div>
   )

@@ -62,6 +62,8 @@ export class Game {
   private guide!: DirectionGuide
   private progress!: TrackProgress
   private wrongWayTime = 0
+  /** Centreline length, meters (one lap). */
+  private lapLength = 0
   /** The car as shipped, before garage upgrades. */
   private baseConfig!: VehicleConfig
   private showroomYaw = 0.9
@@ -196,11 +198,13 @@ export class Game {
     this.guide = new DirectionGuide(this.track.line, edges)
     this.progress = new TrackProgress(this.track.line)
     this.renderer.scene.add(this.guide.group)
-    // ~300 points is plenty for a 160 px map.
-    const step = Math.max(1, Math.floor(this.track.line.length / 300))
+    const line = this.track.line
+    this.lapLength = 0
+    for (let i = 0; i < line.length; i++) this.lapLength += line[i].distanceTo(line[(i + 1) % line.length])
+    // Every point: the minimap is zoomed in and highlights the route from the car's index.
     gameStore.setState({
       minimap: {
-        points: this.track.line.filter((_, i) => i % step === 0).map((p) => [p.x, p.z]),
+        points: line.map((p) => [p.x, p.z]),
         gates: this.track.checkpoints.map((c) => [c.position.x, c.position.z]),
       },
     })
@@ -464,8 +468,23 @@ export class Game {
       carX: this.vehicle.position.x,
       carZ: this.vehicle.position.z,
       heading: Math.atan2(_forward.x, _forward.z),
+      trackIndex: this.progress.index,
+      distanceLeft: this.distanceLeft(),
       wrongWay: this.wrongWayTime > WRONG_WAY_DELAY,
     })
+  }
+
+  /** Meters to the finish: the rest of this lap plus every lap after it. */
+  private distanceLeft(): number {
+    const n = this.track.line.length
+    if (!n) return 0
+    const spacing = this.lapLength / n
+    const i = this.progress.index
+    let lap = ((n - i) % n) * spacing
+    // Still behind the start line on the grid: the whole lap is ahead too.
+    if (this.race.lastCheckpoint === 0 && i > n / 2) lap += this.lapLength
+    const lapsAfter = Math.max(0, this.race.totalLaps - Math.max(1, this.race.lap))
+    return this.race.state === 'finished' ? 0 : lap + lapsAfter * this.lapLength
   }
 
   /** Menu and garage show the car in the showroom; racing shows the track. */
