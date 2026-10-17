@@ -2,6 +2,7 @@ import RAPIER from '@dimforge/rapier3d-compat'
 import * as THREE from 'three'
 import type { InputState } from '../input/InputManager'
 import { Drivetrain } from './Drivetrain'
+import { Nitro } from './Nitro'
 import { Suspension } from './Suspension'
 import { computeTireForces } from './TirePhysics'
 import type { VehicleConfig, WheelConfig } from './VehicleConfig'
@@ -16,6 +17,11 @@ export interface WheelState {
   spin: number
   /** 0..1, for skid marks / tire squeal. */
   slip: number
+  /**
+   * Sideways speed of the contact patch, m/s. Slip alone is high under hard
+   * straight-line acceleration too; effects use this to tell an actual slide.
+   */
+  slide: number
 }
 
 // Scratch objects — the controller runs at 60 Hz, so avoid per-tick allocation.
@@ -45,6 +51,7 @@ function approach(value: number, target: number, step: number): number {
 export class VehicleController {
   readonly wheels: WheelState[]
   readonly drivetrain: Drivetrain
+  readonly nitro: Nitro
   steerAngle = 0
   /** Signed forward speed of the chassis, m/s. */
   forwardSpeed = 0
@@ -63,6 +70,7 @@ export class VehicleController {
     this.body = body
     this.world = world
     this.drivetrain = new Drivetrain(cfg.engine)
+    this.nitro = new Nitro(cfg.nitro)
     const [hx, , hz] = cfg.chassisHalfExtents
     this.yawInertia = (cfg.massKg / 3) * (hx * hx + hz * hz)
     const zs = cfg.wheels.map((w) => w.position[2])
@@ -74,6 +82,7 @@ export class VehicleController {
       contactPoint: new THREE.Vector3(),
       spin: 0,
       slip: 0,
+      slide: 0,
     }))
   }
 
@@ -113,6 +122,24 @@ export class VehicleController {
     const driveThrottle = reversing ? this.brake : this.throttle
     const brakeInput = reversing ? this.throttle : this.brake
 
+    // Nitro reads last tick's tire slip; boosting only pushes forward gears.
+    let slipSum = 0
+    let groundedCount = 0
+    for (const w of this.wheels) {
+      if (!w.grounded) continue
+      slipSum += w.slip
+      groundedCount++
+    }
+    this.nitro.update(
+      {
+        slip: groundedCount ? slipSum / groundedCount : 0,
+        speed: _vel.length(),
+        grounded: groundedCount > 0,
+        wantsBoost: input.nitro && !reversing,
+      },
+      dt,
+    )
+
     const driven = this.wheels.filter((w) => w.cfg.driven)
     const drivenRadius = driven[0]?.cfg.radius ?? 0.35
     const driveForce = this.drivetrain.update(this.forwardSpeed, drivenRadius, driveThrottle, wantsReverse, dt)
@@ -133,6 +160,7 @@ export class VehicleController {
       w.grounded = !!hit
       if (!hit) {
         w.slip = 0
+        w.slide = 0
         if (wc.driven) w.spin += driveThrottle * 30 * dt
         continue
       }
@@ -176,6 +204,7 @@ export class VehicleController {
         cfg.tires,
       )
       w.slip = tire.slip
+      w.slide = Math.abs(vLat)
 
       // Apply tire forces slightly above the contact patch to tame body roll.
       _point.copy(w.contactPoint).addScaledVector(_up, wc.radius * 0.6)
@@ -190,11 +219,19 @@ export class VehicleController {
 
     this.applyStabilityAssist(input.handbrake, speed, dt)
 
+    // Nitro is thrust at the center of mass, not tire force: the rears are
+    // already near their grip limit under power, so routing it through the
+    // friction circle would mostly turn into wheelspin. Grounded only.
+    if (this.nitro.intensity > 0 && groundedCount > 0) {
+      _impulse.copy(_fwd).multiplyScalar(this.nitro.force * dt)
+      body.applyImpulse(_impulse, true)
+    }
+
     // Aerodynamics: quadratic drag + downforce.
     _vel.set(lv.x, lv.y, lv.z)
     const v2 = _vel.lengthSq()
     if (v2 > 0.01) {
-      _impulse.copy(_vel).normalize().multiplyScalar(-cfg.dragCoefficient * v2 * dt)
+      _impulse.copy(_vel).normalize().multiplyScalar(-cfg.dragCoefficient * this.nitro.dragScale * v2 * dt)
       _impulse.addScaledVector(_up, -cfg.downforceCoefficient * this.forwardSpeed * this.forwardSpeed * dt)
       body.applyImpulse(_impulse, true)
     }
@@ -225,9 +262,11 @@ export class VehicleController {
     this.throttle = 0
     this.brake = 0
     this.drivetrain.reset()
+    this.nitro.reset()
     for (const w of this.wheels) {
       w.suspension.reset()
       w.slip = 0
+      w.slide = 0
     }
   }
 }

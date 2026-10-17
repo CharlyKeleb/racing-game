@@ -1,6 +1,9 @@
 import * as THREE from 'three'
 import { Sky } from 'three/examples/jsm/objects/Sky.js'
 
+/** Brightest the sky may get. Just over PostFX's bloom threshold (1.2): the sun glints, it doesn't flood. */
+const SKY_MAX_LUMINANCE = 1.6
+
 /** Sky dome, sun and fog. Time-of-day presets plug in here later. */
 export class Environment {
   readonly group = new THREE.Group()
@@ -20,6 +23,14 @@ export class Environment {
     const azimuth = THREE.MathUtils.degToRad(135)
     this.sunDirection.setFromSphericalCoords(1, Math.PI / 2 - elevation, azimuth)
     u.sunPosition.value.copy(this.sunDirection)
+    // The sky is HDR: the sun disc reaches ~60000 and the glow around it stays
+    // well above the bloom threshold, so a wide FOV (speed, nitro kick) that
+    // catches the sun washed the whole screen white. Clamp it to a soft glow.
+    const sky = this.sky.material
+    sky.fragmentShader = sky.fragmentShader.replace(
+      'gl_FragColor = vec4( texColor, 1.0 );',
+      `gl_FragColor = vec4( min( texColor, vec3( ${SKY_MAX_LUMINANCE.toFixed(2)} ) ), 1.0 );`,
+    )
 
     scene.fog = new THREE.Fog(0xbfd4e6, 250, 900)
     scene.background = new THREE.Color(0xbfd4e6)

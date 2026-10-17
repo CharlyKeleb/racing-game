@@ -71,6 +71,36 @@ export function StatBar({ label, value }: { label: string; value: number }) {
   )
 }
 
+/**
+ * Slanted continuous gauge for a 0..1 resource (nitro, boost, damage).
+ * `state` drives the look: 'empty' is dim, 'ready' glows, 'active' pulses.
+ */
+export function Meter({
+  label,
+  value,
+  state = 'ready',
+  hint,
+}: {
+  label: string
+  value: number
+  state?: 'empty' | 'ready' | 'active'
+  hint?: ReactNode
+}) {
+  const pct = Math.round(Math.max(0, Math.min(1, value)) * 100)
+  return (
+    <div className={`ui-meter ui-meter--${state}`}>
+      <span className="ui-meter__label">
+        {label}
+        {hint && <span className="ui-meter__hint">{hint}</span>}
+      </span>
+      <span className="ui-meter__track" role="meter" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct}>
+        <i className="ui-meter__fill" style={{ transform: `scaleX(${pct / 100})` }} />
+        <i className="ui-meter__ticks" aria-hidden="true" />
+      </span>
+    </div>
+  )
+}
+
 /** Slanted segmented control for picking one option. */
 export function Segmented<T extends string | number>({
   label,

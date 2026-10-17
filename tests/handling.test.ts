@@ -43,7 +43,7 @@ function spawnCar(cfg: VehicleConfig) {
   return { ctrl, step }
 }
 
-const drive = (steer: number): InputState => ({ throttle: 1, brake: 0, steer, handbrake: false })
+const drive = (steer: number): InputState => ({ throttle: 1, brake: 0, steer, handbrake: false, nitro: false })
 
 /** Accelerate in a straight line to ~120 km/h, then hold full right lock. */
 function holdTurn(cfg: VehicleConfig) {

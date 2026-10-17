@@ -58,6 +58,25 @@ export interface EngineConfig {
   shiftTimeSec: number
 }
 
+export interface NitroConfig {
+  /** Seconds a full tank lasts. */
+  durationSec: number
+  /** Tank fraction gained per second at full slip. */
+  fillRate: number
+  /** Mean tire slip (0..1) above which the tank starts filling. */
+  slipThreshold: number
+  /** No filling below this speed, m/s, so launch wheelspin can't farm nitro. */
+  minFillSpeed: number
+  /** Tank fraction needed to start a boost. */
+  minCharge: number
+  /** Forward thrust at the center of mass while boosting, N. Bypasses the tires, like a rocket. */
+  force: number
+  /** Fractional gain in drag-limited top speed while boosting (0.15 = +15%). */
+  topSpeedBonus: number
+  /** Boost ramp in/out, units/s. */
+  rampRate: number
+}
+
 export interface VehicleConfig {
   id: string
   name: string
@@ -93,6 +112,9 @@ export interface VehicleConfig {
   yawStability: number
   dragCoefficient: number
   downforceCoefficient: number
+  nitro: NitroConfig
+  /** Exhaust tips in car-local space, for nitro flames. Derived from the chassis when absent. */
+  exhausts?: [number, number, number][]
 }
 
 /**
@@ -149,6 +171,16 @@ export const DEFAULT_VEHICLE_CONFIG: VehicleConfig = {
   yawStability: 8,
   dragCoefficient: 0.38,
   downforceCoefficient: 1.6,
+  nitro: {
+    durationSec: 4,
+    fillRate: 0.25,
+    slipThreshold: 0.55,
+    minFillSpeed: 12,
+    minCharge: 0.15,
+    force: 6500,
+    topSpeedBonus: 0.15,
+    rampRate: 5,
+  },
 }
 
 /** Shallow-merges a partial JSON config over the defaults, nested objects included. */
@@ -161,6 +193,7 @@ export function resolveVehicleConfig(partial: Partial<VehicleConfig> | undefined
     suspension: { ...d.suspension, ...partial.suspension },
     tires: { ...d.tires, ...partial.tires },
     engine: { ...d.engine, ...partial.engine },
+    nitro: { ...d.nitro, ...partial.nitro },
     wheels: partial.wheels ?? d.wheels,
   }
 }
