@@ -110,6 +110,7 @@ export class Vehicle {
       // Deep red lens; a saturated red glow survives tone mapping as red, not pale orange.
       own.color.setRGB(0.55, 0.06, 0.05)
       own.emissive.setRGB(1, 0.02, 0.01)
+      own.emissiveMap = null // a baked lens texture would tint the glow orange
       own.emissiveIntensity = 0
       mesh.material = own
       this.taillights.push(own)
