@@ -1,5 +1,7 @@
+import { Howler } from 'howler'
 import { existsSync, readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
+import { AudioManager } from '../src/audio/AudioManager'
 import { decodeWav16, GranularEngine, type EngineBank } from '../src/audio/GranularEngine'
 
 const OUT_RATE = 48000
@@ -96,6 +98,14 @@ describe('GranularEngine', () => {
     const { pcm, sampleRate } = decodeWav16(buf)
     expect(sampleRate).toBe(22050)
     expect(Array.from(pcm.subarray(0, 4))).toEqual([0, 0.5, -0.5, 32767 / 32768])
+  })
+})
+
+describe('AudioManager', () => {
+  it("turns off Howler's 30 s auto-suspend, which silenced the borrowed context mid-race", () => {
+    Howler.autoSuspend = true
+    new AudioManager()
+    expect(Howler.autoSuspend).toBe(false)
   })
 })
 

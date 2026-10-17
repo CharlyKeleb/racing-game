@@ -44,6 +44,16 @@ export class AudioManager {
 
   private squealGain!: GainNode
   private squealFilter!: BiquadFilterNode
+  /** True while the game is paused; otherwise the context must stay running. */
+  private paused = false
+  private resumeTriedAt = -Infinity
+
+  constructor() {
+    // Howler suspends its AudioContext 30 s after load (and after each of its
+    // own sounds ends) when no Howl is playing. This game borrows that context
+    // for the engine and never plays a Howl, so the engine went silent mid-race.
+    Howler.autoSuspend = false
+  }
 
   /** Base URL of the car's audio folder, e.g. '/audio/porsche911/'; null = procedural only. */
   setCarAudio(url: string | undefined): void {
@@ -52,6 +62,7 @@ export class AudioManager {
 
   /** Must be called from a user gesture (browser autoplay policy). */
   unlock(volume: number): void {
+    this.paused = false
     if (this.ctx) {
       void this.ctx.resume()
       return
@@ -168,6 +179,15 @@ export class AudioManager {
   update(rpm: number, throttle: number, slip: number): void {
     const ctx = this.ctx
     if (!ctx) return
+    // Self-heal if anything else suspends the context while racing (another
+    // library, the OS taking audio focus). Retry at most once a second.
+    if (ctx.state !== 'running' && !this.paused) {
+      const now = performance.now()
+      if (now - this.resumeTriedAt > 1000) {
+        this.resumeTriedAt = now
+        void ctx.resume()
+      }
+    }
     const t = ctx.currentTime
     const rpmT = Math.min(rpm / RPM_SCALE, 1)
     const running = t >= this.engineStartAt ? 1 : 0
@@ -200,10 +220,12 @@ export class AudioManager {
   }
 
   suspend(): void {
+    this.paused = true
     void this.ctx?.suspend()
   }
 
   resume(): void {
+    this.paused = false
     void this.ctx?.resume()
   }
 
