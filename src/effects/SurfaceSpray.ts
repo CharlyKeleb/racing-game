@@ -8,7 +8,7 @@ const MAX_DUST = 420
 const MIN_CHURN = 2
 /** Grains / dust puffs per second per wheel at full churn on the loosest surface. */
 const GRAIN_RATE = 130
-const DUST_RATE = 16
+const DUST_RATE = 7
 const GRAVITY = -9.81
 const WIND_X = 0.5
 const WIND_Z = 0.25
@@ -21,7 +21,7 @@ const GRAIN_COLOR: Partial<Record<Surface, [number, number, number]>> = {
   [Surface.None]: [0.3, 0.27, 0.17],
 }
 const DUST_COLOR: Partial<Record<Surface, [number, number, number]>> = {
-  [Surface.Sand]: [0.8, 0.71, 0.55],
+  [Surface.Sand]: [0.68, 0.58, 0.42],
   [Surface.Gravel]: [0.66, 0.63, 0.58],
   [Surface.Grass]: [0.52, 0.47, 0.36],
   [Surface.None]: [0.52, 0.47, 0.36],
@@ -110,10 +110,10 @@ export class SurfaceSpray {
     _p.vx = v.x * 0.25 + (Math.random() - 0.5) * 1.5
     _p.vy = 0.3 + Math.random() * 0.7
     _p.vz = v.z * 0.25 + (Math.random() - 0.5) * 1.5
-    _p.life = 3 + Math.random() * 3
+    _p.life = 2.5 + Math.random() * 2
     _p.startSize = 0.7 + Math.random() * 0.5
-    _p.endSize = (3.5 + Math.random() * 3) * (0.6 + 0.4 * Math.min(1, amount))
-    _p.alpha = (0.07 + 0.12 * loose) * Math.min(1, 0.4 + amount)
+    _p.endSize = (2.5 + Math.random() * 2.5) * (0.6 + 0.4 * Math.min(1, amount))
+    _p.alpha = (0.03 + 0.06 * loose) * Math.min(1, 0.4 + amount)
     _p.r = c[0] * shade
     _p.g = c[1] * shade
     _p.b = c[2] * shade
