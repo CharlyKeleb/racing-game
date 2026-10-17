@@ -52,6 +52,7 @@ export class CarSound {
   private readonly squealGain: GainNode
   private readonly sources: AudioScheduledSourceNode[] = []
 
+  private firingPerRev = 3
   private nextPopAt = 0
   /** Engine held silent until this time (ignition cranking). */
   private startAt = 0
@@ -121,6 +122,11 @@ export class CarSound {
     this.sources.push(this.sub, this.whistle)
   }
 
+  /** Firing pulses per crank revolution (flat-six 3, V8 4), for the sub rumble's pitch. */
+  setFiringPerRev(n: number): void {
+    this.firingPerRev = n
+  }
+
   /** The car's lift-off burble recording (optional). */
   setLiftOffClip(buffer: AudioBuffer | null): void {
     this.liftOffClip = buffer
@@ -165,7 +171,7 @@ export class CarSound {
     set(this.raspEq.gain, on * (1.5 + 3 * rpmT), t, 0.025)
     set(this.exhaustGain.gain, 0.1 + 0.22 * on + 0.08 * rpmT, t, 0.025)
 
-    const halfOrder = Math.max(m.rpm, 600) / 40 // rpm/60 × 1.5
+    const halfOrder = (Math.max(m.rpm, 600) / 60) * (this.firingPerRev / 2) // the engine's half order
     set(this.sub.frequency, halfOrder, t, 0.03)
     set(this.subGain.gain, running * (0.05 + 0.1 * on) * (1 - 0.5 * rpmT), t, 0.08)
 

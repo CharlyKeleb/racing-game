@@ -1,0 +1,49 @@
+{
+  "id": "bmw",
+  "name": "BMW M3 E36 GTR",
+  "massKg": 1150,
+  "chassisHalfExtents": [0.9, 0.36, 2.2],
+  "chassisCenter": [0, 0.62, -0.1],
+  "centerOfMass": [0, 0.33, 0.08],
+  "wheels": [
+    { "id": "FL", "position": [0.764, 0.632, 1.35], "radius": 0.312, "width": 0.295, "steered": true, "driven": false, "handbrake": false },
+    { "id": "FR", "position": [-0.764, 0.632, 1.35], "radius": 0.312, "width": 0.295, "steered": true, "driven": false, "handbrake": false },
+    { "id": "RL", "position": [0.833, 0.632, -1.35], "radius": 0.31, "width": 0.295, "steered": false, "driven": true, "handbrake": true },
+    { "id": "RR", "position": [-0.833, 0.632, -1.35], "radius": 0.31, "width": 0.295, "steered": false, "driven": true, "handbrake": true }
+  ],
+  "engine": {
+    "idleRpm": 1200,
+    "redlineRpm": 8500,
+    "torqueCurve": [
+      [1200, 190],
+      [3000, 280],
+      [5000, 350],
+      [6500, 380],
+      [8000, 330],
+      [8500, 290]
+    ],
+    "gearRatios": [-3.2, 3.1, 2.25, 1.75, 1.42, 1.19, 1.02],
+    "finalDrive": 3.6,
+    "efficiency": 0.88,
+    "shiftUpRpm": 8200,
+    "shiftDownRpm": 4800,
+    "shiftTimeSec": 0.06
+  },
+  "exhausts": [[0.555, 0.295, -2.29]],
+  "tires": {
+    "grip": 1.45,
+    "corneringStiffness": 11,
+    "shape": 1.8,
+    "handbrakeGripScale": 0.4,
+    "rollingResistance": 0.012,
+    "tractionControl": true
+  },
+  "brakeForce": 24000,
+  "steerFalloffSpeed": 11,
+  "yawStability": 6,
+  "driftAssist": 0.2,
+  "maxDriftAngle": 0.6,
+  "dragCoefficient": 0.42,
+  "downforceCoefficient": 0.2,
+  "downforceFrontShare": 0.42
+}

@@ -225,6 +225,29 @@ kbd { font-family: inherit; font-size: 11px; padding: 1px 6px; border: 1px solid
 .garage-tabs button.on { background: var(--ink); color: #0a0f1a; border-color: var(--ink); }
 .garage-options { overflow-y: auto; flex: 0 1 auto; }
 .garage-options > .ui-btn { align-self: flex-start; margin-top: 4px; }
+.car-picker { display: flex; align-items: center; gap: 12px; }
+.garage-carpicker { position: absolute; right: var(--gutter); top: var(--gutter); z-index: 2; }
+.menu-car { display: flex; flex-direction: column; align-items: stretch; gap: 10px; }
+.menu-car .car-picker__name { flex: 1; min-width: 0; }
+.car-picker__name {
+  display: flex; flex-direction: column; align-items: center; min-width: 230px; padding: 6px 22px;
+  background: var(--glass-flat); border: 1px solid var(--line); transform: skewX(var(--skew));
+}
+.car-picker__name > * { transform: skewX(var(--unskew)); }
+.car-picker__name b {
+  font-family: var(--font-display); font-style: italic; font-weight: 900; font-size: 24px;
+  text-transform: uppercase; white-space: nowrap; line-height: 1.1;
+}
+.ui-chevron {
+  display: grid; place-items: center; width: 52px; height: 52px; padding: 0; cursor: pointer;
+  color: var(--accent-ink); background: var(--accent); border: 0; transform: skewX(var(--skew));
+  transition: background 0.15s, transform 0.1s, opacity 0.2s;
+}
+.ui-chevron svg { transform: skewX(var(--unskew)); }
+.ui-chevron:hover:not(:disabled) { background: #ffe14d; box-shadow: 0 6px 26px rgba(255, 210, 0, 0.45); }
+.ui-chevron:active:not(:disabled) { transform: skewX(var(--skew)) translateY(2px); }
+.ui-chevron:disabled { opacity: 0.35; cursor: default; }
+.ui-chevron:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 3px; }
 .garage-right { position: absolute; right: var(--gutter); bottom: var(--gutter); display: flex; flex-direction: column; align-items: flex-end; gap: 14px; }
 
 .swatches { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -411,6 +434,9 @@ kbd { font-family: inherit; font-size: 11px; padding: 1px 6px; border: 1px solid
 
 /* ── Small screens ──────────────────────────────────────────────────── */
 @media (max-width: 720px) {
+  .garage-carpicker { top: auto; left: var(--gutter); right: var(--gutter); justify-content: center; bottom: calc(var(--gutter) + 72px); }
+  .car-picker__name { min-width: 0; }
+  .car-picker__name b { font-size: 18px; }
   .menu-bottom { flex-direction: column; align-items: stretch; }
   .menu-actions { align-items: stretch; }
   .menu-track { text-align: left; }

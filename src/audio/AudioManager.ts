@@ -24,6 +24,8 @@ export class AudioManager {
   private master!: GainNode
   private sound: CarSound | null = null
   private carAudioUrl: string | null = null
+  /** Firing pulses per crank revolution (flat-six 3, V8 4): pitches the synth and sub. */
+  private firingPerRev = 3
 
   // Synth stand-in until the recordings load.
   private synthSaw!: OscillatorNode
@@ -45,9 +47,25 @@ export class AudioManager {
     Howler.autoSuspend = false
   }
 
-  /** Base URL of the car's audio folder, e.g. '/audio/porsche911/'; null = synth only. */
-  setCarAudio(url: string | undefined): void {
-    this.carAudioUrl = url ?? null
+  /**
+   * The car's audio folder, e.g. '/audio/porsche911/' (undefined = synth only),
+   * and its firing pulses per revolution. Switching cars after unlock swaps
+   * the engine: the synth covers the gap while the new recordings load.
+   */
+  setCarAudio(url: string | undefined, firingPerRev = 3): void {
+    const next = url ?? null
+    const changed = next !== this.carAudioUrl
+    this.carAudioUrl = next
+    this.firingPerRev = firingPerRev
+    this.sound?.setFiringPerRev(firingPerRev)
+    if (!changed || !this.ctx || !this.sound) return
+    this.sampled?.disconnect()
+    this.sampled?.port.close()
+    this.sampled = null
+    this.ignition = null
+    this.sound.setLiftOffClip(null)
+    this.synthGain.gain.value = 0.35
+    this.loading = this.loadCarAudio(this.ctx, this.sound)
   }
 
   /** Must be called from a user gesture (browser autoplay policy). */
@@ -65,6 +83,7 @@ export class AudioManager {
     this.master.connect(ctx.destination)
     this.setVolume(volume)
     this.sound = new CarSound(ctx, this.master)
+    this.sound.setFiringPerRev(this.firingPerRev)
 
     this.synthGain = ctx.createGain()
     this.synthGain.gain.value = 0.35
@@ -110,11 +129,15 @@ export class AudioManager {
       const node = new AudioWorkletNode(ctx, 'granular-engine', { numberOfInputs: 0, outputChannelCount: [1] })
       const msg: EngineBankMessage = { pcm, bank }
       node.port.postMessage(msg, [pcm.buffer])
+      // The car may have changed while this loaded.
+      if (this.carAudioUrl !== base) {
+        node.port.close()
+        return
+      }
       node.connect(sound.engineIn)
       this.sampled = node
-      this.synthSaw.stop()
-      this.synthSquare.stop()
-      this.synthGain.disconnect()
+      // The synth keeps running silently: it's the stand-in again if the car changes.
+      this.synthGain.gain.value = 0
     } catch (err) {
       console.warn('[AudioManager] car audio unavailable, using the synth engine', err)
     }
@@ -162,8 +185,8 @@ export class AudioManager {
     if (this.sampled) {
       this.sampled.parameters.get('rpm')!.setTargetAtTime(rpm, t, 0.01)
     } else {
-      // Flat-six firing frequency = rpm/60 × 3.
-      const fire = (Math.max(rpm, 600) / 60) * 3
+      // Firing frequency = rpm/60 × pulses per rev (flat-six 3, V8 4).
+      const fire = (Math.max(rpm, 600) / 60) * this.firingPerRev
       this.synthSaw.frequency.setTargetAtTime(fire, t, 0.012)
       this.synthSquare.frequency.setTargetAtTime(fire / 2, t, 0.012)
     }
