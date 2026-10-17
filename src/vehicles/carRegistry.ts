@@ -39,6 +39,8 @@ export const CARS: CarEntry[] = [
     modelUrl: '/models/cars/koenigsegg/koenigsegg.glb',
     modelUrlLow: '/models/cars/koenigsegg/koenigsegg_low.glb',
     configUrl: '/models/cars/koenigsegg/vehicle-config.json',
+    // A real twin-turbo V8 (Mercedes S63 AMG recording) until we have the One:1's own.
+    audioUrl: '/audio/koenigsegg/',
     firingPerRev: 4,
     selectable: true,
     stats: { power: 0.98, grip: 0.8, handling: 0.76, braking: 0.84 },

@@ -30,8 +30,12 @@ export interface EngineBank {
 }
 
 const MAX_GRAINS = 48
-/** Longest grain, in target firing periods (each side of the pulse). */
-const MAX_GRAIN_PERIODS = 1.25
+/**
+ * Longest grain, in target firing periods (each side of the pulse). Short
+ * enough that a recording carried ~4× above its rpm (the V8 bank tops out at
+ * ~1900) still sounds at the new firing rate rather than its own ringing.
+ */
+const MAX_GRAIN_PERIODS = 0.8
 /** Never stretch a grain's loudness more than this when spacing them wider. */
 const MAX_NORMALIZE = 1.5
 

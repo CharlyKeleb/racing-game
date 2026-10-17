@@ -13,7 +13,7 @@ import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { NodeIO } from '@gltf-transform/core'
 import { ALL_EXTENSIONS } from '@gltf-transform/extensions'
-import { cloneDocument, dedup, getBounds, meshopt, prune, simplifyPrimitive, textureCompress, transformMesh, weld } from '@gltf-transform/functions'
+import { cloneDocument, dedup, getBounds, join, meshopt, prune, simplifyPrimitive, textureCompress, transformMesh, weld } from '@gltf-transform/functions'
 import { MeshoptEncoder, MeshoptSimplifier } from 'meshoptimizer'
 import sharp from 'sharp'
 
@@ -208,6 +208,10 @@ function triangleCount() {
   return t
 }
 
+// One draw call per material per node: the split above leaves a primitive per
+// brake piece, light half and so on. keepNamed keeps the contract's nodes apart.
+await doc.transform(join({ keepNamed: true }))
+
 // ── 5. Write the full and Low-preset models ──────────────────────────────────
 const outDir = resolve(cfg.outDir)
 await mkdir(outDir, { recursive: true })
@@ -216,12 +220,19 @@ const low = cloneDocument(doc)
 await doc.transform(meshopt({ encoder: MeshoptEncoder, level: 'medium' }))
 await io.write(`${outDir}/${cfg.id}.glb`, doc)
 
-let lowTris = 0
+// Low preset (phones): the car shares a ~200k-triangle, ~150-draw-call frame
+// with the track, so it gets a hard budget. Drop interior parts the chase
+// camera can't see (cfg.lowDrop), fold look-alike plain-colour materials into
+// one (fewer draw calls), then decimate.
 for (const mesh of low.getRoot().listMeshes()) {
   for (const prim of mesh.listPrimitives()) {
-    simplifyPrimitive(prim, { simplifier: MeshoptSimplifier, ratio: cfg.lowRatio, error: 0.01 })
-    lowTris += prim.getIndices().getCount() / 3
+    if (cfg.lowDrop?.test(prim.getMaterial()?.getName() ?? '')) prim.dispose()
   }
+}
+mergePlainMaterials(low)
+await low.transform(prune(), join({ keepNamed: true }))
+for (const mesh of low.getRoot().listMeshes()) {
+  for (const prim of mesh.listPrimitives()) simplifyPrimitive(prim, { simplifier: MeshoptSimplifier, ratio: cfg.lowRatio, error: cfg.lowError ?? 0.01 })
 }
 await low.transform(
   prune(),
@@ -229,11 +240,47 @@ await low.transform(
   meshopt({ encoder: MeshoptEncoder, level: 'medium' }),
 )
 await io.write(`${outDir}/${cfg.id}_low.glb`, low)
+const lowStats = drawStats(low)
+
+/**
+ * Untextured, opaque materials whose colour, metalness and roughness match to
+ * within ~0.1 become one material, so join() can merge their primitives.
+ * Livery slots (paint, rim, caliper, lights) keep their own.
+ */
+function mergePlainMaterials(d) {
+  const keep = /^(paint|rim|caliper|headlight|taillight)$/
+  const groups = new Map()
+  for (const mat of d.getRoot().listMaterials()) {
+    if (keep.test(mat.getName()) || mat.getBaseColorTexture() || mat.getAlphaMode() !== 'OPAQUE' || mat.getEmissiveTexture()) continue
+    const q = (v) => Math.round(v * 10)
+    const key = [...mat.getBaseColorFactor().slice(0, 3), mat.getMetallicFactor(), mat.getRoughnessFactor()].map(q).join(',')
+    const first = groups.get(key)
+    if (!first) {
+      groups.set(key, mat)
+      continue
+    }
+    for (const parent of mat.listParents()) if (parent.propertyType === 'Primitive') parent.setMaterial(first)
+  }
+}
+
+/** Primitives (draw calls in three.js) and triangles of a document. */
+function drawStats(d) {
+  let calls = 0
+  let tris = 0
+  for (const node of d.getRoot().listNodes()) {
+    for (const p of node.getMesh()?.listPrimitives() ?? []) {
+      calls++
+      tris += (p.getIndices()?.getCount() ?? 0) / 3
+    }
+  }
+  return { calls, tris }
+}
 
 // ── 6. Report ────────────────────────────────────────────────────────────────
 const b = getBounds(scene)
 const r3 = (v) => v.map((n) => +n.toFixed(3))
-console.log(`triangles: ${before} → ${after} (low: ${lowTris})`)
+const fullStats = drawStats(doc)
+console.log(`triangles: ${before} → ${after}, ${fullStats.calls} draw calls (low: ${lowStats.tris} tris, ${lowStats.calls} draw calls)`)
 console.log(`bounds: min ${r3(b.min)} max ${r3(b.max)} → L ${(b.max[2] - b.min[2]).toFixed(2)} W ${(b.max[0] - b.min[0]).toFixed(2)} H ${(b.max[1] - b.min[1]).toFixed(2)} m`)
 for (const id of ['FL', 'FR', 'RL', 'RR']) {
   const w = wheels[id]

@@ -123,8 +123,11 @@ export class AudioManager {
       const bank = JSON.parse(new TextDecoder().decode(manifest)) as EngineBank
       // Parsed by hand: decodeAudioData would resample and shift the pitch marks.
       const { pcm } = decodeWav16(wav)
-      if (ignition) this.ignition = await ctx.decodeAudioData(ignition)
-      if (liftOff) sound.setLiftOffClip(await ctx.decodeAudioData(liftOff))
+      // The one-shots are optional: a car without them (or a dev server that
+      // answers a missing file with index.html) still gets its recorded engine.
+      const decode = (buf: ArrayBuffer | null) => (buf ? ctx.decodeAudioData(buf).catch(() => null) : Promise.resolve(null))
+      this.ignition = await decode(ignition)
+      sound.setLiftOffClip(await decode(liftOff))
 
       const node = new AudioWorkletNode(ctx, 'granular-engine', { numberOfInputs: 0, outputChannelCount: [1] })
       const msg: EngineBankMessage = { pcm, bank }

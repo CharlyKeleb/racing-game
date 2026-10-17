@@ -130,8 +130,9 @@ effect of speeding up a loop.
 To build a bank:
 1. Find recordings with a free-to-ship license (CC0 or CC BY).
 2. Find stretches where the rpm is nearly steady: idle, or the top of a rev blip.
-3. List them in `SEGMENTS` in `scripts/audio/make_engine_bank.py` and run it:
-   `python3 scripts/audio/make_engine_bank.py <wav dir> public/audio/<id>`.
+3. List them in a spec, `scripts/audio/<id>.json`, with the engine's firing
+   pulses per rev (flat-six 3, V8 4). Then run
+   `python3 scripts/audio/make_engine_bank.py scripts/audio/<id>.json <wav dir> public/audio/<id>`.
 
 `tests/engineAudio.test.ts` checks that the bank plays at the requested rpm.
 
