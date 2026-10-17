@@ -46,10 +46,12 @@ export function Minimap() {
         <polygon className="minimap__edge" points={fit.path} />
         <polygon className="minimap__track" points={fit.path} />
         <line className="minimap__start" {...fit.startLine} />
-        {/* Only the position glides: a transition on the rotation would spin the
-            marker the long way round whenever the heading wraps past ±180°. */}
-        <g className="minimap__car" style={{ transform: `translate(${cx}px, ${cz}px)` }}>
-          <path d="M0,-5 L3.6,4 L0,2.2 L-3.6,4 Z" transform={`rotate(${deg.toFixed(1)})`} />
+        {/* SVG transform attribute, not CSS `transform`: CSS px on SVG elements
+            isn't mapped to viewBox units the same way in every browser (Safari),
+            which put the marker off the track outline. At 20 Hz the step is
+            under a pixel, so no transition is needed. */}
+        <g className="minimap__car" transform={`translate(${cx.toFixed(2)} ${cz.toFixed(2)}) rotate(${deg.toFixed(1)})`}>
+          <path d="M0,-5 L3.6,4 L0,2.2 L-3.6,4 Z" />
         </g>
       </svg>
     </div>
