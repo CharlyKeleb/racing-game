@@ -62,7 +62,7 @@ export default {
   ],
 
   /** Dense city: merge each chunk's small prop meshes (< this many tris) into one draw call. */
-  mergeSmallProps: 400,
+  mergeSmallProps: 1200,
 
   /**
    * Every source material is BLEND; the build makes fully opaque textures
