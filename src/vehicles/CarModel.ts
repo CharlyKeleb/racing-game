@@ -71,6 +71,7 @@ export function rigCarModel(scene: THREE.Group, config: VehicleConfig): CarModel
 export function buildPlaceholderCar(config: VehicleConfig): THREE.Group {
   const scene = new THREE.Group()
   const paint = new THREE.MeshPhysicalMaterial({
+    name: 'paint', // so CarLivery repaints the placeholder too
     color: 0xff6a00, // papaya
     metalness: 0.6,
     roughness: 0.3,
@@ -78,7 +79,7 @@ export function buildPlaceholderCar(config: VehicleConfig): THREE.Group {
     clearcoatRoughness: 0.05,
   })
   const dark = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.5 })
-  const glass = new THREE.MeshPhysicalMaterial({ color: 0x0a0f14, metalness: 0.2, roughness: 0.05, transmission: 0.2 })
+  const glass = new THREE.MeshPhysicalMaterial({ name: 'glass', color: 0x0a0f14, metalness: 0.2, roughness: 0.05, transmission: 0.2 })
 
   const [hx, hy, hz] = config.chassisHalfExtents
   const [cx, cy, cz] = config.chassisCenter
@@ -96,7 +97,7 @@ export function buildPlaceholderCar(config: VehicleConfig): THREE.Group {
   scene.add(chassis)
 
   const tire = new THREE.MeshStandardMaterial({ color: 0x151515, roughness: 0.9 })
-  const rim = new THREE.MeshStandardMaterial({ color: 0xbfc5cc, metalness: 1, roughness: 0.25 })
+  const rim = new THREE.MeshStandardMaterial({ name: 'rim', color: 0xbfc5cc, metalness: 1, roughness: 0.25 })
   for (const w of config.wheels) {
     const wheel = new THREE.Group()
     wheel.name = `Wheel_${w.id}`

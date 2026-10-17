@@ -11,6 +11,12 @@ export interface CarEntry {
 
 export const CARS: CarEntry[] = [
   {
+    id: 'porsche911',
+    name: 'Porsche 911 Carrera 4S',
+    modelUrl: '/models/cars/porsche911/porsche911.glb',
+    configUrl: '/models/cars/porsche911/vehicle-config.json',
+  },
+  {
     id: 'mclaren',
     name: 'McLaren',
     modelUrl: '/models/cars/mclaren/mclaren.glb',

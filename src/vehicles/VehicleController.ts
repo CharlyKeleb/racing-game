@@ -32,6 +32,11 @@ const _impulse = new THREE.Vector3()
 const _point = new THREE.Vector3()
 const _ray = new RAPIER.Ray({ x: 0, y: 0, z: 0 }, { x: 0, y: -1, z: 0 })
 
+/** Moves `value` toward `target` by at most `step`. */
+function approach(value: number, target: number, step: number): number {
+  return value + Math.max(-step, Math.min(step, target - value))
+}
+
 /**
  * Raycast-wheel vehicle: one rigid body for the chassis, four suspension rays,
  * tire forces applied as impulses at the contact patches. This is the approach
@@ -43,6 +48,12 @@ export class VehicleController {
   steerAngle = 0
   /** Signed forward speed of the chassis, m/s. */
   forwardSpeed = 0
+  /** Pedals after ramping, 0..1. Keyboards are on/off; this fades them in over ~1/pedalRate s. */
+  private throttle = 0
+  private brake = 0
+  /** Chassis yaw inertia (matches Vehicle's box inertia) and front-to-rear axle distance. */
+  private readonly yawInertia: number
+  private readonly wheelbase: number
   private readonly cfg: VehicleConfig
   private readonly body: RAPIER.RigidBody
   private readonly world: RAPIER.World
@@ -52,6 +63,10 @@ export class VehicleController {
     this.body = body
     this.world = world
     this.drivetrain = new Drivetrain(cfg.engine)
+    const [hx, , hz] = cfg.chassisHalfExtents
+    this.yawInertia = (cfg.massKg / 3) * (hx * hx + hz * hz)
+    const zs = cfg.wheels.map((w) => w.position[2])
+    this.wheelbase = Math.max(1, Math.max(...zs) - Math.min(...zs))
     this.wheels = cfg.wheels.map((w) => ({
       cfg: w,
       suspension: new Suspension(cfg.suspension),
@@ -79,18 +94,24 @@ export class VehicleController {
     this.forwardSpeed = _vel.dot(_fwd)
     const speed = Math.abs(this.forwardSpeed)
 
-    // Steering: smoothed, and reduced at speed so the car stays drivable.
-    const speedFactor = 1 / (1 + speed / 15)
+    // Steering: angle and turn-in rate both shrink with speed, so a keyboard tap
+    // at 200 km/h is a lane change, not a spin. Returning to center is faster.
+    const speedFactor = 1 / (1 + speed / cfg.steerFalloffSpeed)
     const targetSteer = -input.steer * cfg.maxSteerAngle * speedFactor
-    const maxDelta = cfg.steerSpeed * dt
+    const centering = Math.abs(targetSteer) < Math.abs(this.steerAngle) || targetSteer * this.steerAngle < 0
+    const maxDelta = cfg.steerSpeed * speedFactor * (centering ? cfg.steerReturnScale : 1) * dt
     this.steerAngle += Math.max(-maxDelta, Math.min(maxDelta, targetSteer - this.steerAngle))
+
+    // Pedals ramp instead of stepping; brakes bite twice as fast as the throttle.
+    this.throttle = approach(this.throttle, input.throttle, cfg.pedalRate * dt)
+    this.brake = approach(this.brake, input.brake, cfg.pedalRate * 2 * dt)
 
     // Reverse logic: brake at standstill engages reverse; in reverse, pedals swap.
     const reversing = this.drivetrain.gear < 0
     // Total speed, not forward speed: forward speed crosses 0 mid-spin.
     const wantsReverse = input.brake > 0.1 && input.throttle < 0.1 && _vel.length() < 1
-    const driveThrottle = reversing ? input.brake : input.throttle
-    const brakeInput = reversing ? input.throttle : input.brake
+    const driveThrottle = reversing ? this.brake : this.throttle
+    const brakeInput = reversing ? this.throttle : this.brake
 
     const driven = this.wheels.filter((w) => w.cfg.driven)
     const drivenRadius = driven[0]?.cfg.radius ?? 0.35
@@ -167,6 +188,8 @@ export class VehicleController {
       w.spin += (vLong / wc.radius) * dt
     }
 
+    this.applyStabilityAssist(input.handbrake, speed, dt)
+
     // Aerodynamics: quadratic drag + downforce.
     _vel.set(lv.x, lv.y, lv.z)
     const v2 = _vel.lengthSq()
@@ -177,8 +200,30 @@ export class VehicleController {
     }
   }
 
+  /**
+   * ESC-style yaw trim. The bicycle model gives the yaw rate the steering asks
+   * for (v·tanδ/L), capped by what the tires can hold (μg/v). Rotation beyond
+   * that, or against it, is damped back; understeer is left alone.
+   */
+  private applyStabilityAssist(handbrake: boolean, speed: number, dt: number): void {
+    const rate = this.cfg.yawStability
+    if (rate <= 0 || handbrake || speed < 3) return
+    const yaw = this.body.angvel()
+    const yawRate = yaw.x * _up.x + yaw.y * _up.y + yaw.z * _up.z
+    const gripLimit = (this.cfg.tires.grip * 9.81 * 1.15) / speed
+    const wanted = (this.forwardSpeed * Math.tan(this.steerAngle)) / this.wheelbase
+    const target = Math.max(-gripLimit, Math.min(gripLimit, wanted))
+    const excess = yawRate - Math.max(Math.min(0, target), Math.min(Math.max(0, target), yawRate))
+    if (excess === 0) return
+    const k = 1 - Math.exp(-rate * dt)
+    _impulse.copy(_up).multiplyScalar(-excess * this.yawInertia * k)
+    this.body.applyTorqueImpulse(_impulse, true)
+  }
+
   reset(): void {
     this.steerAngle = 0
+    this.throttle = 0
+    this.brake = 0
     this.drivetrain.reset()
     for (const w of this.wheels) {
       w.suspension.reset()

@@ -26,6 +26,11 @@ export class Vehicle {
   private readonly currPos = new THREE.Vector3()
   private readonly prevQuat = new THREE.Quaternion()
   private readonly currQuat = new THREE.Quaternion()
+  // Steer angle and per-wheel suspension offset at the previous/current tick, same idea.
+  private prevSteer = 0
+  private currSteer = 0
+  private readonly prevOffset: number[]
+  private readonly currOffset: number[]
 
   constructor(config: VehicleConfig, model: CarModel, world: RAPIER.World, spawn: SpawnPoint) {
     this.config = config
@@ -54,6 +59,8 @@ export class Vehicle {
     )
 
     this.controller = new VehicleController(config, this.body, world)
+    this.prevOffset = config.wheels.map(() => config.suspension.restLength)
+    this.currOffset = [...this.prevOffset]
     this.respawn(spawn)
   }
 
@@ -81,6 +88,13 @@ export class Vehicle {
     const r = this.body.rotation()
     this.currPos.set(t.x, t.y, t.z)
     this.currQuat.set(r.x, r.y, r.z, r.w)
+    this.prevSteer = this.currSteer
+    this.currSteer = this.controller.steerAngle
+    const wheels = this.controller.wheels
+    for (let i = 0; i < wheels.length; i++) {
+      this.prevOffset[i] = this.currOffset[i]
+      this.currOffset[i] = wheels[i].suspension.wheelOffset()
+    }
   }
 
   /** Interpolate visuals between ticks and pose the wheels. */
@@ -89,11 +103,15 @@ export class Vehicle {
     root.position.lerpVectors(this.prevPos, this.currPos, alpha)
     root.quaternion.slerpQuaternions(this.prevQuat, this.currQuat, alpha)
 
-    for (const w of this.controller.wheels) {
+    const steer = this.prevSteer + (this.currSteer - this.prevSteer) * alpha
+    const wheels = this.controller.wheels
+    for (let i = 0; i < wheels.length; i++) {
+      const w = wheels[i]
       const rig = this.model.wheels[w.cfg.id]
       const [x, y, z] = w.cfg.position
-      rig.pivot.position.set(x, y - w.suspension.wheelOffset(), z)
-      rig.pivot.rotation.y = w.cfg.steered ? this.controller.steerAngle : 0
+      const offset = this.prevOffset[i] + (this.currOffset[i] - this.prevOffset[i]) * alpha
+      rig.pivot.position.set(x, y - offset, z)
+      rig.pivot.rotation.y = w.cfg.steered ? steer : 0
       rig.spinner.rotation.x = w.spin
     }
   }
@@ -109,5 +127,6 @@ export class Vehicle {
     this.currQuat.copy(q)
     this.prevPos.copy(spawn.position)
     this.prevQuat.copy(q)
+    this.prevSteer = this.currSteer = 0
   }
 }
