@@ -382,6 +382,7 @@ export class Game {
    * down within the room. Remembers the drag speed so a flick keeps spinning.
    */
   rotateShowroom(deltaYaw: number, deltaHeight = 0): void {
+    if (gameStore.getState().carSwitching) return
     if (this.showroomFocus === 'wheel') {
       this.wheelYaw = THREE.MathUtils.clamp(this.wheelYaw + deltaYaw, -0.7, 0.7)
       return
@@ -444,6 +445,9 @@ export class Game {
     const showroom = phase === 'menu' || phase === 'garage'
     const loading = this.loadCar(entry.id)
     if (showroom) {
+      // Keep the current view while cars leave and arrive, including after a flick.
+      this.orbitVelocity = 0
+      this.orbitCoasting = false
       // The chevron click is a user gesture, so the engines can be heard leaving and arriving.
       this.audio.unlock(gameStore.getState().settings.masterVolume)
       await new Promise<void>((done) => (this.showroomDrive = { mode: 'out', t: 0, spin: 0, done }))
@@ -594,8 +598,10 @@ export class Game {
   private renderFrame(alpha: number, dt: number): void {
     const phase = gameStore.getState().phase
     this.vehicle.render(phase === 'paused' ? 1 : alpha, phase === 'paused' ? 0 : dt)
-    this.showroomAnchor.position.copy(this.vehicle.model.root.position)
-    this.showroomAnchor.quaternion.copy(this.vehicle.model.root.quaternion)
+    if (!gameStore.getState().carSwitching) {
+      this.showroomAnchor.position.copy(this.vehicle.model.root.position)
+      this.showroomAnchor.quaternion.copy(this.vehicle.model.root.quaternion)
+    }
     if (this.showroomDrive) this.animateShowroomDrive(dt)
     if (phase === 'menu' || phase === 'garage') {
       const wheel = phase === 'garage' && this.showroomFocus === 'wheel'
