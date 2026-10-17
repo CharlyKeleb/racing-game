@@ -27,7 +27,7 @@ function spawnCar(cfg: VehicleConfig) {
         { x: (m / 3) * (hy * hy + hz * hz), y: (m / 3) * (hx * hx + hz * hz), z: (m / 3) * (hx * hx + hy * hy) },
         { x: 0, y: 0, z: 0, w: 1 },
       )
-      .setLinearDamping(0.02)
+      .setLinearDamping(0)
       .setAngularDamping(0.6)
       .setTranslation(0, 0.3, 0),
   )
@@ -78,6 +78,19 @@ describe('handling smoothness', () => {
   it('stops rotating soon after the steering is released', () => {
     const { release } = holdTurn(DEFAULT_VEHICLE_CONFIG)
     expect(Math.abs(release[30])).toBeLessThan(2) // within 0.5 s
+  })
+
+  it('drives forward again after reversing', () => {
+    const { ctrl, step } = spawnCar(DEFAULT_VEHICLE_CONFIG)
+    const pedals = (throttle: number, brake: number): InputState => ({ throttle, brake, steer: 0, handbrake: false, nitro: false })
+    for (let i = 0; i < 30; i++) step(pedals(0, 0)) // settle on the springs
+    for (let i = 0; i < 120; i++) step(pedals(0, 1))
+    expect(ctrl.drivetrain.gear).toBe(-1)
+    expect(ctrl.forwardSpeed).toBeLessThan(-1)
+    // Throttle in reverse brakes first, then must engage 1st and pull away.
+    for (let i = 0; i < 240; i++) step(pedals(1, 0))
+    expect(ctrl.drivetrain.gear).toBeGreaterThan(0)
+    expect(ctrl.forwardSpeed).toBeGreaterThan(5)
   })
 
   it('is calmer than with the assist switched off', () => {

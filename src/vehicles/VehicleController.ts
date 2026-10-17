@@ -1,7 +1,7 @@
 import RAPIER from '@dimforge/rapier3d-compat'
 import * as THREE from 'three'
 import type { InputState } from '../input/InputManager'
-import { Drivetrain } from './Drivetrain'
+import { Drivetrain, type GearRequest } from './Drivetrain'
 import { Nitro } from './Nitro'
 import { Suspension } from './Suspension'
 import { computeTireForces } from './TirePhysics'
@@ -58,6 +58,9 @@ export class VehicleController {
   /** Pedals after ramping, 0..1. Keyboards are on/off; this fades them in over ~1/pedalRate s. */
   private throttle = 0
   private brake = 0
+  /** Fraction of the drivetrain's force each wheel gets (0 for undriven wheels). */
+  private readonly driveShare: number[]
+  private readonly drivenRadius: number
   /** Chassis yaw inertia (matches Vehicle's box inertia) and front-to-rear axle distance. */
   private readonly yawInertia: number
   private readonly wheelbase: number
@@ -75,6 +78,17 @@ export class VehicleController {
     this.yawInertia = (cfg.massKg / 3) * (hx * hx + hz * hz)
     const zs = cfg.wheels.map((w) => w.position[2])
     this.wheelbase = Math.max(1, Math.max(...zs) - Math.min(...zs))
+    // Split drive between axles: front = +Z. With both axles driven, the front
+    // gets frontDriveShare; otherwise the driven axle takes everything.
+    const zMid = (Math.max(...zs) + Math.min(...zs)) / 2
+    const isFront = (w: WheelConfig) => w.position[2] > zMid
+    const frontDriven = cfg.wheels.filter((w) => w.driven && isFront(w)).length
+    const rearDriven = cfg.wheels.filter((w) => w.driven && !isFront(w)).length
+    const frontShare = !frontDriven ? 0 : !rearDriven ? 1 : cfg.frontDriveShare
+    this.driveShare = cfg.wheels.map((w) =>
+      !w.driven ? 0 : isFront(w) ? frontShare / frontDriven : (1 - frontShare) / rearDriven,
+    )
+    this.drivenRadius = cfg.wheels.find((w) => w.driven)?.radius ?? 0.35
     this.wheels = cfg.wheels.map((w) => ({
       cfg: w,
       suspension: new Suspension(cfg.suspension),
@@ -115,10 +129,18 @@ export class VehicleController {
     this.throttle = approach(this.throttle, input.throttle, cfg.pedalRate * dt)
     this.brake = approach(this.brake, input.brake, cfg.pedalRate * 2 * dt)
 
-    // Reverse logic: brake at standstill engages reverse; in reverse, pedals swap.
+    // Reverse logic: brake at standstill engages reverse, throttle at standstill
+    // goes back to 1st; in reverse, pedals swap.
     const reversing = this.drivetrain.gear < 0
     // Total speed, not forward speed: forward speed crosses 0 mid-spin.
-    const wantsReverse = input.brake > 0.1 && input.throttle < 0.1 && _vel.length() < 1
+    const stopped = _vel.length() < 1
+    const gearRequest: GearRequest = !stopped
+      ? 0
+      : input.brake > 0.1 && input.throttle < 0.1
+        ? -1
+        : input.throttle > 0.1 && input.brake < 0.1
+          ? 1
+          : 0
     const driveThrottle = reversing ? this.brake : this.throttle
     const brakeInput = reversing ? this.throttle : this.brake
 
@@ -140,14 +162,12 @@ export class VehicleController {
       dt,
     )
 
-    const driven = this.wheels.filter((w) => w.cfg.driven)
-    const drivenRadius = driven[0]?.cfg.radius ?? 0.35
-    const driveForce = this.drivetrain.update(this.forwardSpeed, drivenRadius, driveThrottle, wantsReverse, dt)
-    const driveForcePerWheel = driven.length ? driveForce / driven.length : 0
+    const driveForce = this.drivetrain.update(this.forwardSpeed, this.drivenRadius, driveThrottle, gearRequest, dt)
 
     const massShare = cfg.massKg / this.wheels.length
 
-    for (const w of this.wheels) {
+    for (let i = 0; i < this.wheels.length; i++) {
+      const w = this.wheels[i]
       const wc = w.cfg
       _mount.set(wc.position[0], wc.position[1], wc.position[2]).applyQuaternion(_q).add(_pos)
 
@@ -183,7 +203,7 @@ export class VehicleController {
       const vLong = _vel.dot(_wFwd)
       const vLat = _vel.dot(_wRight)
 
-      let longitudinal = wc.driven ? driveForcePerWheel : 0
+      let longitudinal = driveForce * this.driveShare[i]
       const brake = (cfg.brakeForce / this.wheels.length) * brakeInput + (wc.handbrake && input.handbrake ? cfg.handbrakeForce / 2 : 0)
       if (brake > 0) {
         // Clamp so brakes stop the wheel instead of reversing it.

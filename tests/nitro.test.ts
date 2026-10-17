@@ -115,7 +115,7 @@ describe('Nitro on the car', () => {
           { x: (m / 3) * (hy * hy + hz * hz), y: (m / 3) * (hx * hx + hz * hz), z: (m / 3) * (hx * hx + hy * hy) },
           { x: 0, y: 0, z: 0, w: 1 },
         )
-        .setLinearDamping(0.02)
+        .setLinearDamping(0)
         .setAngularDamping(0.6)
         .setTranslation(0, 0.3, 0),
     )

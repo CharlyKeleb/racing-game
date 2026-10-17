@@ -47,7 +47,7 @@ export class Vehicle {
     const [comX, comY, comZ] = config.centerOfMass
     const bodyDesc = RAPIER.RigidBodyDesc.dynamic()
       .setAdditionalMassProperties(m, { x: comX, y: comY, z: comZ }, inertia, { x: 0, y: 0, z: 0, w: 1 })
-      .setLinearDamping(0.02)
+      .setLinearDamping(0) // air drag and rolling resistance are modelled in VehicleController
       .setAngularDamping(0.6)
       .setCcdEnabled(true)
     this.body = world.createRigidBody(bodyDesc)
