@@ -77,7 +77,20 @@ export interface VehicleConfig {
   handbrakeForce: number
   /** Max steering angle at standstill, radians. Reduced with speed. */
   maxSteerAngle: number
+  /** How fast the wheels turn in, rad/s at standstill; slows with speed like the angle. */
   steerSpeed: number
+  /** Return-to-center is this much faster than turning in, so the car settles quickly. */
+  steerReturnScale: number
+  /** Speed (m/s) at which the steer angle and rate are halved. Lower = calmer at speed. */
+  steerFalloffSpeed: number
+  /** Pedal ramp, units/s: smooths digital keyboard throttle/brake into a short fade. */
+  pedalRate: number
+  /**
+   * Arcade stability assist, 1/s. Trims yaw beyond what the steering and tire
+   * grip can produce, so the car turns where it's pointed instead of wobbling
+   * or over-rotating. 0 = off; ~6 feels assisted; handbrake bypasses it.
+   */
+  yawStability: number
   dragCoefficient: number
   downforceCoefficient: number
 }
@@ -129,7 +142,11 @@ export const DEFAULT_VEHICLE_CONFIG: VehicleConfig = {
   brakeForce: 22000,
   handbrakeForce: 9000,
   maxSteerAngle: 0.55,
-  steerSpeed: 4,
+  steerSpeed: 2.6,
+  steerReturnScale: 1.8,
+  steerFalloffSpeed: 9,
+  pedalRate: 6,
+  yawStability: 8,
   dragCoefficient: 0.38,
   downforceCoefficient: 1.6,
 }

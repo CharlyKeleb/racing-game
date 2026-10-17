@@ -4,6 +4,17 @@ import type { CameraMode } from '../stores/gameStore'
 const _desired = new THREE.Vector3()
 const _look = new THREE.Vector3()
 const _fwd = new THREE.Vector3()
+const _side = new THREE.Vector3()
+const _focus = new THREE.Vector3()
+
+/** Where the showroom camera looks and from how far; see ChaseCamera.showroom. */
+export interface ShowroomFraming {
+  focus: THREE.Vector3
+  distance: number
+  height: number
+  shift: number
+  fov: number
+}
 
 /** Framerate-independent exponential smoothing factor. */
 function damp(lambda: number, dt: number): number {
@@ -63,6 +74,33 @@ export class ChaseCamera {
       this.camera.fov = THREE.MathUtils.lerp(this.camera.fov, fov, damp(4, dt))
       this.camera.updateProjectionMatrix()
     }
+  }
+
+  /**
+   * Menu/garage turntable: orbit a point on the parked car. `framing.focus` is
+   * in car-local space (the car's center, or a wheel); `yaw` orbits around it.
+   * `shift` (meters) slides the subject right of frame to clear a left panel.
+   * Switching framings glides because position and look target are damped.
+   */
+  showroom(target: THREE.Object3D, yaw: number, dt: number, framing: ShowroomFraming): void {
+    _focus.copy(framing.focus).applyQuaternion(target.quaternion).add(target.position)
+    _desired.set(Math.sin(yaw) * framing.distance, framing.height, Math.cos(yaw) * framing.distance)
+    _desired.applyQuaternion(target.quaternion).add(_focus)
+    _desired.y = Math.max(_desired.y, target.position.y + 0.25) // never dip under the floor
+    _side.subVectors(_focus, _desired).setY(0).normalize()
+    // Camera-right of a forward vector f is (−f.z, 0, f.x); look left of the subject to push it right.
+    _look.set(_focus.x + _side.z * framing.shift, _focus.y, _focus.z - _side.x * framing.shift)
+
+    const k = damp(4, dt)
+    this.camera.position.lerp(_desired, k)
+    this.lookTarget.lerp(_look, k)
+    this.camera.lookAt(this.lookTarget)
+    if (Math.abs(this.camera.fov - framing.fov) > 0.01) {
+      this.camera.fov = THREE.MathUtils.lerp(this.camera.fov, framing.fov, damp(4, dt))
+      this.camera.updateProjectionMatrix()
+    }
+    // Hand back to the chase cam without a swoop from the turntable.
+    this.initialised = false
   }
 
   snap(): void {
