@@ -30,6 +30,7 @@
     "shiftTimeSec": 0.08
   },
   "frontDriveShare": 0.35,
+  "exhausts": [[0.475, 0.26, -2.215], [-0.475, 0.26, -2.215]],
   "tires": {
     "grip": 1.2,
     "corneringStiffness": 10,

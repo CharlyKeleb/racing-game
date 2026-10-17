@@ -23,7 +23,8 @@ export class DrivingEffects {
     this.group.name = 'driving-effects'
     this.group.add(this.skidMarks.mesh, this.smoke.mesh, ...this.spray.meshes)
     this.flames = new NitroFlames(vehicle.config)
-    vehicle.model.root.add(this.flames.group)
+    // On the body, not the root: the body leans, and the pipes lean with it.
+    vehicle.model.body.add(this.flames.group)
   }
 
   update(vehicle: Vehicle, dt: number): void {

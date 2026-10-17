@@ -8,6 +8,8 @@ export interface NitroInput {
   speed: number
   /** True while at least one wheel touches the ground. */
   grounded: boolean
+  /** True while no wheel touches the ground (a jump, a crest taken flat out). */
+  airborne: boolean
   /** Boost button held. */
   wantsBoost: boolean
 }
@@ -15,19 +17,40 @@ export interface NitroInput {
 /**
  * Asphalt-style nitro. Pure — numbers in, numbers out, unit tested.
  *
- * The tank (0..1) fills while the tires work near or past the grip limit
- * (drifting, hard cornering) and drains while the boost button is held.
- * A boost needs `minCharge` to start but then runs until released or empty.
- * `intensity` ramps toward 1 while boosting so the force and camera kick in
- * over a few frames rather than in one step.
+ * Filling: the tank (0..1) fills while the tires work near or past the grip
+ * limit (drifting, hard cornering) and while the car is airborne.
+ *
+ * Burning: holding the button burns the tank (needs `minCharge` to start).
+ * Letting go ends the burn after a short grace, so a quick re-tap keeps it.
+ *
+ * Perfect nitro: a moment into each burn a timing window opens (`windowOpen`,
+ * cued on the HUD). Tapping again inside it fires a perfect boost, stronger
+ * but hungrier, for `perfectDurationSec`. One try per burn: a tap outside
+ * the window spends it (`missed`).
+ *
+ * `intensity` ramps toward the target (1, or `perfectBoost`) so the thrust and
+ * camera kick in over a few frames rather than in one step.
  */
 export class Nitro {
   /** Tank level, 0..1. */
   charge = 0
   /** True while a boost is burning. */
   active = false
-  /** Smoothed boost amount, 0..1. Scales force, drag and visuals. */
+  /** True during a perfect boost. */
+  perfect = false
+  /** True once this burn's perfect window was missed by a badly timed tap. */
+  missed = false
+  /** `burnTime` when the miss happened, for a brief HUD flash. */
+  missedAt = 0
+  /** Smoothed boost amount: 0..1, up to `perfectBoost` during a perfect boost. */
   intensity = 0
+  /** Seconds since the current burn started. */
+  burnTime = 0
+  private perfectLeft = 0
+  /** This burn's one perfect attempt has been used (hit or missed). */
+  private attempted = false
+  private releasedFor = 0
+  private wasHeld = false
   private readonly cfg: NitroConfig
 
   constructor(cfg: NitroConfig) {
@@ -36,25 +59,62 @@ export class Nitro {
 
   update(input: NitroInput, dt: number): void {
     const cfg = this.cfg
+    const pressed = input.wantsBoost && !this.wasHeld
+    this.wasHeld = input.wantsBoost
+    this.releasedFor = input.wantsBoost ? 0 : this.releasedFor + dt
 
     if (this.active) {
-      if (!input.wantsBoost || this.charge <= 0) this.active = false
+      if (pressed && !this.attempted) {
+        if (this.windowOpen) {
+          this.perfect = true
+          this.perfectLeft = cfg.perfectDurationSec
+        } else {
+          this.missed = true
+          this.missedAt = this.burnTime
+        }
+        this.attempted = true
+      }
+      if (this.charge <= 0 || this.releasedFor > cfg.releaseGraceSec) this.stopBurn()
     } else if (input.wantsBoost && this.charge >= cfg.minCharge) {
       this.active = true
+      this.burnTime = 0
+      this.attempted = false
+      this.missed = false
     }
 
     if (this.active) {
-      this.charge = Math.max(0, this.charge - dt / cfg.durationSec)
+      this.burnTime += dt
+      if (this.perfect) {
+        this.perfectLeft -= dt
+        if (this.perfectLeft <= 0) this.perfect = false
+      }
+      const drain = this.perfect ? cfg.perfectDrainScale : 1
+      this.charge = Math.max(0, this.charge - (drain * dt) / cfg.durationSec)
     } else {
       this.charge = Math.min(1, this.charge + fillRate(input, cfg) * dt)
     }
 
-    const target = this.active ? 1 : 0
+    const target = this.active ? (this.perfect ? cfg.perfectBoost : 1) : 0
     const step = cfg.rampRate * dt
     this.intensity += Math.max(-step, Math.min(step, target - this.intensity))
   }
 
-  /** Extra drive force at the driven wheels this tick, N. */
+  /** True while a tap now would fire a perfect boost. */
+  get windowOpen(): boolean {
+    const t = this.burnTime - this.cfg.perfectWindowStart
+    return this.active && !this.attempted && t >= 0 && t <= this.cfg.perfectWindowLength
+  }
+
+  /**
+   * HUD cue, 0..1: how far this burn has come toward the end of the perfect
+   * window (1 = window closing). 0 when there's nothing left to aim for.
+   */
+  get windowCue(): number {
+    if (!this.active || this.attempted) return 0
+    return Math.min(1, this.burnTime / (this.cfg.perfectWindowStart + this.cfg.perfectWindowLength))
+  }
+
+  /** Forward thrust this tick, N. */
   get force(): number {
     return this.cfg.force * this.intensity
   }
@@ -68,16 +128,29 @@ export class Nitro {
     return 1 / (k * k)
   }
 
+  private stopBurn(): void {
+    this.active = false
+    this.perfect = false
+    this.perfectLeft = 0
+  }
+
   reset(): void {
     this.charge = 0
-    this.active = false
     this.intensity = 0
+    this.burnTime = 0
+    this.attempted = false
+    this.missed = false
+    this.releasedFor = 0
+    this.wasHeld = false
+    this.stopBurn()
   }
 }
 
-/** Tank fraction per second gained from tire slip; 0 below the threshold or speed. */
+/** Tank fraction per second from tire slip and airtime; 0 below the minimum speed. */
 export function fillRate(input: NitroInput, cfg: NitroConfig): number {
-  if (!input.grounded || input.speed < cfg.minFillSpeed) return 0
+  if (input.speed < cfg.minFillSpeed) return 0
+  if (input.airborne) return cfg.airFillRate
+  if (!input.grounded) return 0
   const over = (input.slip - cfg.slipThreshold) / (1 - cfg.slipThreshold)
   if (over <= 0) return 0
   return cfg.fillRate * Math.min(1, over)

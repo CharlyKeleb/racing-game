@@ -173,6 +173,7 @@ export class VehicleController {
         slip: groundedCount ? slipSum / groundedCount : 0,
         speed: _vel.length(),
         grounded: groundedCount > 0,
+        airborne: groundedCount === 0,
         wantsBoost: input.nitro && !reversing,
       },
       dt,
@@ -316,6 +317,11 @@ export class VehicleController {
     const k = 1 - Math.exp(-rate * dt)
     _impulse.copy(_up).multiplyScalar(-excess * this.yawInertia * k)
     this.body.applyTorqueImpulse(_impulse, true)
+  }
+
+  /** Throttle pedal after ramping, 0..1: what the engine actually gets (audio reads it). */
+  get throttlePedal(): number {
+    return this.drivetrain.gear < 0 ? this.brake : this.throttle
   }
 
   reset(): void {

@@ -14,6 +14,13 @@ export interface Telemetry {
   nitroActive: boolean
   /** Enough in the tank to start a boost. */
   nitroReady: boolean
+  /** Perfect-nitro timing cue, 0..1 toward the window closing; 0 = nothing to aim for. */
+  nitroCue: number
+  /** A tap now fires a perfect boost. */
+  nitroWindow: boolean
+  nitroPerfect: boolean
+  /** Just mistimed the perfect tap (flashes briefly). */
+  nitroMissed: boolean
   lap: number
   totalLaps: number
   currentLapMs: number
@@ -42,6 +49,10 @@ export const initialTelemetry: Telemetry = {
   nitro: 0,
   nitroActive: false,
   nitroReady: false,
+  nitroCue: 0,
+  nitroWindow: false,
+  nitroPerfect: false,
+  nitroMissed: false,
   lap: 0,
   totalLaps: 3,
   currentLapMs: 0,

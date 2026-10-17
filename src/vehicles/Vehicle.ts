@@ -14,7 +14,13 @@ const TICK = 1 / 60
  */
 const PITCH_PER_ACCEL = 0.28
 const ROLL_PER_ACCEL = 0.36
-const MAX_PITCH = 3.5
+/**
+ * Squat (nose up) is capped well below dive: a stiff sports car barely squats,
+ * and nitro's surge pinned the old shared 3.5° cap, lifting the nose ~13 cm
+ * off the front wheels so the car looked airborne.
+ */
+const MAX_SQUAT = 1.2
+const MAX_DIVE = 2.5
 const MAX_ROLL = 4.5
 const LEAN_FREQ = 9 // rad/s
 const LEAN_DAMPING = 0.5
@@ -26,6 +32,8 @@ const _v = new THREE.Vector3()
 const _a = new THREE.Vector3()
 const _f = new THREE.Vector3()
 const _l = new THREE.Vector3()
+const _pivot = new THREE.Vector3()
+const _euler = new THREE.Euler()
 
 /** Smoothed chassis motion in the car's frame, for the camera and body lean. */
 export interface VehicleMotion {
@@ -66,6 +74,8 @@ export class Vehicle {
   readonly motion: VehicleMotion = { accelLong: 0, accelLat: 0, velocity: new THREE.Vector3() }
   private readonly lastVel = new THREE.Vector3()
   // Body lean spring state, radians and rad/s.
+  /** Body lean pivot height: the axle line (mean wheel radius). */
+  private readonly pivotHeight: number
   private pitch = 0
   private pitchVel = 0
   private roll = 0
@@ -80,6 +90,7 @@ export class Vehicle {
 
   constructor(config: VehicleConfig, model: CarModel, world: RAPIER.World, spawn: SpawnPoint) {
     this.config = config
+    this.pivotHeight = config.wheels.reduce((sum, w) => sum + w.radius, 0) / config.wheels.length
     this.model = model
 
     const [hx, hy, hz] = config.chassisHalfExtents
@@ -204,7 +215,7 @@ export class Vehicle {
     if (dt > 0) {
       const h = Math.min(dt, 1 / 20)
       // Braking dives the nose (+X rotation tips +Z down); speeding up squats it.
-      const pitchTarget = THREE.MathUtils.clamp(-this.motion.accelLong * PITCH_PER_ACCEL, -MAX_PITCH, MAX_PITCH) * DEG
+      const pitchTarget = THREE.MathUtils.clamp(-this.motion.accelLong * PITCH_PER_ACCEL, -MAX_SQUAT, MAX_DIVE) * DEG
       // Cornering rolls the body to the outside: turning left lifts the left (+X) side.
       const rollTarget = THREE.MathUtils.clamp(this.motion.accelLat * ROLL_PER_ACCEL, -MAX_ROLL, MAX_ROLL) * DEG
       const w2 = LEAN_FREQ * LEAN_FREQ
@@ -213,7 +224,13 @@ export class Vehicle {
       this.pitch += this.pitchVel * h
       this.rollVel += (w2 * (rollTarget - this.roll) - c * this.rollVel) * h
       this.roll += this.rollVel * h
-      this.model.body.rotation.set(this.pitch, 0, this.roll)
+      // Lean about the axle line, not the ground under the car: pivoting at
+      // ground level swung the whole body up and away from its wheels.
+      const body = this.model.body
+      _euler.set(this.pitch, 0, this.roll)
+      body.rotation.copy(_euler)
+      _pivot.set(0, this.pivotHeight, 0)
+      body.position.copy(_pivot).sub(_pivot.applyEuler(_euler))
 
       // Kept near 1: ACES tone mapping washes brighter emissive out toward white.
       const running = this.lightsOn ? 0.45 : 0.15
@@ -242,5 +259,6 @@ export class Vehicle {
     this.motion.velocity.set(0, 0, 0)
     this.pitch = this.pitchVel = this.roll = this.rollVel = 0
     this.model.body.rotation.set(0, 0, 0)
+    this.model.body.position.set(0, 0, 0)
   }
 }

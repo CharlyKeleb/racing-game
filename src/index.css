@@ -269,6 +269,18 @@ kbd { font-family: inherit; font-size: 11px; padding: 1px 6px; border: 1px solid
   -webkit-mask-image: radial-gradient(ellipse at 50% 55%, transparent 42%, #000 85%);
   mask-image: radial-gradient(ellipse at 50% 55%, transparent 42%, #000 85%);
 }
+.hud--nitro-perfect .hud-speedlines { filter: hue-rotate(-20deg) brightness(1.6); }
+.hud-nitro-call {
+  position: absolute; left: 50%; top: 24%; transform: translateX(-50%) skewX(var(--skew));
+  font-family: var(--font-display); font-style: italic; font-weight: 900; font-size: clamp(26px, 4vw, 42px);
+  letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap; pointer-events: none;
+}
+.hud-nitro-call kbd { font-size: 0.6em; font-style: normal; vertical-align: middle; color: var(--accent-ink); background: var(--accent); border: 0; padding: 2px 10px; }
+.hud-nitro-call--tap { color: var(--accent); -webkit-text-stroke: 2px #2a1f00; paint-order: stroke fill; text-shadow: 0 0 22px rgba(255, 210, 0, 0.8), 0 3px 0 #000; animation: nitro-tap 0.16s steps(2) infinite; }
+.hud-nitro-call--perfect { color: #9ff0ff; -webkit-text-stroke: 2px #04203a; paint-order: stroke fill; text-shadow: 0 0 24px rgba(40, 160, 255, 0.95), 0 4px 0 #021220; animation: nitro-perfect 0.5s ease-out both; }
+.hud-nitro-call--missed { color: var(--muted); text-shadow: 0 3px 0 #000; animation: nitro-perfect 0.4s ease-out both; }
+@keyframes nitro-tap { 50% { opacity: 0.55; } }
+@keyframes nitro-perfect { 0% { opacity: 0; transform: translateX(-50%) skewX(var(--skew)) scale(1.6); } 100% { opacity: 1; transform: translateX(-50%) skewX(var(--skew)) scale(1); } }
 .hud--nitro .hud-speedlines { opacity: 1; transition-duration: 0.12s; animation: speedlines 0.18s steps(2) infinite; }
 @keyframes speedlines { to { transform: rotate(2deg) scale(1.02); } }
 .hud-fps { position: absolute; top: var(--gutter); right: var(--gutter); font-size: 12px; color: var(--muted); letter-spacing: 0.1em; }
@@ -349,6 +361,11 @@ kbd { font-family: inherit; font-size: 11px; padding: 1px 6px; border: 1px solid
 .gauge--nitro-ready .gauge__n2o-fill { stroke: #46a8ff; opacity: 1; filter: drop-shadow(0 0 4px rgba(70, 170, 255, 0.9)); }
 .gauge--nitro-active .gauge__n2o-fill { stroke: #8fe3ff; opacity: 1; animation: gauge-n2o-pulse 0.35s ease-in-out infinite alternate; }
 .gauge--nitro-active .gauge__small-face { stroke: #46a8ff; stroke-width: 2; }
+.gauge__n2o-cue { fill: none; stroke: rgba(255, 210, 0, 0.55); stroke-width: 3; transition: stroke-dasharray 0.06s linear; }
+.gauge--nitro-window .gauge__n2o-cue { stroke: #ffd200; stroke-width: 5; filter: drop-shadow(0 0 8px rgba(255, 210, 0, 1)); }
+.gauge--nitro-window .gauge__small-face { stroke: #ffd200; stroke-width: 3; }
+.gauge--nitro-perfect .gauge__n2o-fill { stroke: #fff; filter: drop-shadow(0 0 12px rgba(255, 255, 255, 1)); }
+.gauge--nitro-perfect .gauge__small-face { stroke: #fff; stroke-width: 3; }
 @keyframes gauge-n2o-pulse { from { filter: drop-shadow(0 0 3px rgba(80, 180, 255, 0.8)); } to { filter: drop-shadow(0 0 10px rgba(140, 220, 255, 1)); } }
 .gauge__hint { position: absolute; left: 50%; bottom: -4px; transform: translateX(-50%); font-size: 10px; animation: gauge-hint 1s ease-in-out infinite; }
 @keyframes gauge-hint { 50% { opacity: 0.45; } }

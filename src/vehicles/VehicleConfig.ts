@@ -75,6 +75,20 @@ export interface NitroConfig {
   topSpeedBonus: number
   /** Boost ramp in/out, units/s. */
   rampRate: number
+  /** Tank fraction gained per second while all four wheels are off the ground. */
+  airFillRate: number
+  /** Seconds after release before a burn ends, so a quick re-tap keeps it going. */
+  releaseGraceSec: number
+  /** Perfect nitro: the timing window opens this long into a burn, seconds… */
+  perfectWindowStart: number
+  /** …and stays open this long. */
+  perfectWindowLength: number
+  /** How long a perfect boost lasts, seconds. */
+  perfectDurationSec: number
+  /** Boost intensity during a perfect boost (1 = normal nitro): scales thrust and top speed. */
+  perfectBoost: number
+  /** Tank drain multiplier during a perfect boost. */
+  perfectDrainScale: number
 }
 
 export interface VehicleConfig {
@@ -129,7 +143,11 @@ export interface VehicleConfig {
   /** Share of downforce on the front axle (aero balance), 0..1. */
   downforceFrontShare: number
   nitro: NitroConfig
-  /** Exhaust tips in car-local space, for nitro flames. Derived from the chassis when absent. */
+  /**
+   * Centres of the exhaust tips' outlets in car-local space, for nitro flames.
+   * Measure them from the model (the chrome tip's rear face). Derived from the
+   * chassis box when absent, which is only a rough guess.
+   */
   exhausts?: [number, number, number][]
 }
 
@@ -200,6 +218,13 @@ export const DEFAULT_VEHICLE_CONFIG: VehicleConfig = {
     force: 6500,
     topSpeedBonus: 0.15,
     rampRate: 5,
+    airFillRate: 0.3,
+    releaseGraceSec: 0.25,
+    perfectWindowStart: 0.8,
+    perfectWindowLength: 0.4,
+    perfectDurationSec: 1.5,
+    perfectBoost: 1.6,
+    perfectDrainScale: 1.5,
   },
 }
 
