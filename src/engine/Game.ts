@@ -13,9 +13,11 @@ import { getCar } from '../vehicles/carRegistry'
 import { Vehicle } from '../vehicles/Vehicle'
 import { resolveVehicleConfig, type VehicleConfig } from '../vehicles/VehicleConfig'
 import { Environment } from '../world/Environment'
+import type { RaceTrack } from '../world/RaceTrack'
 import { Showroom } from '../world/Showroom'
+import { StreamedTrack } from '../world/StreamedTrack'
 import { Track } from '../world/Track'
-import { TEST_CIRCUIT } from '../world/tracks'
+import { getTrack } from '../world/tracks'
 import { AssetManager } from './AssetManager'
 import { GameLoop } from './GameLoop'
 import { initRapier, PhysicsWorld } from './PhysicsWorld'
@@ -26,6 +28,7 @@ const TELEMETRY_HZ = 20
 export type ShowroomFocus = 'car' | 'wheel'
 
 const LOCKED_INPUT: InputState = { throttle: 0, brake: 0, steer: 0, handbrake: true, nitro: false }
+const _velocity = new THREE.Vector3()
 
 /**
  * Composition root for one play session. React creates exactly one Game,
@@ -42,7 +45,7 @@ export class Game {
   private readonly audio = new AudioManager()
   private readonly loop: GameLoop
   private physics!: PhysicsWorld
-  private track!: Track
+  private track!: RaceTrack
   private environment!: Environment
   private vehicle!: Vehicle
   private camera!: ChaseCamera
@@ -74,7 +77,8 @@ export class Game {
       render: (alpha, dt) => this.renderFrame(alpha, dt),
     })
     this.unsubscribe = gameStore.subscribe((s, prev) => {
-      if (s.settings !== prev.settings) this.applySettings(s.settings)
+      if (s.settings.track !== prev.settings.track && this.track) void this.switchTrack(s.settings.track)
+      else if (s.settings !== prev.settings) this.applySettings(s.settings)
       if (s.build !== prev.build) this.applyBuild(s.build, prev.build)
       if (s.phase !== prev.phase) this.updateShowroom(s.phase)
     })
@@ -91,7 +95,8 @@ export class Game {
     this.environment = new Environment(scene)
     scene.add(this.environment.group)
 
-    this.track = new Track(TEST_CIRCUIT, this.physics.world)
+    this.track = await this.loadTrack(gameStore.getState().settings.track)
+    if (this.disposed) return
     scene.add(this.track.group)
 
     const { config: base, model } = await this.loadCar(carId)
@@ -113,7 +118,53 @@ export class Game {
     scene.add(this.showroom.group)
 
     this.camera = new ChaseCamera(this.renderer.camera)
-    this.race = new RaceManager(this.track.checkpoints, gameStore.getState().settings.laps, {
+    this.race = this.createRace()
+
+    this.applySettings(gameStore.getState().settings)
+    telemetryStore.setState({ redlineRpm: config.engine.redlineRpm })
+    this.vehicle.render(1)
+    this.loop.start()
+    gameStore.getState().setPhase('menu')
+    if (import.meta.env.DEV) (window as unknown as { __game: Game }).__game = this
+  }
+
+  /**
+   * Dev-only (window.__game): step frames by hand and read render cost —
+   * works even when the tab is hidden and rAF is throttled.
+   */
+  debugStep(frames = 60): { msPerFrame: number; calls: number; triangles: number; pixelRatio: number; track: unknown; car: number[] } {
+    const gl = this.renderer.renderer.getContext()
+    const px = new Uint8Array(4)
+    const info = this.renderer.renderer.info
+    const t0 = performance.now()
+    for (let i = 0; i < frames; i++) {
+      // Count every pass of the last frame (post FX would otherwise report only its final quad).
+      if (i === frames - 1) {
+        info.autoReset = false
+        info.reset()
+      }
+      this.loop.advance(1 / 60)
+      gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px) // wait for the GPU
+    }
+    info.autoReset = true
+    const p = this.vehicle.position
+    return {
+      msPerFrame: (performance.now() - t0) / frames,
+      calls: info.render.calls,
+      triangles: info.render.triangles,
+      pixelRatio: this.renderer.pixelRatio,
+      track: (this.track as Partial<StreamedTrack>).stats,
+      car: [p.x, p.y, p.z].map((v) => Math.round(v)),
+    }
+  }
+
+  /** Dev-only: hold inputs for debugStep runs. */
+  debugInput(state: Partial<InputState>): void {
+    this.input.setTouch(state)
+  }
+
+  private createRace(): RaceManager {
+    return new RaceManager(this.track.checkpoints, gameStore.getState().settings.laps, {
       onStateChange: (state) => {
         const phase: Record<typeof state, GamePhase> = {
           idle: 'menu',
@@ -125,12 +176,53 @@ export class Game {
       },
       onLap: () => this.publishTelemetry(),
     })
+  }
 
+  /** Procedural tracks build instantly; streamed ones load collision + nearby chunks first. */
+  private async loadTrack(id: string): Promise<RaceTrack> {
+    const def = getTrack(id)
+    gameStore.setState({ loadProgress: 0, trackName: def.name })
+    let track: RaceTrack
+    if (def.kind === 'procedural') {
+      track = new Track(def, this.physics.world)
+    } else {
+      track = await StreamedTrack.load(def.manifestUrl, {
+        assets: this.assets,
+        renderer: this.renderer.renderer,
+        camera: this.renderer.camera,
+        scene: this.renderer.scene,
+        world: this.physics.world,
+        quality: gameStore.getState().settings.quality,
+        onProgress: (p) => gameStore.setState({ loadProgress: p }),
+      })
+    }
+    gameStore.setState({ loadProgress: 1 })
+    return track
+  }
+
+  /** Menu track picker: tear down the current track and stream in the next. */
+  private async switchTrack(id: string): Promise<void> {
+    if (getTrack(id).id === this.track.id) return
+    const { setPhase } = gameStore.getState()
+    setPhase('loading')
+    this.race.state = 'idle'
+    this.track.dispose()
+    this.effects.clear()
+    try {
+      this.track = await this.loadTrack(id)
+    } catch (err) {
+      gameStore.getState().setError(err instanceof Error ? err.message : String(err))
+      return
+    }
+    if (this.disposed) return this.track.dispose()
+    this.renderer.scene.add(this.track.group)
+    this.race = this.createRace()
+    this.showroom.placeAt(this.track.spawn.position, this.track.spawn.heading)
+    this.resetCar()
     this.applySettings(gameStore.getState().settings)
-    telemetryStore.setState({ redlineRpm: config.engine.redlineRpm })
-    this.vehicle.render(1)
-    this.loop.start()
-    gameStore.getState().setPhase('menu')
+    setPhase('menu')
+    // Re-apply showroom visibility: the new track group starts visible.
+    this.updateShowroom('menu')
   }
 
   /** Loads the GLB + config from the pipeline, falling back to the placeholder car. */
@@ -138,12 +230,15 @@ export class Game {
     const entry = getCar(carId)
     const json = await this.assets.loadJson<Partial<VehicleConfig>>(entry.configUrl)
     const config = resolveVehicleConfig(json ?? undefined)
+    // Phones on Low get the simplified car: it's the single heaviest mesh on screen.
+    const low = gameStore.getState().settings.quality === 'low' && entry.modelUrlLow
+    const url = low ? entry.modelUrlLow! : entry.modelUrl
     let scene
-    if (await this.assets.exists(entry.modelUrl)) {
+    if (await this.assets.exists(url)) {
       try {
-        scene = await this.assets.loadModel(entry.modelUrl)
+        scene = await this.assets.loadModel(url)
       } catch (err) {
-        console.warn(`[Game] failed to load ${entry.modelUrl}, using placeholder`, err)
+        console.warn(`[Game] failed to load ${url}, using placeholder`, err)
       }
     }
     scene ??= buildPlaceholderCar(config)
@@ -214,6 +309,22 @@ export class Game {
     this.camera.snap()
   }
 
+  /** Mid-race reset (R / touch button / falling off the world): back to the last checkpoint. */
+  resetToCheckpoint(): void {
+    this.vehicle.respawn(this.track.respawnAt(this.race.lastCheckpoint))
+    this.camera.snap()
+  }
+
+  /** Feed from the on-screen touch controls. */
+  setTouchInput(state: Partial<InputState>): void {
+    this.input.setTouch(state)
+  }
+
+  /** Touch buttons for actions the keyboard maps to keys. */
+  triggerAction(action: 'pause' | 'reset' | 'camera'): void {
+    this.input.trigger(action)
+  }
+
   // ── Loop ───────────────────────────────────────────────────────────────
 
   private fixedUpdate(dt: number): void {
@@ -226,13 +337,18 @@ export class Game {
 
     const phase = gameStore.getState().phase
     if (phase === 'paused') return
-    if (this.input.consume('reset') && phase === 'racing') this.resetCar()
+    if (this.input.consume('reset') && phase === 'racing') this.resetToCheckpoint()
 
     const inMenu = phase === 'menu' || phase === 'garage' || phase === 'loading'
     const controls = this.race.controlsEnabled && !inMenu && phase !== 'finished'
     this.vehicle.fixedUpdate(controls ? this.input.state : LOCKED_INPUT, dt)
     this.physics.step(dt)
     this.vehicle.capture()
+    // Physics position, not the render-interpolated one (that lags a tick).
+    if (this.vehicle.body.translation().y < this.track.killY) {
+      if (phase === 'racing') this.resetToCheckpoint()
+      else this.resetCar()
+    }
     this.race.update(dt, this.vehicle.position)
   }
 
@@ -258,6 +374,9 @@ export class Game {
     }
     this.environment.follow(this.vehicle.position)
     this.showroom.update(dt)
+    const v = this.vehicle.body.linvel()
+    this.track.update(this.vehicle.position, _velocity.set(v.x, v.y, v.z), dt)
+    this.renderer.adapt(dt)
 
     const ctrl = this.vehicle.controller
     const slip = Math.max(...ctrl.wheels.map((w) => w.slip))
@@ -321,6 +440,13 @@ export class Game {
 
   private applySettings(s: Settings): void {
     this.renderer.applyQuality(s.quality, s.postfx)
+    this.environment?.setShadowMapSize(s.quality === 'high' ? 2048 : 1024)
+    if (this.track) {
+      void this.track.setQuality(s.quality)
+      const view = this.track.viewDistance(s.quality)
+      this.environment.setViewDistance(view.fogNear, view.fogFar)
+      this.renderer.setViewDistance(view.fogFar * 1.05)
+    }
     this.audio.setVolume(s.masterVolume)
     if (this.camera) this.camera.mode = s.camera
   }

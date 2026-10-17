@@ -6,6 +6,8 @@ export interface CarEntry {
   id: string
   name: string
   modelUrl: string
+  /** Simplified mesh for the Low preset (npm run build:car-lod). */
+  modelUrlLow?: string
   configUrl: string
 }
 
@@ -14,6 +16,7 @@ export const CARS: CarEntry[] = [
     id: 'porsche911',
     name: 'Porsche 911 Carrera 4S',
     modelUrl: '/models/cars/porsche911/porsche911.glb',
+    modelUrlLow: '/models/cars/porsche911/porsche911_low.glb',
     configUrl: '/models/cars/porsche911/vehicle-config.json',
   },
   {

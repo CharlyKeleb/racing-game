@@ -29,6 +29,11 @@ export class RaceManager {
     this.events = events
   }
 
+  /** Last checkpoint passed this lap, for resets. */
+  get lastCheckpoint(): number {
+    return this.checkpoints.last
+  }
+
   /** Vehicle controls are locked until this is true. */
   get controlsEnabled(): boolean {
     return this.state === 'racing' || this.state === 'finished'

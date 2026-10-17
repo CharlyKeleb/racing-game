@@ -78,14 +78,13 @@ both the axle centers and the computed mount points.
 *above* the wheels. Keep its bottom above the ground clearance so the box
 doesn't scrape. The wheels carry the car, not the box.
 
-## Track contract (Milestone 2)
+## Track contract
 
-- `Road` mesh is used as a Rapier trimesh collider. Keep it under ~50k triangles.
-- `Barrier_*` meshes become trimesh colliders.
-- `checkpoint_00…NN` empties are placed along the racing line, with +Z facing the
-  direction of travel. `checkpoint_00` is the start/finish line.
-- `spawn_00…` empties mark grid positions.
-- Visual-only meshes are named anything else.
+Tracks don't need hand-authored names: `scripts/track/build-track.mjs`
+classifies meshes by **material name** with per-track regex rules, then chunks,
+simplifies and compresses them for streaming. See
+[Track streaming](TRACK_STREAMING.md) for the pipeline, the `track.json`
+manifest and how to add a track.
 
 ## Licensing
 

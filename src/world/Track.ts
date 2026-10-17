@@ -1,7 +1,8 @@
 import RAPIER from '@dimforge/rapier3d-compat'
 import * as THREE from 'three'
 import type { SpawnPoint } from '../vehicles/Vehicle'
-import type { TrackDefinition } from './tracks'
+import type { RaceTrack, ViewDistance } from './RaceTrack'
+import type { ProceduralTrackDefinition } from './tracks'
 
 export interface Checkpoint {
   index: number
@@ -20,14 +21,15 @@ const GROUND_SIZE = 1200
  * ribbon, kerbs, scenery and checkpoint gates. The road is flat on y = 0 for
  * now; elevation comes with authored Blender tracks.
  */
-export class Track {
+export class Track implements RaceTrack {
   readonly group = new THREE.Group()
+  readonly killY = -50
   readonly curve: THREE.CatmullRomCurve3
   readonly checkpoints: Checkpoint[]
-  readonly definition: TrackDefinition
+  readonly definition: ProceduralTrackDefinition
   private readonly disposables: { dispose(): void }[] = []
 
-  constructor(def: TrackDefinition, world: RAPIER.World) {
+  constructor(def: ProceduralTrackDefinition, world: RAPIER.World) {
     this.definition = def
     this.curve = new THREE.CatmullRomCurve3(
       def.controlPoints.map(([x, z]) => new THREE.Vector3(x, 0, z)),
@@ -43,6 +45,28 @@ export class Track {
     this.group.add(this.buildGround(), this.buildRoad(def.roadWidth), this.buildKerbs(def.roadWidth), this.buildScenery(def.roadWidth))
     this.checkpoints = this.buildCheckpoints(def)
     this.group.add(this.buildStartLine(def.roadWidth))
+  }
+
+  get name(): string {
+    return this.definition.name
+  }
+
+  get id(): string {
+    return this.definition.id
+  }
+
+  respawnAt(index: number): SpawnPoint {
+    if (index === 0) return this.spawn
+    const cp = this.checkpoints[index] ?? this.checkpoints[0]
+    return { position: cp.position.clone().setY(0.6), heading: Math.atan2(cp.tangent.x, cp.tangent.z) }
+  }
+
+  update(): void {}
+
+  setQuality(): void {}
+
+  viewDistance(): ViewDistance {
+    return { fogNear: 250, fogFar: 900 }
   }
 
   get spawn(): SpawnPoint {
@@ -150,7 +174,7 @@ export class Track {
     return g
   }
 
-  private buildCheckpoints(def: TrackDefinition): Checkpoint[] {
+  private buildCheckpoints(def: ProceduralTrackDefinition): Checkpoint[] {
     return Array.from({ length: def.checkpointCount }, (_, i) => {
       const u = i / def.checkpointCount
       return {

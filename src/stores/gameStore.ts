@@ -1,4 +1,5 @@
 import { createStore } from 'zustand/vanilla'
+import { defaultQuality, isMobile } from '../engine/device'
 import { DEFAULT_BUILD, sanitizeBuild, type CarBuild } from '../vehicles/CarBuild'
 
 /**
@@ -16,12 +17,18 @@ export interface Settings {
   masterVolume: number
   camera: CameraMode
   laps: number
+  /** Track id from world/tracks.ts. */
+  track: string
 }
 
 export interface GameState {
   phase: GamePhase
   /** Display name of the loaded car, set by the engine. */
   carName: string
+  /** Display name of the loaded track, set by the engine. */
+  trackName: string
+  /** 0..1 while a track is loading. */
+  loadProgress: number
   error: string | null
   settings: Settings
   /** Garage customisation, applied by the engine on change. */
@@ -36,12 +43,15 @@ export interface GameState {
 const SETTINGS_KEY = 'racing-game:settings'
 const BUILD_KEY = 'racing-game:build'
 
+// First run: pick quality from the device. Phones start on Low with post FX
+// off; the renderer's dynamic resolution then holds 60 fps from there.
 const defaultSettings: Settings = {
-  quality: 'high',
-  postfx: true,
+  quality: defaultQuality(),
+  postfx: !isMobile(),
   masterVolume: 0.7,
   camera: 'chase',
   laps: 3,
+  track: 'nurburgring',
 }
 
 function loadSettings(): Settings {
@@ -73,6 +83,8 @@ function saveBuild(build: CarBuild): void {
 export const gameStore = createStore<GameState>()((set, get) => ({
   phase: 'boot',
   carName: '',
+  trackName: '',
+  loadProgress: 0,
   error: null,
   settings: loadSettings(),
   build: loadBuild(),

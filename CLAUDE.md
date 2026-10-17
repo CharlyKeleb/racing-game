@@ -15,6 +15,9 @@ Browser racing game. Read `docs/ARCHITECTURE.md` before structural changes.
 - Coordinates are glTF: meters, +Y up, +Z forward, +X left.
 - Car and track assets follow `docs/ASSET_PIPELINE.md`. Tune handling in
   `vehicle-config.json` / `DEFAULT_VEHICLE_CONFIG`, not in code.
+- Tracks: never ship a source GLB. Run it through `scripts/track/build-track.mjs`
+  (see `docs/TRACK_STREAMING.md`). Keep the Low preset at ≲150 draw calls and
+  ≲200k triangles per frame, car included (`window.__game.debugStep()` in dev).
 
 ## Verify
 - `npm run build` (includes `tsc -b`), `npm test`, `npm run lint`

@@ -27,6 +27,9 @@ npm run dev
 | R | Reset car |
 | Esc / P | Pause |
 
+On phones and tablets, on-screen touch controls appear: drag to steer on the
+left; Gas, Brake, N₂O and Drift are on the right.
+
 Gamepads are supported: RT throttle, LT brake, left stick steer, A handbrake,
 Y camera, B reset and Start pause.
 
@@ -41,6 +44,8 @@ placeholder car with the same node names and physics.
 | `npm run build` | Typecheck and production build |
 | `npm test` | Vitest (physics, race rules, loop) |
 | `npm run lint` | oxlint |
+| `npm run build:track` | Rebuild the streamed Nürburgring package from the source GLB |
+| `npm run build:car-lod` | Rebuild the low-poly Porsche for the Low preset |
 
 ## Docs
 
@@ -48,5 +53,7 @@ placeholder car with the same node names and physics.
   conventions and roadmap
 - [Asset pipeline](docs/ASSET_PIPELINE.md): the GLB and `vehicle-config.json`
   contract for cars and tracks
+- [Track streaming](docs/TRACK_STREAMING.md): the Nürburgring pipeline,
+  streaming runtime and mobile performance budgets
 - [Prepare a car with Blender MCP](docs/blender/PREPARE_CAR_WITH_BLENDER_MCP.md):
   hand this to Claude to turn the McLaren `.blend` into a game-ready GLB

@@ -10,6 +10,7 @@ export class Environment {
   readonly sun: THREE.DirectionalLight
   readonly sunDirection = new THREE.Vector3()
   private readonly sky: Sky
+  private readonly fog: THREE.Fog
 
   constructor(scene: THREE.Scene) {
     this.sky = new Sky()
@@ -32,7 +33,8 @@ export class Environment {
       `gl_FragColor = vec4( min( texColor, vec3( ${SKY_MAX_LUMINANCE.toFixed(2)} ) ), 1.0 );`,
     )
 
-    scene.fog = new THREE.Fog(0xbfd4e6, 250, 900)
+    this.fog = new THREE.Fog(0xbfd4e6, 250, 900)
+    scene.fog = this.fog
     scene.background = new THREE.Color(0xbfd4e6)
 
     const hemi = new THREE.HemisphereLight(0xcfe3ff, 0x4f6a3a, 0.6)
@@ -52,7 +54,22 @@ export class Environment {
     this.group.add(this.sky, hemi, this.sun, this.sun.target)
   }
 
+  /** Tracks hide their streaming edge in fog; see RaceTrack.viewDistance. */
+  setViewDistance(near: number, far: number): void {
+    this.fog.near = near
+    this.fog.far = far
+  }
+
+  /** Smaller shadow maps on weaker presets (shadows are off entirely on low). */
+  setShadowMapSize(size: number): void {
+    if (this.sun.shadow.mapSize.x === size) return
+    this.sun.shadow.mapSize.set(size, size)
+    this.sun.shadow.map?.dispose()
+    this.sun.shadow.map = null
+  }
+
   follow(target: THREE.Vector3): void {
+    this.sky.position.copy(target)
     this.sun.target.position.copy(target)
     this.sun.position.copy(target).addScaledVector(this.sunDirection, 150)
   }

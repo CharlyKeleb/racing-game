@@ -166,7 +166,8 @@ src/
 ├── engine/      Game (composition root), GameLoop, Renderer, PhysicsWorld, AssetManager
 ├── vehicles/    VehicleConfig (data contract), Vehicle, VehicleController,
 │                Suspension, TirePhysics, Drivetrain, CarModel (GLB rigging), carRegistry
-├── world/       Track (spline → road, kerbs, scenery, checkpoints), Environment (sky, sun, fog), tracks
+├── world/       RaceTrack (interface), Track (procedural), StreamedTrack (chunked GLB streaming),
+│                streaming/ChunkPlanner (pure LOD planning), Environment (sky, sun, fog), tracks
 ├── camera/      ChaseCamera (chase + cockpit, speed FOV)
 ├── racing/      RaceManager, CheckpointManager, LapTimer
 ├── input/       InputManager (keyboard + gamepad → InputState)
@@ -175,7 +176,7 @@ src/
 ├── stores/      gameStore, telemetryStore
 └── ui/          React overlay: MainMenu, Settings, Hud, PauseMenu, Results
 public/models/cars/<id>/   <id>.glb + vehicle-config.json   (from the Blender MCP pipeline)
-public/models/tracks/      authored track GLBs (later)
+public/models/tracks/<id>/ streamed track packages from scripts/track/build-track.mjs
 public/audio/              recorded engine loops / SFX (later)
 tests/                     Vitest: physics + racing rules + loop
 docs/                      this file, ASSET_PIPELINE.md, blender/ prompts
@@ -211,10 +212,12 @@ The game runs before any authored asset exists:
 - [ ] Performance pass: stable 60 FPS on a mid-range laptop
 
 ### Milestone 2: A beautiful circuit
-- Authored track GLB (road mesh as trimesh collider, barriers, `checkpoint_*` empties)
-- Surface types (asphalt/kerb/grass grip via collider user data)
-- HDRI environment, time-of-day presets, baked lighting for the track
-- Barrier collisions, camera shake, reset-to-last-checkpoint
+- [x] Nürburgring GP streamed from a chunked GLB package, see [Track streaming](TRACK_STREAMING.md)
+- [x] Trimesh collision (road, run-off, barriers, terrain), reset-to-last-checkpoint, kill floor
+- [x] Mobile: quality presets, far-LOD merging, car LOD, dynamic resolution, touch controls
+- [ ] Surface types (asphalt/kerb/grass grip via collider user data)
+- [ ] HDRI environment, time-of-day presets, baked lighting for the track
+- [ ] Camera shake on barrier hits; minimap from the gate positions
 
 ### Milestone 3: Racing
 - AI opponents on a racing line (waypoints + PID steering, rubber-banding)
