@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { buildStats, carClass, performanceRank } from '../vehicles/CarBuild'
 import { getCar } from '../vehicles/carRegistry'
+import { CURRENT_MODE, GAME_MODES } from '../racing/gameModes'
 import { TRACKS } from '../world/tracks'
 import { useGameInstance } from './GameContext'
 import { useGame } from './hooks'
@@ -12,6 +13,18 @@ import { Settings } from './Settings'
 export function MainMenu() {
   const game = useGameInstance()
   const [showSettings, setShowSettings] = useState(false)
+  // Browsers only start audio from a user gesture: the first click or key in
+  // the menu brings up the garage's room tone.
+  useEffect(() => {
+    if (!game) return
+    const start = () => game.unlockAudio()
+    window.addEventListener('pointerdown', start, { once: true })
+    window.addEventListener('keydown', start, { once: true })
+    return () => {
+      window.removeEventListener('pointerdown', start)
+      window.removeEventListener('keydown', start)
+    }
+  }, [game])
   const switching = useGame((s) => s.carSwitching)
 
   return (
@@ -32,6 +45,7 @@ export function MainMenu() {
           <CarCard />
         </div>
         <div className="menu-actions">
+          <ModeSelect />
           <TrackPicker />
           <Button size="md" onClick={() => game?.openGarage()}>
             Garage
@@ -57,7 +71,8 @@ export function MainMenu() {
 export function CarCard() {
   const name = useGame((s) => s.carName)
   const build = useGame((s) => s.build)
-  const stock = getCar(useGame((s) => s.settings.car)).stats
+  const carId = useGame((s) => s.settings.car)
+  const stock = getCar(carId).stats
   const stats = buildStats(build, stock)
   const rank = performanceRank(build, stock)
   return (
@@ -71,10 +86,60 @@ export function CarCard() {
           </div>
         </div>
       </div>
+      <CarSpecsStrip carId={carId} />
       <StatBar label="Power" value={stats.power} />
       <StatBar label="Grip" value={stats.grip} />
       <StatBar label="Handling" value={stats.handling} />
       <StatBar label="Braking" value={stats.braking} />
+    </div>
+  )
+}
+
+/** Stock power, 0–100, top speed and drivetrain, the numbers a car card leads with. */
+function CarSpecsStrip({ carId }: { carId: string }) {
+  const s = getCar(carId).specs
+  const tiles: [string, string, string][] = [
+    ['Power', s.powerHp.toLocaleString(), 'hp'],
+    ['0–100', s.zeroToHundred.toFixed(1), 's'],
+    ['Top', String(s.topSpeedKmh), 'km/h'],
+    ['Drive', s.drivetrain, ''],
+  ]
+  return (
+    <dl className="car-specs" aria-label="Stock specifications">
+      {tiles.map(([label, value, unit]) => (
+        <div key={label} className="car-specs__tile">
+          <dt>{label}</dt>
+          <dd>
+            {value}
+            {unit && <small>{unit}</small>}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  )
+}
+
+/** Mode tiles: the current one lit, the rest locked with a "Soon" tag until they're built. */
+function ModeSelect() {
+  const current = GAME_MODES.find((m) => m.id === CURRENT_MODE)!
+  return (
+    <div className="mode-select">
+      <div className="mode-select__grid" role="radiogroup" aria-label="Game mode">
+        {GAME_MODES.map((m) => (
+          <button
+            key={m.id}
+            role="radio"
+            aria-checked={m.id === CURRENT_MODE}
+            disabled={!m.available}
+            className={m.id === CURRENT_MODE ? 'on' : ''}
+            title={m.available ? m.blurb : `${m.blurb}: coming soon`}
+          >
+            <span>{m.name}</span>
+            {!m.available && <i>Soon</i>}
+          </button>
+        ))}
+      </div>
+      <span className="mode-select__blurb">{current.blurb}</span>
     </div>
   )
 }

@@ -427,6 +427,14 @@ export class Game {
     this.wheelYaw = 0
   }
 
+  /**
+   * First click or tap in the menu: start audio (browsers only allow it from a
+   * user gesture) so the garage has its room tone before any race.
+   */
+  unlockAudio(): void {
+    this.audio.unlock(gameStore.getState().settings.masterVolume)
+  }
+
   /** Garage chevrons: step through the cars. The current one drives off and the next drives in. */
   cycleCar(step: 1 | -1): void {
     const s = gameStore.getState()
@@ -446,6 +454,10 @@ export class Game {
     if (showroom) {
       // The chevron click is a user gesture, so the engines can be heard leaving and arriving.
       this.audio.unlock(gameStore.getState().settings.masterVolume)
+      // Swing the camera round to a fresh angle for the new car; the showroom
+      // camera's damping turns this into a slow glide over the swap.
+      this.showroomYaw += (Math.random() < 0.5 ? -1 : 1) * (0.5 + Math.random() * 0.5)
+      this.showroomHeight = THREE.MathUtils.clamp(ORBIT_REST_HEIGHT + (Math.random() - 0.4) * 0.8, ORBIT_HEIGHT[0], ORBIT_HEIGHT[1])
       await new Promise<void>((done) => (this.showroomDrive = { mode: 'out', t: 0, spin: 0, done }))
       this.vehicle.model.root.visible = false
     }
@@ -455,8 +467,6 @@ export class Game {
     if (showroom) await new Promise<void>((done) => (this.showroomDrive = { mode: 'in', t: 0, spin: 0, done }))
     if (token !== this.carSwapToken) return
     gameStore.setState({ carSwitching: false })
-    const now = gameStore.getState().phase
-    if (now === 'menu' || now === 'garage') this.audio.suspend()
   }
 
   /** Swap the player car for a freshly loaded one, rebuilding everything tied to it. */
@@ -533,7 +543,8 @@ export class Game {
 
   quitToMenu(): void {
     this.race.state = 'idle'
-    this.audio.suspend()
+    // Back in the garage: room tone on, engine quiet (updateShowroom sets the scene).
+    this.audio.resume()
     this.resetCar()
     this.effects.clear()
     gameStore.getState().setPhase('menu')
@@ -597,6 +608,7 @@ export class Game {
     this.showroomAnchor.position.copy(this.vehicle.model.root.position)
     this.showroomAnchor.quaternion.copy(this.vehicle.model.root.quaternion)
     if (this.showroomDrive) this.animateShowroomDrive(dt)
+    this.audio.setMenuEngine(this.showroomRev !== null)
     if (phase === 'menu' || phase === 'garage') {
       const wheel = phase === 'garage' && this.showroomFocus === 'wheel'
       if (wheel) {
@@ -764,6 +776,7 @@ export class Game {
     const inShowroom = phase === 'menu' || phase === 'garage'
     this.showroom.setActive(this.renderer.scene, inShowroom, [this.track.group, this.environment.group, this.effects.group, this.guide.group])
     this.setShowroomPad(inShowroom)
+    this.audio.setScene(inShowroom ? 'menu' : 'race')
     // Re-assert the time of day: it may have changed while the showroom had the scene.
     if (!inShowroom) this.environment.apply(this.renderer.scene)
   }
