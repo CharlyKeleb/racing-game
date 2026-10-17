@@ -90,7 +90,9 @@ export class Game {
   private trackVisuals: Promise<void> | null = null
   private trackVisualsDone = false
   private trackProgress = 0
+  private trackLoadToken = 0
   private raceQueued = false
+  private raceLoadingTick: ReturnType<typeof setInterval> | null = null
   /** Bumped per car switch, so a slow load can't install over a newer pick. */
   private carSwapToken = 0
   /** Garage car swap in progress: the car drives off ('out') or arrives ('in'), drawn only — physics stays parked. */
@@ -216,16 +218,22 @@ export class Game {
     performance.measure('boot:menu', 'boot:start')
     if (import.meta.env.DEV) (window as unknown as { __game: Game }).__game = this
 
+    const bootToken = this.trackLoadToken
     // Behind the menu: the track's visuals first (Race needs them), then the
     // sharp garage textures, then the other cars.
     void this.loadTrackVisuals()
       .then(async () => {
+        if (this.disposed || this.trackLoadToken !== bootToken) return
         performance.measure('boot:trackVisuals', 'boot:start')
         await this.showroom.upgrade(this.assets)
         performance.measure('boot:garageHigh', 'boot:start')
         await this.preloadCars()
       })
-      .catch((err: unknown) => gameStore.getState().setError(err instanceof Error ? err.message : String(err)))
+      .catch((err: unknown) => {
+        if (!this.disposed && this.trackLoadToken === bootToken) {
+          gameStore.getState().setError(err instanceof Error ? err.message : String(err))
+        }
+      })
   }
 
   /**
@@ -306,12 +314,16 @@ export class Game {
     })
   }
 
-  /** Procedural tracks build instantly; streamed ones load collision + nearby chunks first. */
   /** A track ready to race and see (track switching): core, then visuals. */
   private async loadTrack(id: string): Promise<RaceTrack> {
     gameStore.setState({ loadProgress: 0 })
     const track = await this.loadTrackCore(id)
-    await track.loadVisuals?.((p) => gameStore.setState({ loadProgress: p }))
+    try {
+      await track.loadVisuals?.((p) => gameStore.setState({ loadProgress: p }))
+    } catch (err) {
+      track.dispose()
+      throw err
+    }
     this.trackVisuals = Promise.resolve()
     this.trackVisualsDone = true
     gameStore.setState({ loadProgress: 1 })
@@ -321,9 +333,11 @@ export class Game {
   /** What the race logic needs: physics, spawn, checkpoints, surfaces. */
   private async loadTrackCore(id: string): Promise<RaceTrack> {
     const def = getTrack(id)
+    this.trackLoadToken++
     gameStore.setState({ trackName: def.name })
     this.trackVisuals = null
     this.trackVisualsDone = false
+    this.trackProgress = 0
     if (def.kind === 'procedural') return new Track(def, this.physics.world)
     return StreamedTrack.load(def.manifestUrl, {
       assets: this.assets,
@@ -337,7 +351,12 @@ export class Game {
 
   /** The current track's visuals, loaded once; resolves straight away for complete tracks. */
   private loadTrackVisuals(): Promise<void> {
-    this.trackVisuals ??= (this.track.loadVisuals?.((p) => (this.trackProgress = p)) ?? Promise.resolve()).then(() => {
+    const token = this.trackLoadToken
+    const track = this.track
+    this.trackVisuals ??= (track.loadVisuals?.((p) => {
+      if (!this.disposed && this.trackLoadToken === token) this.trackProgress = p
+    }) ?? Promise.resolve()).then(() => {
+      if (this.disposed || this.trackLoadToken !== token) return
       this.trackVisualsDone = true
       this.trackProgress = 1
     })
@@ -349,6 +368,7 @@ export class Game {
     if (getTrack(id).id === this.track.id) return
     const { setPhase } = gameStore.getState()
     setPhase('loading')
+    this.clearRaceLoading()
     this.race.state = 'idle'
     this.track.dispose()
     this.effects.clear()
@@ -413,7 +433,7 @@ export class Game {
 
   startRace(): void {
     const { settings, carSwitching } = gameStore.getState()
-    if (carSwitching || this.raceQueued) return
+    if (this.disposed || carSwitching || this.raceQueued) return
     if (!this.trackReady) {
       // Pressed before the track's visuals finished loading behind the menu:
       // show the loading screen, then start. Audio unlocks now, while this is
@@ -421,13 +441,19 @@ export class Game {
       this.audio.unlock(settings.masterVolume)
       this.raceQueued = true
       gameStore.getState().setPhase('loading')
-      const tick = setInterval(() => gameStore.setState({ loadProgress: this.trackProgress }), 100)
+      const token = this.trackLoadToken
+      gameStore.setState({ loadProgress: this.trackProgress })
+      this.raceLoadingTick = setInterval(() => gameStore.setState({ loadProgress: this.trackProgress }), 100)
       void this.loadTrackVisuals().then(() => {
-        clearInterval(tick)
-        this.raceQueued = false
-        if (this.disposed) return
+        if (this.disposed || this.trackLoadToken !== token) return
+        this.clearRaceLoading()
         gameStore.getState().setPhase('menu')
         this.startRace()
+      }).catch((err: unknown) => {
+        if (!this.disposed && this.trackLoadToken === token) {
+          this.clearRaceLoading()
+          gameStore.getState().setError(err instanceof Error ? err.message : String(err))
+        }
       })
       return
     }
@@ -436,6 +462,12 @@ export class Game {
     this.resetCar()
     this.effects.clear()
     this.race.start(settings.laps)
+  }
+
+  private clearRaceLoading(): void {
+    if (this.raceLoadingTick !== null) clearInterval(this.raceLoadingTick)
+    this.raceLoadingTick = null
+    this.raceQueued = false
   }
 
   openGarage(): void {
@@ -908,6 +940,7 @@ export class Game {
 
   dispose(): void {
     this.disposed = true
+    this.clearRaceLoading()
     this.loop.stop()
     this.unsubscribe()
     this.input.dispose()

@@ -148,10 +148,6 @@ export class StreamedTrack implements RaceTrack {
   }
 
   /**
-   * Loads everything needed to start racing at the spawn point. Resolves once
-   * the car's surroundings are in full detail; the rest streams in while driving.
-   */
-  /**
    * Loads what the race logic needs: manifest, collision and the surface map
    * (~0.5 MB). Everything you see comes from `loadVisuals`, which boot runs
    * behind the menu: the garage hides the track, so the menu needn't wait.
@@ -168,13 +164,16 @@ export class StreamedTrack implements RaceTrack {
   /** Materials, backdrop and the chunks around the grid. Streaming starts once this is done. */
   loadVisuals(onProgress: (p: number) => void = () => {}): Promise<void> {
     this.visuals ??= (async () => {
+      if (this.disposed) return
       onProgress(0.05)
       await this.loadMaterials(BUDGET[this.quality].tier)
+      if (this.disposed) return
       onProgress(0.4)
       await this.loadBackdrop()
+      if (this.disposed) return
       onProgress(0.5)
       await this.preload(this.spawn.position, (p) => onProgress(0.5 + p * 0.5))
-      this.visualsReady = true
+      if (!this.disposed) this.visualsReady = true
     })()
     return this.visuals
   }
@@ -194,6 +193,10 @@ export class StreamedTrack implements RaceTrack {
         : new THREE.MeshStandardMaterial({ name: VERTEX_COLOR_MATERIAL, vertexColors: true, roughness: 0.95, metalness: 0 }),
     )
 
+    if (this.disposed) {
+      disposeMaterials(next)
+      return
+    }
     const old = this.materials
     this.materials = next
     // Retarget already-streamed meshes, then free the previous tier's GPU memory.
@@ -296,6 +299,10 @@ export class StreamedTrack implements RaceTrack {
 
   private async loadBackdrop(): Promise<void> {
     const gltf = await this.assets.loadGltf(this.baseUrl + this.manifest.backdrop)
+    if (this.disposed) {
+      disposeObject(gltf.scene)
+      return
+    }
     this.backdrop = this.adopt(gltf.scene)
     this.group.add(this.backdrop)
   }
@@ -309,7 +316,10 @@ export class StreamedTrack implements RaceTrack {
     const worker = async () => {
       for (let i = queue.shift(); i !== undefined; i = queue.shift()) {
         const object = await this.fetchChunk(i, this.wanted[i])
-        if (this.disposed) return
+        if (this.disposed) {
+          disposeObject(object)
+          return
+        }
         this.show(i, this.wanted[i], object)
         onProgress(++done / jobs.length)
       }
