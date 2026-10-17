@@ -112,6 +112,7 @@ export class Game {
 
     const { config: base, model } = await this.loadCar(carId)
     if (this.disposed) return
+    this.audio.setCarAudio(getCar(carId).audioUrl)
     const build = gameStore.getState().build
     this.baseConfig = base
     gameStore.setState({ carName: base.name })
@@ -284,6 +285,7 @@ export class Game {
   startRace(): void {
     const { settings } = gameStore.getState()
     this.audio.unlock(settings.masterVolume)
+    this.audio.playStart()
     this.resetCar()
     this.effects.clear()
     this.race.start(settings.laps)

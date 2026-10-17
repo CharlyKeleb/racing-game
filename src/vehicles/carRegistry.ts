@@ -9,6 +9,8 @@ export interface CarEntry {
   /** Simplified mesh for the Low preset (npm run build:car-lod). */
   modelUrlLow?: string
   configUrl: string
+  /** Engine recordings folder (engine-bank.wav/.json, ignition, lift-off); procedural engine if absent. */
+  audioUrl?: string
 }
 
 export const CARS: CarEntry[] = [
@@ -18,6 +20,7 @@ export const CARS: CarEntry[] = [
     modelUrl: '/models/cars/porsche911/porsche911.glb',
     modelUrlLow: '/models/cars/porsche911/porsche911_low.glb',
     configUrl: '/models/cars/porsche911/vehicle-config.json',
+    audioUrl: '/audio/porsche911/',
   },
   {
     id: 'mclaren',
