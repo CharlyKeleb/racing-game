@@ -3,6 +3,7 @@ import { AudioManager } from '../audio/AudioManager'
 import { ChaseCamera, type ShowroomFraming } from '../camera/ChaseCamera'
 import { DirectionGuide } from '../effects/DirectionGuide'
 import { DrivingEffects } from '../effects/DrivingEffects'
+import { Headlights } from '../effects/Headlights'
 import { TrackProgress } from '../racing/TrackProgress'
 import { InputManager, type InputState } from '../input/InputManager'
 import { RaceManager } from '../racing/RaceManager'
@@ -60,6 +61,7 @@ export class Game {
   private livery!: CarLivery
   private showroom!: Showroom
   private effects!: DrivingEffects
+  private headlights!: Headlights
   private guide!: DirectionGuide
   private progress!: TrackProgress
   private wrongWayTime = 0
@@ -104,8 +106,10 @@ export class Game {
     this.physics = new PhysicsWorld()
     const scene = this.renderer.scene
 
-    this.environment = new Environment(scene)
+    this.environment = new Environment(this.renderer.renderer)
+    this.environment.setTimeOfDay(gameStore.getState().settings.timeOfDay)
     scene.add(this.environment.group)
+    this.environment.apply(scene)
 
     this.track = await this.loadTrack(gameStore.getState().settings.track)
     if (this.disposed) return
@@ -122,6 +126,7 @@ export class Game {
     this.livery = new CarLivery(model)
     this.livery.apply(build)
     scene.add(model.root)
+    this.headlights = new Headlights(model, config)
     this.effects = new DrivingEffects(this.vehicle)
     scene.add(this.effects.group)
 
@@ -502,6 +507,8 @@ export class Game {
     if (!this.showroom) return
     const inShowroom = phase === 'menu' || phase === 'garage'
     this.showroom.setActive(this.renderer.scene, inShowroom, [this.track.group, this.environment.group, this.effects.group, this.guide.group])
+    // Re-assert the time of day: it may have changed while the showroom had the scene.
+    if (!inShowroom) this.environment.apply(this.renderer.scene)
   }
 
   private applyBuild(build: CarBuild, prev: CarBuild): void {
@@ -514,6 +521,7 @@ export class Game {
     const config = applyCarBuild(this.baseConfig, build)
     this.vehicle = new Vehicle(config, model, this.physics.world, this.track.spawn)
     this.vehicle.controller.surfaceAt = (x, z) => this.track.surfaceAt(x, z)
+    this.vehicle.lightsOn = this.environment.current.headlights
     telemetryStore.setState({ redlineRpm: config.engine.redlineRpm })
     this.vehicle.render(1)
   }
@@ -529,6 +537,25 @@ export class Game {
     }
     this.audio.setVolume(s.masterVolume)
     if (this.camera) this.camera.mode = s.camera
+    this.applyTimeOfDay(s.timeOfDay)
+  }
+
+  /** Sky, lights, fog and reflections for the chosen time of day; headlights at night. */
+  private applyTimeOfDay(id: Settings['timeOfDay']): void {
+    if (!this.environment) return
+    const before = this.environment.current
+    this.environment.setTimeOfDay(id)
+    const preset = this.environment.current
+    // The garage showroom owns the scene's fog/environment while it's up; it
+    // gets ours back in updateShowroom() when it closes.
+    const phase = gameStore.getState().phase
+    if (phase !== 'menu' && phase !== 'garage') this.environment.apply(this.renderer.scene)
+    if (this.vehicle) {
+      this.vehicle.lightsOn = preset.headlights
+      this.headlights.setOn(preset.headlights)
+    }
+    // Adding/removing the headlight beams changes every lit shader: compile now, in the menu, not on the grid.
+    if (before !== preset && this.vehicle) void this.renderer.renderer.compileAsync(this.renderer.scene, this.renderer.camera)
   }
 
   dispose(): void {
@@ -542,6 +569,7 @@ export class Game {
     this.guide?.dispose()
     this.showroom?.dispose()
     this.track?.dispose()
+    this.headlights?.dispose()
     this.environment?.dispose()
     this.physics?.dispose()
     this.renderer.dispose()

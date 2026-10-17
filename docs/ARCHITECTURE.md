@@ -229,7 +229,8 @@ The game runs before any authored asset exists:
 - [x] Trimesh collision (road, run-off, barriers, terrain), reset-to-last-checkpoint, kill floor
 - [x] Mobile: quality presets, far-LOD merging, car LOD, dynamic resolution, touch controls
 - [ ] Surface types (asphalt/kerb/grass grip via collider user data)
-- [ ] HDRI environment, time-of-day presets, baked lighting for the track
+- [x] Time-of-day presets (noon, golden hour, overcast, night with headlights) with a sky-baked HDR environment (#20)
+- [ ] Baked lighting for the track
 - [ ] Camera shake on barrier hits; minimap from the gate positions
 
 ### Milestone 3: Racing

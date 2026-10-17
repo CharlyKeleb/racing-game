@@ -1,9 +1,8 @@
 import * as THREE from 'three'
-import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
 import { PostFX } from '../effects/PostFX'
 import type { QualityPreset } from '../stores/gameStore'
 
-/** Owns the WebGL context, scene, camera, environment map and post stack. */
+/** Owns the WebGL context, scene, camera and post stack. */
 export class Renderer {
   readonly renderer: THREE.WebGLRenderer
   readonly scene = new THREE.Scene()
@@ -30,11 +29,7 @@ export class Renderer {
     this.renderer.shadowMap.type = THREE.PCFShadowMap
     container.appendChild(this.renderer.domElement)
 
-    // Image-based lighting so PBR car paint has something to reflect.
-    const pmrem = new THREE.PMREMGenerator(this.renderer)
-    this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture
-    this.scene.environmentIntensity = 0.6
-    pmrem.dispose()
+    // Image-based lighting comes from world/Environment (sky-baked, per time of day).
 
     this.postfx = new PostFX(this.renderer, this.scene, this.camera)
 
@@ -114,7 +109,6 @@ export class Renderer {
   dispose(): void {
     this.resizeObserver.disconnect()
     this.postfx.dispose()
-    this.scene.environment?.dispose()
     this.renderer.dispose()
     this.renderer.domElement.remove()
   }

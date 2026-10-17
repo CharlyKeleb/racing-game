@@ -1,6 +1,7 @@
 import { createStore } from 'zustand/vanilla'
 import { defaultQuality, isMobile } from '../engine/device'
 import { DEFAULT_BUILD, sanitizeBuild, type CarBuild } from '../vehicles/CarBuild'
+import { isTimeOfDay, type TimeOfDay } from '../world/timeOfDay'
 
 /**
  * Low-frequency game state shared by the engine and React.
@@ -19,6 +20,8 @@ export interface Settings {
   laps: number
   /** Track id from world/tracks.ts. */
   track: string
+  /** Lighting preset, see world/timeOfDay.ts. */
+  timeOfDay: TimeOfDay
 }
 
 export interface GameState {
@@ -54,12 +57,16 @@ const defaultSettings: Settings = {
   camera: 'chase',
   laps: 3,
   track: 'nurburgring',
+  timeOfDay: 'noon',
 }
 
 function loadSettings(): Settings {
   try {
     const raw = localStorage.getItem(SETTINGS_KEY)
-    return raw ? { ...defaultSettings, ...JSON.parse(raw) } : defaultSettings
+    if (!raw) return defaultSettings
+    const merged: Settings = { ...defaultSettings, ...JSON.parse(raw) }
+    if (!isTimeOfDay(merged.timeOfDay)) merged.timeOfDay = defaultSettings.timeOfDay
+    return merged
   } catch {
     return defaultSettings
   }

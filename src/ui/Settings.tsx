@@ -1,4 +1,5 @@
 import type { QualityPreset } from '../stores/gameStore'
+import type { TimeOfDay } from '../world/timeOfDay'
 import { useGame } from './hooks'
 import { Button, Panel, Segmented } from './kit'
 
@@ -16,6 +17,17 @@ export function Settings({ onClose }: { onClose?: () => void }) {
           ['high', 'High'],
         ]}
         onPick={(quality) => update({ quality })}
+      />
+      <Segmented<TimeOfDay>
+        label="Time of day"
+        value={settings.timeOfDay}
+        options={[
+          ['noon', 'Noon'],
+          ['golden', 'Golden'],
+          ['overcast', 'Overcast'],
+          ['night', 'Night'],
+        ]}
+        onPick={(timeOfDay) => update({ timeOfDay })}
       />
       <Segmented<number>
         label="Laps"

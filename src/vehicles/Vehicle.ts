@@ -72,7 +72,11 @@ export class Vehicle {
   private rollVel = 0
   /** Tail-light materials (owned copies), lit up under braking. */
   private readonly taillights: THREE.MeshStandardMaterial[] = []
+  /** Headlight lens materials (owned copies), lit at night. */
+  private readonly headlights: THREE.MeshStandardMaterial[] = []
   private brakeGlow = 0
+  /** Night driving: headlight lenses glow and the tail lights run brighter. */
+  lightsOn = false
 
   constructor(config: VehicleConfig, model: CarModel, world: RAPIER.World, spawn: SpawnPoint) {
     this.config = config
@@ -105,7 +109,16 @@ export class Vehicle {
       const mesh = o as THREE.Mesh
       if (!mesh.isMesh) return
       const mat = mesh.material as THREE.MeshStandardMaterial
-      if (Array.isArray(mat) || !mat?.isMeshStandardMaterial || !/tail ?light|brake ?light/i.test(mat.name)) return
+      if (Array.isArray(mat) || !mat?.isMeshStandardMaterial) return
+      if (/^lights$|head ?light/i.test(mat.name)) {
+        const own = mat.clone()
+        own.emissive.setRGB(1, 0.96, 0.88)
+        own.emissiveIntensity = 0
+        mesh.material = own
+        this.headlights.push(own)
+        return
+      }
+      if (!/tail ?light|brake ?light/i.test(mat.name)) return
       const own = mat.clone()
       // Deep red lens; a saturated red glow survives tone mapping as red, not pale orange.
       own.color.setRGB(0.55, 0.06, 0.05)
@@ -203,7 +216,10 @@ export class Vehicle {
       this.model.body.rotation.set(this.pitch, 0, this.roll)
 
       // Kept near 1: ACES tone mapping washes brighter emissive out toward white.
-      const glowTarget = this.controller.braking > 0.05 ? 1.3 : 0.15 // brake lights vs running lights
+      const running = this.lightsOn ? 0.45 : 0.15
+      const glowTarget = this.controller.braking > 0.05 ? 1.3 : running // brake lights vs running lights
+      const lens = this.lightsOn ? 1.6 : 0
+      for (const mat of this.headlights) mat.emissiveIntensity = lens
       this.brakeGlow += (glowTarget - this.brakeGlow) * (1 - Math.exp(-25 * h))
       for (const mat of this.taillights) mat.emissiveIntensity = this.brakeGlow
     }
