@@ -1,87 +1,69 @@
+import { Help } from './Help'
+import { useEffect, useRef, useState } from 'react'
+import { GiGears, GiSteeringWheel, GiSpeaker, GiGamepad, GiComputerFan } from 'react-icons/gi'
 import type { CameraMode, QualityPreset } from '../stores/gameStore'
-import type { TimeOfDay } from '../world/timeOfDay'
+import { TIME_PRESETS, type TimeOfDay } from '../world/timeOfDay'
 import { useGame } from './hooks'
-import { Button, Panel, Segmented } from './kit'
+import { Button, Segmented } from './kit'
+import { SettingChoices, SettingScene } from './SettingChoices'
+
+const sections = [
+  { id: 'graphics', label: 'Graphics', icon: GiComputerFan, hint: 'Balance detail and performance.' },
+  { id: 'driving', label: 'Driving', icon: GiSteeringWheel, hint: 'Set your view and race preferences.' },
+  { id: 'audio', label: 'Audio', icon: GiSpeaker, hint: 'Find the right volume for your engine.' },
+  { id: 'controls', label: 'Controls', icon: GiGamepad, hint: 'Everything you need behind the wheel.' },
+] as const
+
+/** Top-layer modal: previews and other menu layers cannot paint over it. */
+export function SettingsDialog({ onClose }: { onClose(): void }) {
+  const dialog = useRef<HTMLDialogElement>(null)
+  useEffect(() => { dialog.current?.showModal() }, [])
+  return <dialog ref={dialog} className="settings-dialog" aria-label="Settings" onClose={onClose}>
+    <Settings onClose={() => dialog.current?.close()} />
+  </dialog>
+}
 
 export function Settings({ onClose }: { onClose?: () => void }) {
   const settings = useGame((s) => s.settings)
   const update = useGame((s) => s.updateSettings)
-  return (
-    <Panel title="Settings" className="settings">
-      <Segmented<QualityPreset>
-        label="Quality"
-        value={settings.quality}
-        options={[
-          ['low', 'Low'],
-          ['medium', 'Medium'],
-          ['high', 'High'],
-        ]}
-        onPick={(quality) => update({ quality })}
-      />
-      <Segmented<CameraMode>
-        label="Camera"
-        value={settings.camera}
-        options={[
-          ['chase', 'Chase'],
-          ['cockpit', 'Cockpit'],
-        ]}
-        onPick={(camera) => update({ camera })}
-      />
-      <Segmented<TimeOfDay>
-        label="Time of day"
-        value={settings.timeOfDay}
-        options={[
-          ['noon', 'Noon'],
-          ['golden', 'Golden'],
-          ['overcast', 'Overcast'],
-          ['night', 'Night'],
-        ]}
-        onPick={(timeOfDay) => update({ timeOfDay })}
-      />
-      <Segmented<number>
-        label="Laps"
-        value={settings.laps}
-        options={[
-          [1, '1'],
-          [3, '3'],
-          [5, '5'],
-        ]}
-        onPick={(laps) => update({ laps })}
-      />
-      <Segmented<number>
-        label="Post FX"
-        value={settings.postfx ? 1 : 0}
-        options={[
-          [1, 'On'],
-          [0, 'Off'],
-        ]}
-        onPick={(v) => update({ postfx: v === 1 })}
-      />
-      <label className="ui-field">
-        <span className="ui-field__label">
-          Volume <em>{Math.round(settings.masterVolume * 100)}</em>
-        </span>
-        <input
-          className="ui-range"
-          type="range"
-          min={0}
-          max={1}
-          step={0.05}
-          value={settings.masterVolume}
-          onChange={(e) => update({ masterVolume: Number(e.target.value) })}
-        />
-      </label>
-      <ul className="controls">
-        <li><kbd>W</kbd><kbd>↑</kbd> throttle · <kbd>S</kbd><kbd>↓</kbd> brake / reverse</li>
-        <li><kbd>A</kbd><kbd>D</kbd> steer · <kbd>Space</kbd> handbrake · <kbd>Shift</kbd> nitro (tap again on the cue for a perfect boost)</li>
-        <li>Drift: tap <kbd>S</kbd> (or <kbd>Space</kbd>) while turning, steer into it for more angle, straighten to exit</li>
-        <li><kbd>C</kbd> camera · <kbd>R</kbd> reset · <kbd>Esc</kbd> pause · gamepad supported</li>
-      </ul>
-      {onClose && (
-        <Button variant="primary" onClick={onClose}>
-          Done
-        </Button>
-      )}
-    </Panel>
-  )
+  const [section, setSection] = useState<typeof sections[number]['id']>('graphics')
+  const active = sections.find(s => s.id === section)!
+  return <section className="settings">
+    <header className="settings__header"><div><span className="eyebrow">Make it yours</span><h2><GiGears aria-hidden="true"/>Settings</h2></div>
+      {onClose && <Button size="sm" variant="ghost" onClick={onClose} aria-label="Close settings">Close ×</Button>}
+    </header>
+    <div className="settings__body">
+      <nav className="settings__nav" aria-label="Settings categories">
+        {sections.map(s => <button key={s.id} aria-pressed={section === s.id} onClick={() => setSection(s.id)}><s.icon aria-hidden="true"/><span>{s.label}</span></button>)}
+      </nav>
+      <div className="settings__content" key={section}>
+        <span className="eyebrow">{active.label}</span><p className="settings__hint">{active.hint}</p>
+        {section === 'graphics' && <>
+          <SettingChoices<QualityPreset> preview={quality=><SettingScene quality={quality}/>} label="Visual quality" value={settings.quality} options={[[ 'low','Low'],['medium','Medium'],['high','High']]} onPick={quality=>update({quality})}/>
+          <p className="settings__help">Illustrative previews. Low favors speed; High adds richer lighting and detail.</p>
+          <SettingChoices<number> preview={v=><SettingScene effects={v===1}/>} label="Post effects" value={settings.postfx?1:0} options={[[1,'On'],[0,'Off']]} onPick={v=>update({postfx:v===1})}/>
+        </>}
+        {section === 'driving' && <>
+          <SettingChoices<CameraMode> preview={camera=><SettingScene cockpit={camera==='cockpit'}/>} label="Camera" value={settings.camera} options={[[ 'chase','Chase'],['cockpit','Cockpit']]} onPick={camera=>update({camera})}/>
+          <SettingChoices<TimeOfDay> preview={time=><SettingScene time={time}/>} label="Time of day" value={settings.timeOfDay} options={(Object.keys(TIME_PRESETS) as TimeOfDay[]).map(id=>[id,TIME_PRESETS[id].label])} onPick={timeOfDay=>update({timeOfDay})}/>
+          <Segmented<number> help label="Laps" value={settings.laps} options={[[1,'1'],[3,'3'],[5,'5']]} onPick={laps=>update({laps})}/>
+        </>}
+        {section === 'audio' && <label className="ui-field settings__volume">
+          <span className="ui-field__label">Master volume <Help label="Master volume">Adjusts all game sound, including the engine, tires, effects and garage ambience. Zero mutes the game.</Help><em>{Math.round(settings.masterVolume*100)}%</em></span>
+          <input aria-label="Master volume" className="ui-range" type="range" min={0} max={1} step={.05} value={settings.masterVolume} onChange={e=>update({masterVolume:Number(e.target.value)})}/>
+          <span className="settings__help">Engine, tires, effects and garage ambience.</span>
+        </label>}
+        {section === 'controls' && <dl className="settings__controls">
+          <div><dt>Accelerate</dt><dd><kbd>W</kbd> / <kbd>↑</kbd></dd></div>
+          <div><dt>Brake / reverse</dt><dd><kbd>S</kbd> / <kbd>↓</kbd></dd></div>
+          <div><dt>Steer</dt><dd><kbd>A</kbd> <kbd>D</kbd> / <kbd>←</kbd> <kbd>→</kbd></dd></div>
+          <div><dt>Handbrake</dt><dd><kbd>Space</kbd></dd></div>
+          <div><dt>Nitro</dt><dd><kbd>Shift</kbd></dd></div>
+          <div><dt>Camera / reset / pause</dt><dd><kbd>C</kbd> <kbd>R</kbd> <kbd>Esc</kbd></dd></div>
+        </dl>}
+        {section === 'controls' && <p className="settings__help">Drift: tap brake or handbrake while turning. Tap nitro again on the cue for a perfect boost. Gamepads are supported.</p>}
+      </div>
+    </div>
+    <footer className="settings__footer"><span>Changes save automatically</span>{onClose && <Button variant="primary" onClick={onClose}>Done</Button>}</footer>
+  </section>
 }

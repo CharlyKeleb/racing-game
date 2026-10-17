@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
+import { TIME_PRESETS } from '../world/timeOfDay'
 import { TRACKS } from '../world/tracks'
 import previews from './trackPreviews.json'
 import { useGame } from './hooks'
 import { Button } from './kit'
+import { TrackAerial } from './TrackAerial'
 
 const details: Record<string, { location: string; character: string; description: string }> = {
   nurburgring: { location: 'Germany', character: 'Elevation / Fast sections', description: 'Commit through sweeping bends, manage the elevation changes and find your braking points.' },
@@ -26,8 +28,10 @@ export function Circuit({ id }: { id: string }) {
 /** Browsing is local; only confirmation changes the track and starts loading. */
 export function TrackSelection({ onClose }: { onClose(): void }) {
   const current = useGame(s=>s.settings.track)
+  const settings = useGame(s=>s.settings)
   const update = useGame(s=>s.updateSettings)
   const [selected,setSelected] = useState(current)
+  const [view,setView] = useState<'outline'|'aerial'>('aerial')
   const dialog = useRef<HTMLDialogElement>(null)
   useEffect(()=>{dialog.current?.showModal()},[])
   const track = TRACKS.find(t=>t.id===selected) ?? TRACKS[0]
@@ -49,12 +53,12 @@ export function TrackSelection({ onClose }: { onClose(): void }) {
         <p className="track-select__hint">Choose a circuit to preview it.<br/>Your car and race setup stay with you.</p>
       </nav>
       <section className="track-select__detail" aria-label="Selected circuit preview">
-        <div className="track-select__map"><span className="track-select__watermark" aria-hidden="true">0{index+1}</span><span className="eyebrow track-select__map-label">Circuit layout</span><Circuit id={track.id}/><span className="track-select__legend"><i/> Start / finish</span></div>
+        <div className="track-select__map"><span className="track-select__watermark" aria-hidden="true">0{index+1}</span><div className="track-select__view" role="group" aria-label="Track preview view"><button aria-pressed={view==='aerial'} onClick={()=>setView('aerial')}>Aerial</button><button aria-pressed={view==='outline'} onClick={()=>setView('outline')}>Outline</button></div>{view==='aerial'?<TrackAerial id={track.id}/>:<Circuit key={track.id} id={track.id}/ >}<span className="track-select__legend"><i/> Start / finish</span></div>
         <div className="track-select__info"><span className="eyebrow">{detail.location}</span><h2>{track.name}</h2><p>{detail.description}</p>
           <dl className="track-select__stats"><div><dt>Lap distance</dt><dd>{previews[track.id as keyof typeof previews].lengthKm}<small>km</small></dd></div><div><dt>Character</dt><dd className="track-select__character">{detail.character}</dd></div></dl>
         </div>
       </section>
     </div>
-    <footer className="track-select__footer"><span>Quick Race <i>/</i> {track.name}</span><Button variant="primary" size="lg" onClick={()=>{dialog.current?.close();if(selected!==current)update({track:selected})}}>{selected===current?'Keep this circuit':'Select circuit'} <span aria-hidden="true">→</span></Button></footer>
+    <footer className="track-select__footer"><div className="track-select__race-context"><span className="eyebrow">Your race</span><span>{settings.laps} {settings.laps===1?'lap':'laps'} <i>/</i> {(Number(previews[track.id as keyof typeof previews].lengthKm)*settings.laps).toFixed(2)} km <i>/</i> {TIME_PRESETS[settings.timeOfDay].label}</span></div><Button variant="primary" size="lg" onClick={()=>{dialog.current?.close();if(selected!==current)update({track:selected})}}>{selected===current?'Keep this circuit':'Select circuit'} <span aria-hidden="true">→</span></Button></footer>
   </dialog>
 }

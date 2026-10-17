@@ -1,3 +1,4 @@
+import { GiPaintBrush, GiCarWheel, GiAutoRepair, GiCheckeredFlag } from 'react-icons/gi'
 import { useEffect, useState } from 'react'
 import {
   CALIPER_PRESETS,
@@ -23,6 +24,8 @@ const TABS: [Tab, string][] = [
   ['performance', 'Upgrades'],
 ]
 
+const tabIcons = { paint: GiPaintBrush, wheels: GiCarWheel, performance: GiAutoRepair }
+
 export function Garage() {
   const game = useGameInstance()
   const build = useGame((s) => s.build)
@@ -44,11 +47,13 @@ export function Garage() {
 
       <div className="garage-left">
         <nav className="garage-tabs" role="tablist" aria-label="Customise">
-          {TABS.map(([id, text]) => (
+          {TABS.map(([id, text]) => {
+            const Icon = tabIcons[id]
+            return (
             <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? 'on' : ''} onClick={() => setTab(id)}>
-              <span>{text}</span>
+              <span><Icon aria-hidden="true" focusable="false"/>{text}</span>
             </button>
-          ))}
+          )})}
         </nav>
         <Panel className="garage-options">
           {tab === 'paint' && <PaintTab build={build} update={update} />}
@@ -64,8 +69,8 @@ export function Garage() {
 
       <div className="garage-right">
         {tab !== 'wheels' && <CarCard />}
-        <Button size="lg" variant="primary" disabled={switching} onClick={() => game?.startRace()}>
-          Race
+        <Button size="lg" variant="primary" className="menu-icon-action" disabled={switching} onClick={() => game?.startRace()}>
+          <GiCheckeredFlag aria-hidden="true"/> Race
         </Button>
       </div>
     </div>
