@@ -40,6 +40,14 @@ export interface TireInput {
   surfaceGrip?: number
   /** Extra rolling resistance coefficient from the surface. Default 0. */
   surfaceDrag?: number
+  /** Multiplier on cornering grip only (drifting rears let go). Default 1. */
+  lateralGripScale?: number
+  /**
+   * Share the friction circle between drive and cornering instead of giving
+   * cornering priority (traction control off for this tire): power then pushes
+   * the tire wide — what lets the throttle hold a drift. Default false.
+   */
+  combined?: boolean
 }
 
 export interface TireOutput {
@@ -66,9 +74,10 @@ export function computeTireForces(input: TireInput, cfg: TireConfig): TireOutput
   // (otherwise the car jitters sideways when parked).
   let lateral: number
   const speed = Math.abs(vLong)
+  const lateralMax = maxForce * (input.lateralGripScale ?? 1)
   if (speed > LOW_SPEED) {
     const slipAngle = Math.atan2(vLat, speed)
-    lateral = -lateralForceCurve(slipAngle, cfg) * maxForce
+    lateral = -lateralForceCurve(slipAngle, cfg) * lateralMax
   } else {
     lateral = (-vLat * massShare) / dt
   }
@@ -88,7 +97,7 @@ export function computeTireForces(input: TireInput, cfg: TireConfig): TireOutput
   const total = Math.hypot(longitudinal, lateral)
   let slip = total / maxForce
   if (total > maxForce) {
-    if (cfg.tractionControl) {
+    if (cfg.tractionControl && !input.combined) {
       // Arcade: cornering grip wins, drive/brake gets what's left. Stops
       // full-throttle power oversteer; handbrake drifts still work.
       lateral = Math.max(-maxForce, Math.min(maxForce, lateral))
@@ -100,6 +109,7 @@ export function computeTireForces(input: TireInput, cfg: TireConfig): TireOutput
       lateral *= k
     }
   }
+  lateral = Math.max(-lateralMax, Math.min(lateralMax, lateral))
   if (handbrake) slip = Math.max(slip, Math.min(1, Math.abs(vLat) / 4))
 
   let slide: number

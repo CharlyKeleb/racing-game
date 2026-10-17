@@ -37,6 +37,10 @@ export class Drivetrain {
     this.rpm = cfg.idleRpm
   }
 
+  private get peakTorque(): number {
+    return Math.max(...this.cfg.torqueCurve.map(([, t]) => t))
+  }
+
   get topGear(): number {
     return this.cfg.gearRatios.length - 1
   }
@@ -77,7 +81,13 @@ export class Drivetrain {
 
     const limiter = this.rpm >= cfg.redlineRpm ? 0 : 1
     const engineTorque = torqueAt(this.rpm, cfg.torqueCurve) * throttle * limiter
-    return (engineTorque * ratio * cfg.efficiency) / wheelRadius
+    const drive = (engineTorque * ratio * cfg.efficiency) / wheelRadius
+    if (throttle > 0.05 || this.gear === 0 || Math.abs(wheelSpeed) < 1) return drive
+    // Engine braking off-throttle: pumping losses grow with rpm, so a downshift
+    // (revs up) brakes harder — and loads the driven wheels, which is what lets
+    // a downshift into a corner step the tail out.
+    const brakeTorque = (cfg.engineBrakeTorque ?? 0.12 * this.peakTorque) * (this.rpm / cfg.redlineRpm)
+    return (-Math.sign(wheelSpeed) * brakeTorque * Math.abs(ratio)) / wheelRadius
   }
 
   private autoShift(braking: boolean): void {

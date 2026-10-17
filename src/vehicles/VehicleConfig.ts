@@ -1,3 +1,5 @@
+import { DEFAULT_DRIFT, type DriftConfig } from './Drift'
+
 /**
  * Data contract between the asset pipeline (Blender MCP → vehicle-config.json)
  * and the runtime vehicle. Every car ships one of these next to its GLB.
@@ -55,6 +57,8 @@ export interface EngineConfig {
   efficiency: number
   shiftUpRpm: number
   shiftDownRpm: number
+  /** Engine braking at the redline off-throttle, Nm (default 12% of peak torque). */
+  engineBrakeTorque?: number
   /** Optional: highest rpm a downshift under braking may land at (default shiftUpRpm − 500). */
   brakeDownshiftRpm?: number
   shiftTimeSec: number
@@ -145,6 +149,8 @@ export interface VehicleConfig {
   /** Share of downforce on the front axle (aero balance), 0..1. */
   downforceFrontShare: number
   nitro: NitroConfig
+  /** Drift entries and how loose the rear goes (see Drift.ts). */
+  drift: DriftConfig
   /**
    * Centres of the exhaust tips' outlets in car-local space, for nitro flames.
    * Measure them from the model (the chrome tip's rear face). Derived from the
@@ -211,6 +217,7 @@ export const DEFAULT_VEHICLE_CONFIG: VehicleConfig = {
   dragCoefficient: 0.46,
   downforceCoefficient: 1.6,
   downforceFrontShare: 0.42,
+  drift: DEFAULT_DRIFT,
   nitro: {
     durationSec: 4,
     fillRate: 0.25,
@@ -241,6 +248,7 @@ export function resolveVehicleConfig(partial: Partial<VehicleConfig> | undefined
     tires: { ...d.tires, ...partial.tires },
     engine: { ...d.engine, ...partial.engine },
     nitro: { ...d.nitro, ...partial.nitro },
+    drift: { ...d.drift, ...partial.drift },
     wheels: partial.wheels ?? d.wheels,
   }
 }

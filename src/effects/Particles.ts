@@ -1,6 +1,10 @@
 import * as THREE from 'three'
 
-export type ParticleLook = 'puff' | 'grain'
+/**
+ * puff: soft smoke / dust; grain: one hard speck; spray: a cluster of tiny
+ * grains scattered across the sprite — a handful of thrown sand, not a ball.
+ */
+export type ParticleLook = 'puff' | 'grain' | 'spray'
 
 export interface ParticleSpawn {
   x: number
@@ -32,13 +36,16 @@ const vertexShader = /* glsl */ `
   varying vec2 vUv;
   varying float vAlpha;
   varying vec3 vColor;
+  varying float vSeed;
+  uniform vec2 uNearFade;
   #include <fog_pars_vertex>
   void main() {
     vUv = uv;
     vColor = iColor;
+    vSeed = iRot; // random per particle: also seeds the spray's grain pattern
     vec4 mvPosition = modelViewMatrix * vec4(iPos, 1.0);
     // Fade particles near the lens so driving through a cloud never fogs the screen.
-    vAlpha = iAlpha * smoothstep(1.5, 6.0, -mvPosition.z);
+    vAlpha = iAlpha * smoothstep(uNearFade.x, uNearFade.y, -mvPosition.z);
     float c = cos(iRot);
     float s = sin(iRot);
     // Billboard: expand the quad in view space so it always faces the camera.
@@ -52,11 +59,23 @@ const fragmentShader = /* glsl */ `
   varying vec2 vUv;
   varying float vAlpha;
   varying vec3 vColor;
+  varying float vSeed;
   #include <fog_pars_fragment>
   void main() {
     vec2 d = vUv - 0.5;
     float r = length(d) * 2.0;
-  #ifdef GRAIN
+  #ifdef SPRAY
+    // A 9×9 grid of cells, each holding at most one round grain; fewer toward
+    // the rim, so the cluster thins out instead of ending in an edge.
+    vec2 g = vUv * 9.0;
+    vec2 cell = floor(g);
+    float h = fract(sin(dot(cell + vSeed * vec2(7.31, 3.17), vec2(12.9898, 78.233))) * 43758.5453);
+    vec2 f = fract(g) - 0.5 + (vec2(fract(h * 7.0), fract(h * 13.0)) - 0.5) * 0.4;
+    float grainDot = 1.0 - smoothstep(0.16, 0.34, length(f));
+    float keep = step(0.45 + 0.45 * r, h);
+    float a = grainDot * keep * (1.0 - smoothstep(0.75, 1.0, r)) * vAlpha;
+    vec3 col = vColor * (0.7 + 0.45 * h);
+  #elif defined(GRAIN)
     // Small hard-edged speck: a grain or clump of sand / gravel.
     float a = (1.0 - smoothstep(0.6, 1.0, r)) * vAlpha;
     vec3 col = vColor * (0.75 + 0.25 * (1.0 - r));
@@ -111,7 +130,12 @@ export class ParticlePool {
   private cursor = 0
   private live = 0
 
-  constructor(max: number, look: ParticleLook, renderOrder = 2) {
+  /**
+   * @param nearFade distance from the lens (m) where particles start / finish
+   *   fading in. Big soft clouds need a wide band so driving through them never
+   *   fogs the screen; small dense spray can come right up to the camera.
+   */
+  constructor(max: number, look: ParticleLook, renderOrder = 2, nearFade: [number, number] = [1.5, 6]) {
     this.max = max
     this.look = look
     this.pos = new Float32Array(max * 3)
@@ -151,10 +175,10 @@ export class ParticlePool {
     this.geometry = geo
 
     this.material = new THREE.ShaderMaterial({
-      uniforms: THREE.UniformsUtils.clone(THREE.UniformsLib.fog),
+      uniforms: { ...THREE.UniformsUtils.clone(THREE.UniformsLib.fog), uNearFade: { value: new THREE.Vector2(...nearFade) } },
       vertexShader,
       fragmentShader,
-      defines: look === 'grain' ? { GRAIN: '' } : {},
+      defines: look === 'grain' ? { GRAIN: '' } : look === 'spray' ? { SPRAY: '' } : {},
       transparent: true,
       depthWrite: false,
       fog: true,

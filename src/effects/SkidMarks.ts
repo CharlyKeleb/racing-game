@@ -20,6 +20,9 @@ const MAX_SEGMENT = 4
 /** Above the contact point, clear of the road ribbon (y 0.01) and kerbs (0.015). */
 const LIFT = 0.025
 const NEVER = -1e9
+/** Ruts in loose ground: darker and longer-lived than rubber, scaled by how loose it is. */
+const RUT_OPACITY = 0.6
+const RUT_LIFETIME = 45
 
 interface Trail {
   active: boolean
@@ -65,10 +68,12 @@ const fragmentShader = /* glsl */ `
 `
 
 /**
- * Rubber left on the road by sliding tires. One ring-buffered mesh holds every
- * mark: each segment is a quad joined to the previous one, so a slide draws a
- * continuous strip. Each vertex stores its birth time; the shader fades it out,
- * so aging costs nothing on the CPU. Only freshly written quads are uploaded.
+ * Rubber left on the road by sliding tires — or, in `ruts` mode, the dark
+ * compacted tracks a tyre ploughs through sand, gravel and grass. One
+ * ring-buffered mesh holds every mark: each segment is a quad joined to the
+ * previous one, so a slide draws a continuous strip. Each vertex stores its
+ * birth time; the shader fades it out, so aging costs nothing on the CPU. Only
+ * freshly written quads are uploaded.
  */
 export class SkidMarks {
   readonly mesh: THREE.Mesh
@@ -82,8 +87,11 @@ export class SkidMarks {
   private readonly trails: Trail[] = []
   private head = 0
   private time = 0
+  private readonly ruts: boolean
 
-  constructor() {
+  /** @param ruts mark loose ground wherever a tyre rolls through it, instead of rubber on tarmac. */
+  constructor({ ruts = false }: { ruts?: boolean } = {}) {
+    this.ruts = ruts
     const verts = MAX_SEGMENTS * 4
     this.positions = new Float32Array(verts * 3)
     this.alphas = new Float32Array(verts)
@@ -107,7 +115,8 @@ export class SkidMarks {
     this.material = new THREE.ShaderMaterial({
       uniforms: THREE.UniformsUtils.merge([
         THREE.UniformsLib.fog,
-        { uTime: { value: 0 }, uLife: { value: LIFETIME }, uColor: { value: new THREE.Color(0x0b0b0c) } },
+        // Ruts: damp, compacted sand under the dry surface — dark brown, not black.
+        { uTime: { value: 0 }, uLife: { value: ruts ? RUT_LIFETIME : LIFETIME }, uColor: { value: new THREE.Color(ruts ? 0x2e2216 : 0x0b0b0c) } },
       ]),
       vertexShader,
       fragmentShader,
@@ -138,8 +147,10 @@ export class SkidMarks {
         right: new THREE.Vector3(),
         alpha: 0,
       })
-      // Rubber only marks tarmac; loose surfaces throw spray instead.
-      if (!w.grounded || w.slide < MIN_SLIDE || surfaceProps(w.surface).loose > 0) {
+      // Rubber only marks tarmac when sliding; ruts mark loose ground whenever a tyre rolls through.
+      const loose = w.grounded ? surfaceProps(w.surface).loose : 0
+      const marks = this.ruts ? loose > 0 : w.grounded && w.slide >= MIN_SLIDE && loose === 0
+      if (!marks) {
         trail.active = false
         continue
       }
@@ -162,8 +173,10 @@ export class SkidMarks {
         continue
       }
 
-      const alpha = MAX_OPACITY * Math.min(1, 0.2 + (0.8 * (w.slide - MIN_SLIDE)) / (FULL_SLIDE - MIN_SLIDE))
-      const half = w.cfg.width * 0.45
+      const alpha = this.ruts
+        ? RUT_OPACITY * loose * Math.min(1, 0.6 + w.slide / FULL_SLIDE)
+        : MAX_OPACITY * Math.min(1, 0.2 + (0.8 * (w.slide - MIN_SLIDE)) / (FULL_SLIDE - MIN_SLIDE))
+      const half = w.cfg.width * (this.ruts ? 0.5 : 0.45)
       _side.set(-dz / len, 0, dx / len).multiplyScalar(half)
       if (!trail.hasEdges) {
         trail.left.copy(trail.center).add(_side)

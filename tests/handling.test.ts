@@ -220,7 +220,39 @@ describe('Porsche 911 handling', () => {
       step(pedals({ throttle: 0.4 }))
       t++
     }
-    expect(t / 60).toBeLessThan(1.5) // straightens up once the driver lets it
+    // Straightens up once the driver lets it. The drift now holds ~34° on opposite
+    // lock (the assist used to pull it back to ~20°), and unwinding that on full
+    // grip takes ~1.6 s of plain tire physics.
+    expect(t / 60).toBeLessThan(1.8)
+  })
+
+  /** Peak body slip (deg) over `frames` of `input` after reaching `kmh` in a straight line. */
+  const slideAfter = (kmh: number, setup: [number, Partial<InputState>][], frames: number, input: Partial<InputState>) => {
+    const { ctrl, step, body } = spawnCar(PORSCHE_911)
+    while (ctrl.forwardSpeed < kmh / 3.6) step(pedals({ throttle: 1 }))
+    for (const [n, p] of setup) for (let i = 0; i < n; i++) step(pedals(p))
+    let max = 0
+    for (let i = 0; i < frames; i++) {
+      step(pedals(input))
+      max = Math.max(max, slipAngle(body))
+    }
+    return { max, end: slipAngle(body), ctrl }
+  }
+
+  it('drifts on a fast full-lock turn-in, and the assist still catches a spin', () => {
+    const { max } = slideAfter(160, [], 90, { throttle: 1, steer: 1 })
+    expect(max).toBeGreaterThan(12)
+    expect(max).toBeLessThan(60)
+  })
+
+  it('drifts on a brake-tap entry (brake, release, turn in)', () => {
+    const { max } = slideAfter(110, [[10, { brake: 1 }], [2, {}]], 90, { throttle: 0.8, steer: 1 })
+    expect(max).toBeGreaterThan(12)
+  })
+
+  it('stays gripped turning in at the same speed without an entry', () => {
+    const { max } = slideAfter(110, [], 90, { throttle: 0.8, steer: 1 })
+    expect(max).toBeLessThan(8)
   })
 
   it('accelerates and brakes like the real car', () => {

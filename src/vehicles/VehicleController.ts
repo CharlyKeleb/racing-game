@@ -1,6 +1,7 @@
 import RAPIER from '@dimforge/rapier3d-compat'
 import * as THREE from 'three'
 import type { InputState } from '../input/InputManager'
+import { Drift } from './Drift'
 import { Drivetrain, type GearRequest } from './Drivetrain'
 import { Nitro } from './Nitro'
 import { Surface, surfaceProps } from './Surface'
@@ -57,6 +58,7 @@ export class VehicleController {
   readonly wheels: WheelState[]
   readonly drivetrain: Drivetrain
   readonly nitro: Nitro
+  readonly drift = new Drift()
   steerAngle = 0
   /** Signed forward speed of the chassis, m/s. */
   forwardSpeed = 0
@@ -67,6 +69,8 @@ export class VehicleController {
   /** Pedals after ramping, 0..1. Keyboards are on/off; this fades them in over ~1/pedalRate s. */
   private throttle = 0
   private brake = 0
+  /** Rear wheels (behind the axle midpoint): the ones that let go in a drift. */
+  private readonly isRear: boolean[]
   /** Fraction of the drivetrain's force each wheel gets (0 for undriven wheels). */
   private readonly driveShare: number[]
   private readonly drivenRadius: number
@@ -103,6 +107,7 @@ export class VehicleController {
       !w.driven ? 0 : isFront(w) ? frontShare / frontDriven : (1 - frontShare) / rearDriven,
     )
     this.drivenRadius = cfg.wheels.find((w) => w.driven)?.radius ?? 0.35
+    this.isRear = cfg.wheels.map((w) => !isFront(w))
     this.wheels = cfg.wheels.map((w) => ({
       cfg: w,
       suspension: new Suspension(cfg.suspension),
@@ -134,7 +139,9 @@ export class VehicleController {
 
     // Steering: angle and turn-in rate both shrink with speed, so a keyboard tap
     // at 200 km/h is a lane change, not a spin. Returning to center is faster.
-    const speedFactor = 1 / (1 + speed / cfg.steerFalloffSpeed)
+    // In a drift the driver needs real opposite lock, so the high-speed limit opens up.
+    const gripFactor = 1 / (1 + speed / cfg.steerFalloffSpeed)
+    const speedFactor = gripFactor + (Math.max(gripFactor, 0.55) - gripFactor) * this.drift.amount
     const targetSteer = -input.steer * cfg.maxSteerAngle * speedFactor
     const centering = Math.abs(targetSteer) < Math.abs(this.steerAngle) || targetSteer * this.steerAngle < 0
     const maxDelta = cfg.steerSpeed * speedFactor * (centering ? cfg.steerReturnScale : 1) * dt
@@ -179,7 +186,32 @@ export class VehicleController {
       dt,
     )
 
+    const gearBefore = this.drivetrain.gear
     const driveForce = this.drivetrain.update(this.forwardSpeed, this.drivenRadius, driveThrottle, gearRequest, dt, brakeInput)
+    const downshift = this.drivetrain.gear > 0 && this.drivetrain.gear < gearBefore
+
+    // Drift: entries (fast turn-in, brake-tap, downshift, handbrake) and exits.
+    const sideways = Math.abs(lv.x * _right.x + lv.y * _right.y + lv.z * _right.z)
+    this.drift.update(
+      {
+        speed,
+        steer: input.steer,
+        throttle: driveThrottle,
+        brake: brakeInput,
+        handbrake: input.handbrake,
+        slipAngle: Math.atan2(sideways, Math.max(speed, 0.1)),
+        downshift,
+      },
+      cfg.drift,
+      dt,
+    )
+    if (this.drift.entry !== 0 && !input.handbrake) {
+      // Swing the tail out toward the turn: +steer (right) yaws clockwise from above (−Y).
+      _impulse.copy(_up).multiplyScalar(-this.drift.entry * cfg.drift.kick * this.yawInertia)
+      body.applyTorqueImpulse(_impulse, true)
+    }
+    const rearGrip = this.drift.rearGripScale(driveThrottle, cfg.drift)
+    const combinedRear = this.drift.amount > 0.3
 
     const massShare = cfg.massKg / this.wheels.length
 
@@ -241,6 +273,8 @@ export class VehicleController {
           dt,
           surfaceGrip: ground.grip,
           surfaceDrag: ground.drag,
+          lateralGripScale: this.isRear[i] ? rearGrip : 1,
+          combined: this.isRear[i] && combinedRear,
         },
         cfg.tires,
       )
@@ -310,9 +344,13 @@ export class VehicleController {
     const sideways = Math.abs(lv.x * _right.x + lv.y * _right.y + lv.z * _right.z)
     const driftAngle = Math.atan2(sideways, Math.abs(this.forwardSpeed))
     const countersteering = wanted * yawRate < 0
-    if (countersteering && driftAngle > DRIFT_MIN_ANGLE) {
+    // Relax in a countersteered slide, or while a drift is under way; either way
+    // it comes back in full past maxDriftAngle to catch a spin.
+    const relax = Math.max(countersteering && driftAngle > DRIFT_MIN_ANGLE ? 1 : 0, this.drift.amount)
+    if (relax > 0) {
       const t = Math.min(1, Math.max(0, (driftAngle - cfg.maxDriftAngle * 0.8) / (cfg.maxDriftAngle * 0.2)))
-      rate *= cfg.driftAssist + (1 - cfg.driftAssist) * t
+      const scale = cfg.driftAssist + (1 - cfg.driftAssist) * t
+      rate *= 1 - relax * (1 - scale)
     }
     const k = 1 - Math.exp(-rate * dt)
     _impulse.copy(_up).multiplyScalar(-excess * this.yawInertia * k)
@@ -331,6 +369,7 @@ export class VehicleController {
     this.braking = 0
     this.drivetrain.reset()
     this.nitro.reset()
+    this.drift.reset()
     for (const w of this.wheels) {
       w.suspension.reset()
       w.slip = 0
