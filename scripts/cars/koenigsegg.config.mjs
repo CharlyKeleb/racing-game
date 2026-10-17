@@ -24,6 +24,10 @@ export default {
     [/Emissive|headlight|taillight/, 0.6],
   ],
   simplifyError: 0.004,
-  lowRatio: 0.35,
+  // Low preset: ~35k triangles. The grilles are thousands of tiny pieces that
+  // won't decimate, and the seats sit behind tinted glass, so Low drops them.
+  lowRatio: 0.2,
+  lowError: 0.03,
+  lowDrop: /^KOP_(Grills|Seats)_Shd$/,
   textureSize: 1024,
 }

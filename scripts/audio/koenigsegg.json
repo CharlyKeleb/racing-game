@@ -1,0 +1,9 @@
+{
+  "comment": "Koenigsegg One:1 stand-in V8: marcelweiss's CC0 Mercedes S63 AMG twin-turbo V8 (Freesound 505321). The recording is idle plus short blips, so the layers stop at ~1900 rpm and GranularEngine carries them up the rev range.",
+  "firingPerRev": 4,
+  "segments": [
+    [ "idle", "505321_7236652-hq.wav", 0.02, 0.36, 930 ],
+    [ "low", "505321_7236652-hq.wav", 5.78, 6.12, 1170 ],
+    [ "mid", "505321_7236652-hq.wav", 5.16, 5.34, 1900 ]
+  ]
+}
