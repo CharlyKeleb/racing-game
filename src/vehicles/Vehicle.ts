@@ -107,7 +107,9 @@ export class Vehicle {
       const mat = mesh.material as THREE.MeshStandardMaterial
       if (Array.isArray(mat) || !mat?.isMeshStandardMaterial || !/tail ?light|brake ?light/i.test(mat.name)) return
       const own = mat.clone()
-      own.emissive.setRGB(1, 0.04, 0.02)
+      // Deep red lens; a saturated red glow survives tone mapping as red, not pale orange.
+      own.color.setRGB(0.55, 0.06, 0.05)
+      own.emissive.setRGB(1, 0.02, 0.01)
       own.emissiveIntensity = 0
       mesh.material = own
       this.taillights.push(own)
@@ -199,7 +201,7 @@ export class Vehicle {
       this.roll += this.rollVel * h
       this.model.body.rotation.set(this.pitch, 0, this.roll)
 
-      const glowTarget = this.controller.braking > 0.05 ? 4 : 0.35 // running lights vs brake lights
+      const glowTarget = this.controller.braking > 0.05 ? 2.4 : 0.3 // brake lights vs running lights
       this.brakeGlow += (glowTarget - this.brakeGlow) * (1 - Math.exp(-25 * h))
       for (const mat of this.taillights) mat.emissiveIntensity = this.brakeGlow
     }

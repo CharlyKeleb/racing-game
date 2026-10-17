@@ -12,12 +12,14 @@ const BEHIND = 3
 /** Heading change (rad) over ±SPAN points that makes a corner worth marking. */
 const MIN_BEND = 0.25
 const SPAN = 5
+/** Arrows start this many points (~32 m) before a corner, on the approach, like NFS. */
+const LEAD_IN = 8
 /** Arrows sit on the inside of the bend, this far in from the paved edge, but never further out than MAX_OFFSET from the centreline. */
 const EDGE_INSET = 2.2
 const MAX_OFFSET = 5.5
 /** Arrow footprint on the road, m: long along the road so it reads at a grazing angle. */
-const ARROW_LEN = 4.6
-const ARROW_WID = 3.2
+const ARROW_LEN = 6.5
+const ARROW_WID = 4.2
 /** How far (rad) the arrow turns from straight ahead toward the bend: it points into the corner. */
 const POINT_IN = 0.55
 const HOVER = 0.1
@@ -69,7 +71,7 @@ export class DirectionGuide {
     this.line = line
     this.groundAt = groundAt
     this.arrowY = new Float32Array(line.length).fill(NaN)
-    this.bend = signedBend(line)
+    this.bend = leadIn(signedBend(line), LEAD_IN)
     this.offset = new Float32Array(line.length)
     for (let i = 0; i < line.length; i++) {
       // Inside of a left bend is the left side, and vice versa.
@@ -153,6 +155,21 @@ export class DirectionGuide {
     this.texture.dispose()
     this.group.removeFromParent()
   }
+}
+
+/** For each point, the sharpest bend within the next `lead` points (keeping its sign), so arrows show on the approach. */
+function leadIn(bend: Float32Array, lead: number): Float32Array {
+  const n = bend.length
+  const out = new Float32Array(n)
+  for (let i = 0; i < n; i++) {
+    let best = 0
+    for (let k = 0; k <= lead; k++) {
+      const b = bend[(i + k) % n]
+      if (Math.abs(b) > Math.abs(best)) best = b
+    }
+    out[i] = best
+  }
+  return out
 }
 
 /** Heading change over ±SPAN points (±20 m), signed: + turns left. */
