@@ -86,6 +86,32 @@ simplifies and compresses them for streaming. See
 [Track streaming](TRACK_STREAMING.md) for the pipeline, the `track.json`
 manifest and how to add a track.
 
+## Engine audio
+
+Each car can ship its own recordings in `public/audio/<id>/`. Point the car's
+`audioUrl` in `carRegistry.ts` at that folder. Without it, the car falls back
+to the procedural engine.
+
+| File | What |
+|---|---|
+| `engine-bank.wav` + `.json` | Steady segments of the real engine at a few rpm, plus a pitch mark on every firing pulse (16-bit WAV, Git LFS) |
+| `ignition.mp3` | One-shot played at race start; the engine loop fades in after it |
+| `lift-off.mp3` | Exhaust burble on lifting off the throttle above ~4200 rpm |
+| `CREDITS.md` | Source and license of every recording |
+
+`GranularEngine` replays one Hann-windowed grain of the recording per firing
+pulse, spaced at the target rpm (PSOLA). That way 4–5 short real segments
+between idle and ~3000 rpm cover the whole rev range without the chipmunk
+effect of speeding up a loop.
+
+To build a bank:
+1. Find recordings with a free-to-ship license (CC0 or CC BY).
+2. Find stretches where the rpm is nearly steady: idle, or the top of a rev blip.
+3. List them in `SEGMENTS` in `scripts/audio/make_engine_bank.py` and run it:
+   `python3 scripts/audio/make_engine_bank.py <wav dir> public/audio/<id>`.
+
+`tests/engineAudio.test.ts` checks that the bank plays at the requested rpm.
+
 ## Licensing
 
 A free download is **not** automatically licensed for redistribution in a
