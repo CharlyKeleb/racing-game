@@ -153,15 +153,18 @@ export class AudioManager {
     const dt = Math.min(Math.max(t - this.lastTime, 0), 0.1)
     this.lastTime = t
 
+    // The sound model turns the physics rpm into the engine as heard (rev
+    // inertia, shift glides, rev-match blips); pitch follows that.
+    this.sound.update(state, dt)
+    const rpm = this.sound.engineRpm
     if (this.sampled) {
-      this.sampled.parameters.get('rpm')!.setTargetAtTime(state.rpm, t, 0.025)
+      this.sampled.parameters.get('rpm')!.setTargetAtTime(rpm, t, 0.01)
     } else {
       // Flat-six firing frequency = rpm/60 × 3.
-      const fire = (Math.max(state.rpm, 600) / 60) * 3
-      this.synthSaw.frequency.setTargetAtTime(fire, t, 0.03)
-      this.synthSquare.frequency.setTargetAtTime(fire / 2, t, 0.03)
+      const fire = (Math.max(rpm, 600) / 60) * 3
+      this.synthSaw.frequency.setTargetAtTime(fire, t, 0.012)
+      this.synthSquare.frequency.setTargetAtTime(fire / 2, t, 0.012)
     }
-    this.sound.update(state, dt)
   }
 
   suspend(): void {

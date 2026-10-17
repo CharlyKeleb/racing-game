@@ -47,8 +47,6 @@ export class CarSound {
   private readonly sources: AudioScheduledSourceNode[] = []
 
   private nextPopAt = 0
-  /** The engine level is being ducked for a gear change until then. */
-  private duckUntil = 0
   /** Engine held silent until this time (ignition cranking). */
   private startAt = 0
   private liftOffClip: AudioBuffer | null = null
@@ -116,6 +114,11 @@ export class CarSound {
     this.liftOffClip = buffer
   }
 
+  /** Engine rpm as heard: rev inertia and shift dynamics applied (see CarSoundModel). */
+  get engineRpm(): number {
+    return this.model.rpm
+  }
+
   /** Hold the engine silent until `time` (while the ignition clip cranks it). */
   holdEngineUntil(time: number): void {
     this.startAt = time
@@ -133,19 +136,23 @@ export class CarSound {
     const t = this.ctx.currentTime
     const m = this.model
     m.update(s, dt)
-    const rpmT = Math.min(Math.max(s.rpm, 0) / RPM_SCALE, 1)
-    const on = s.throttle
+    // Everything tonal follows the engine *as heard* (m.rpm, m.load): the model
+    // already shapes rev inertia, the pedal, upshift cuts and downshift blips,
+    // so the audio params only need a short glide between frames.
+    const rpmT = Math.min(Math.max(m.rpm, 0) / RPM_SCALE, 1)
+    const on = m.load
     const running = t >= this.startAt ? 1 : 0
 
-    // Engine level: louder with rpm and load; overrun is quieter and darker.
-    if (t >= this.duckUntil) set(this.engineIn.gain, running * (0.7 + 0.3 * rpmT), t, running ? 0.06 : 0.01)
-    set(this.intakeFilter.frequency, 1100 + on * 6000 + rpmT * 3500, t, 0.05)
-    set(this.intakeGain.gain, 0.45 + 0.25 * on, t, 0.06)
-    set(this.drive.gain, 0.5 + 1.6 * on * (0.4 + 0.6 * rpmT), t, 0.05)
-    set(this.raspEq.gain, on * (2 + 4 * rpmT), t, 0.06)
-    set(this.exhaustGain.gain, 0.12 + 0.3 * on + 0.1 * rpmT, t, 0.06)
+    // Engine level: louder with rpm and load; dips for the upshift cut, swells on a blip.
+    const level = running * ((0.7 + 0.3 * rpmT) * (1 - 0.55 * m.cut) + 0.12 * m.blip)
+    set(this.engineIn.gain, level, t, running ? 0.015 : 0.01)
+    set(this.intakeFilter.frequency, 1100 + on * 6000 + rpmT * 3500, t, 0.02)
+    set(this.intakeGain.gain, 0.45 + 0.25 * on, t, 0.025)
+    set(this.drive.gain, 0.5 + 1.6 * on * (0.4 + 0.6 * rpmT), t, 0.02)
+    set(this.raspEq.gain, on * (2 + 4 * rpmT), t, 0.025)
+    set(this.exhaustGain.gain, 0.12 + 0.3 * on + 0.1 * rpmT, t, 0.025)
 
-    const halfOrder = Math.max(s.rpm, 600) / 40 // rpm/60 × 1.5
+    const halfOrder = Math.max(m.rpm, 600) / 40 // rpm/60 × 1.5
     set(this.sub.frequency, halfOrder, t, 0.03)
     set(this.subGain.gain, running * (0.05 + 0.1 * on) * (1 - 0.5 * rpmT), t, 0.08)
 
@@ -157,7 +164,8 @@ export class CarSound {
     set(this.squealGain.gain, Math.min(Math.max(0, s.slip - 0.75) * 4, 1) * 0.2, t, 0.05)
 
     if (m.blowOff > 0) this.blowOffAt(t, m.blowOff)
-    if (m.shiftUp) this.shiftAt(t, rpmT)
+    if (m.shiftUp) this.upshiftAt(t, rpmT)
+    if (m.shiftDown) this.downshiftAt(t, rpmT)
     if (m.liftOff && this.liftOffClip) this.playClip(this.liftOffClip, 0.3 + 0.3 * rpmT)
     if (m.nitroStart) this.nitroWhooshAt(t)
     if (m.perfectStart) this.perfectBoomAt(t)
@@ -211,15 +219,18 @@ export class CarSound {
     src.start(when, Math.random(), 0.4)
   }
 
-  /** Upshift: the engine note ducks for the cut, with a crack from the pipes. */
-  private shiftAt(when: number, rpmT: number): void {
-    const g = this.engineIn.gain
-    g.cancelScheduledValues(when)
-    g.setValueAtTime(g.value, when)
-    g.linearRampToValueAtTime(g.value * 0.35, when + 0.025)
-    g.linearRampToValueAtTime(g.value, when + 0.11)
-    this.duckUntil = when + 0.12
-    this.popAt(when + 0.02, 0.5 + 0.4 * rpmT, true)
+  /** Upshift: the model dips the note for the ignition cut; the pipes give one crack. */
+  private upshiftAt(when: number, rpmT: number): void {
+    this.popAt(when + 0.03, 0.35 + 0.35 * rpmT, true)
+  }
+
+  /**
+   * Downshift: the model blips the revs to rev-match ("bwaap"); the hot exhaust
+   * answers with a pop as the blip falls away, and a smaller one after.
+   */
+  private downshiftAt(when: number, rpmT: number): void {
+    this.popAt(when + 0.11, 0.4 + 0.35 * rpmT, true)
+    this.popAt(when + 0.17 + Math.random() * 0.04, 0.2 + 0.2 * rpmT, false)
   }
 
   /** Nitro kicks in: a rising whoosh. */
