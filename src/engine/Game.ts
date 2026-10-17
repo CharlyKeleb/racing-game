@@ -568,10 +568,6 @@ export class Game {
       this.orbitCoasting = false
       // The chevron click is a user gesture, so the engines can be heard leaving and arriving.
       this.audio.unlock(gameStore.getState().settings.masterVolume)
-      // Swing the camera round to a fresh angle for the new car; the showroom
-      // camera's damping turns this into a slow glide over the swap.
-      this.showroomYaw += (Math.random() < 0.5 ? -1 : 1) * (0.5 + Math.random() * 0.5)
-      this.showroomHeight = THREE.MathUtils.clamp(ORBIT_REST_HEIGHT + (Math.random() - 0.4) * 0.8, ORBIT_HEIGHT[0], ORBIT_HEIGHT[1])
       await new Promise<void>((done) => (this.showroomDrive = { mode: 'out', t: 0, spin: 0, done }))
       this.vehicle.model.root.visible = false
     }
