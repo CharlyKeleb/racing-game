@@ -60,6 +60,8 @@ export class VehicleController {
   steerAngle = 0
   /** Signed forward speed of the chassis, m/s. */
   forwardSpeed = 0
+  /** Brake pedal actually braking (not driving in reverse), 0..1. Brake lights. */
+  braking = 0
   /** Ground type under a world XZ point; the track sets this. Default: all asphalt. */
   surfaceAt: (x: number, z: number) => Surface = () => Surface.Asphalt
   /** Pedals after ramping, 0..1. Keyboards are on/off; this fades them in over ~1/pedalRate s. */
@@ -156,6 +158,7 @@ export class VehicleController {
           : 0
     const driveThrottle = reversing ? this.brake : this.throttle
     const brakeInput = reversing ? this.throttle : this.brake
+    this.braking = brakeInput
 
     // Nitro reads last tick's tire slip; boosting only pushes forward gears.
     let slipSum = 0
@@ -319,6 +322,7 @@ export class VehicleController {
     this.steerAngle = 0
     this.throttle = 0
     this.brake = 0
+    this.braking = 0
     this.drivetrain.reset()
     this.nitro.reset()
     for (const w of this.wheels) {

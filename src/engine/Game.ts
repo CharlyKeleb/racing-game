@@ -390,7 +390,7 @@ export class Game {
 
   private renderFrame(alpha: number, dt: number): void {
     const phase = gameStore.getState().phase
-    this.vehicle.render(phase === 'paused' ? 1 : alpha)
+    this.vehicle.render(phase === 'paused' ? 1 : alpha, phase === 'paused' ? 0 : dt)
     if (phase === 'menu' || phase === 'garage') {
       const wheel = phase === 'garage' && this.showroomFocus === 'wheel'
       if (wheel) {
@@ -405,7 +405,7 @@ export class Game {
         this.camera.showroom(this.vehicle.model.root, this.showroomYaw, dt, this.carFraming)
       }
     } else if (phase !== 'paused') {
-      this.camera.update(this.vehicle.model.root, this.vehicle.speedKmh, dt, this.vehicle.controller.nitro.intensity)
+      this.camera.update(this.vehicle.model.root, this.vehicle.speedKmh, dt, this.vehicle.controller.nitro.intensity, this.vehicle.motion)
       this.effects.update(this.vehicle, dt)
       this.updateGuide(dt)
     }

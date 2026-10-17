@@ -8,6 +8,8 @@ import type { VehicleConfig, WheelId } from './VehicleConfig'
  */
 export interface CarModel {
   root: THREE.Group
+  /** Everything but the wheels: leaned for visual weight transfer while the wheels stay planted. */
+  body: THREE.Object3D
   wheels: Record<WheelId, WheelRig>
 }
 
@@ -64,7 +66,7 @@ export function rigCarModel(scene: THREE.Group, config: VehicleConfig): CarModel
     }
     wheels[id] = { pivot, spinner }
   }
-  return { root, wheels }
+  return { root, body: scene, wheels }
 }
 
 /** Stand-in car used until the McLaren GLB exists in public/models/cars/mclaren/. */
