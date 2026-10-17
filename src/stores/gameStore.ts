@@ -1,6 +1,7 @@
 import { createStore } from 'zustand/vanilla'
 import { defaultQuality, isMobile } from '../engine/device'
 import { DEFAULT_BUILD, sanitizeBuild, type CarBuild } from '../vehicles/CarBuild'
+import { selectableCars } from '../vehicles/carRegistry'
 import { isTimeOfDay, type TimeOfDay } from '../world/timeOfDay'
 
 /**
@@ -20,6 +21,8 @@ export interface Settings {
   laps: number
   /** Track id from world/tracks.ts. */
   track: string
+  /** Car id from vehicles/carRegistry.ts. */
+  car: string
   /** Lighting preset, see world/timeOfDay.ts. */
   timeOfDay: TimeOfDay
 }
@@ -28,6 +31,8 @@ export interface GameState {
   phase: GamePhase
   /** Display name of the loaded car, set by the engine. */
   carName: string
+  /** True while the garage swaps cars (one drives off, the next drives in). */
+  carSwitching: boolean
   /** Display name of the loaded track, set by the engine. */
   trackName: string
   /** 0..1 while a track is loading. */
@@ -36,8 +41,10 @@ export interface GameState {
   minimap: { points: [number, number][]; gates: [number, number][] } | null
   error: string | null
   settings: Settings
-  /** Garage customisation, applied by the engine on change. */
+  /** Garage customisation of the current car, applied by the engine on change. */
   build: CarBuild
+  /** Every car's customisation, by car id. Each car keeps its own. */
+  builds: Record<string, CarBuild>
   setPhase(phase: GamePhase): void
   setError(error: string | null): void
   updateSettings(patch: Partial<Settings>): void
@@ -46,7 +53,9 @@ export interface GameState {
 }
 
 const SETTINGS_KEY = 'racing-game:settings'
-const BUILD_KEY = 'racing-game:build'
+/** Per-car builds, { [carId]: CarBuild }. The old single build (racing-game:build) migrates to the Porsche. */
+const BUILDS_KEY = 'racing-game:builds'
+const LEGACY_BUILD_KEY = 'racing-game:build'
 
 // First run: pick quality from the device. Phones start on Low with post FX
 // off; the renderer's dynamic resolution then holds 60 fps from there.
@@ -57,6 +66,7 @@ const defaultSettings: Settings = {
   camera: 'chase',
   laps: 3,
   track: 'nurburgring',
+  car: 'porsche911',
   timeOfDay: 'noon',
 }
 
@@ -66,43 +76,57 @@ function loadSettings(): Settings {
     if (!raw) return defaultSettings
     const merged: Settings = { ...defaultSettings, ...JSON.parse(raw) }
     if (!isTimeOfDay(merged.timeOfDay)) merged.timeOfDay = defaultSettings.timeOfDay
+    if (!selectableCars().some((c) => c.id === merged.car)) merged.car = defaultSettings.car
     return merged
   } catch {
     return defaultSettings
   }
 }
 
-function loadBuild(): CarBuild {
+function loadBuilds(): Record<string, CarBuild> {
   try {
-    const raw = localStorage.getItem(BUILD_KEY)
-    return raw ? sanitizeBuild(JSON.parse(raw)) : DEFAULT_BUILD
+    const raw = localStorage.getItem(BUILDS_KEY)
+    if (raw) {
+      const out: Record<string, CarBuild> = {}
+      for (const [id, b] of Object.entries(JSON.parse(raw) as Record<string, unknown>)) out[id] = sanitizeBuild(b)
+      return out
+    }
+    const legacy = localStorage.getItem(LEGACY_BUILD_KEY)
+    return legacy ? { porsche911: sanitizeBuild(JSON.parse(legacy)) } : {}
   } catch {
-    return DEFAULT_BUILD
+    return {}
   }
 }
 
-function saveBuild(build: CarBuild): void {
+function saveBuilds(builds: Record<string, CarBuild>): void {
   try {
-    localStorage.setItem(BUILD_KEY, JSON.stringify(build))
+    localStorage.setItem(BUILDS_KEY, JSON.stringify(builds))
   } catch {
-    // storage unavailable — the build just won't persist
+    // storage unavailable — the builds just won't persist
   }
 }
+
+const initialSettings = loadSettings()
+const initialBuilds = loadBuilds()
 
 export const gameStore = createStore<GameState>()((set, get) => ({
   phase: 'boot',
   carName: '',
+  carSwitching: false,
   trackName: '',
   loadProgress: 0,
   minimap: null,
   error: null,
-  settings: loadSettings(),
-  build: loadBuild(),
+  settings: initialSettings,
+  builds: initialBuilds,
+  build: initialBuilds[initialSettings.car] ?? DEFAULT_BUILD,
   setPhase: (phase) => set({ phase }),
   setError: (error) => set({ error }),
   updateSettings: (patch) => {
     const settings = { ...get().settings, ...patch }
-    set({ settings })
+    // Switching car brings up that car's own build.
+    if (settings.car !== get().settings.car) set({ settings, build: get().builds[settings.car] ?? DEFAULT_BUILD })
+    else set({ settings })
     try {
       localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings))
     } catch {
@@ -111,11 +135,13 @@ export const gameStore = createStore<GameState>()((set, get) => ({
   },
   updateBuild: (patch) => {
     const build = { ...get().build, ...patch }
-    set({ build })
-    saveBuild(build)
+    const builds = { ...get().builds, [get().settings.car]: build }
+    set({ build, builds })
+    saveBuilds(builds)
   },
   resetBuild: () => {
-    set({ build: DEFAULT_BUILD })
-    saveBuild(DEFAULT_BUILD)
+    const builds = { ...get().builds, [get().settings.car]: DEFAULT_BUILD }
+    set({ build: DEFAULT_BUILD, builds })
+    saveBuilds(builds)
   },
 }))

@@ -32,6 +32,17 @@ export function Panel({ title, className = '', children }: { title?: ReactNode; 
   )
 }
 
+/** Slanted chevron button, for stepping through options (cars, tracks). */
+export function Chevron({ dir, label, disabled, onClick }: { dir: 'left' | 'right'; label: string; disabled?: boolean; onClick(): void }) {
+  return (
+    <button className={`ui-chevron ui-chevron--${dir}`} onClick={onClick} disabled={disabled} aria-label={label}>
+      <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">
+        <path d={dir === 'left' ? 'M15 4 7 12l8 8' : 'm9 4 8 8-8 8'} fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="square" />
+      </svg>
+    </button>
+  )
+}
+
 /** Back chevron + screen title, pinned top-left. */
 export function ScreenHeader({ title, onBack }: { title: string; onBack?: () => void }) {
   return (

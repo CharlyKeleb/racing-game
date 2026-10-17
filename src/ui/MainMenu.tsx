@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { buildStats, carClass, performanceRank } from '../vehicles/CarBuild'
+import { getCar } from '../vehicles/carRegistry'
 import { TRACKS } from '../world/tracks'
 import { useGameInstance } from './GameContext'
 import { useGame } from './hooks'
+import { CarPicker } from './CarPicker'
 import { Button, ClassBadge, StatBar } from './kit'
 import { OrbitLayer } from './OrbitLayer'
 import { Settings } from './Settings'
@@ -10,6 +12,7 @@ import { Settings } from './Settings'
 export function MainMenu() {
   const game = useGameInstance()
   const [showSettings, setShowSettings] = useState(false)
+  const switching = useGame((s) => s.carSwitching)
 
   return (
     <div className="screen screen--menu">
@@ -24,13 +27,16 @@ export function MainMenu() {
       </header>
 
       <div className="menu-bottom">
-        <CarCard />
+        <div className="menu-car">
+          <CarPicker />
+          <CarCard />
+        </div>
         <div className="menu-actions">
           <TrackPicker />
           <Button size="md" onClick={() => game?.openGarage()}>
             Garage
           </Button>
-          <Button size="lg" variant="primary" onClick={() => game?.startRace()} autoFocus>
+          <Button size="lg" variant="primary" disabled={switching} onClick={() => game?.startRace()} autoFocus>
             Race
           </Button>
         </div>
@@ -51,8 +57,9 @@ export function MainMenu() {
 export function CarCard() {
   const name = useGame((s) => s.carName)
   const build = useGame((s) => s.build)
-  const stats = buildStats(build)
-  const rank = performanceRank(build)
+  const stock = getCar(useGame((s) => s.settings.car)).stats
+  const stats = buildStats(build, stock)
+  const rank = performanceRank(build, stock)
   return (
     <div className="car-card">
       <div className="car-card__head">

@@ -12,8 +12,8 @@ import { gameStore, type GamePhase, type Settings } from '../stores/gameStore'
 import { telemetryStore } from '../stores/telemetryStore'
 import { applyCarBuild, samePerformance, type CarBuild } from '../vehicles/CarBuild'
 import { CarLivery } from '../vehicles/CarLivery'
-import { buildPlaceholderCar, rigCarModel } from '../vehicles/CarModel'
-import { getCar } from '../vehicles/carRegistry'
+import { buildPlaceholderCar, rigCarModel, type CarModel } from '../vehicles/CarModel'
+import { getCar, selectableCars, stepCar, type CarEntry } from '../vehicles/carRegistry'
 import { Vehicle } from '../vehicles/Vehicle'
 import { resolveVehicleConfig, type VehicleConfig } from '../vehicles/VehicleConfig'
 import { Environment } from '../world/Environment'
@@ -41,13 +41,16 @@ const WRONG_WAY_DELAY = 1.2
 /** Garage turntable camera: distance (m) and lens (deg) when there's room. */
 const SHOWROOM_DISTANCE = 7.5
 const SHOWROOM_FOV = 42
-/** Free orbit: idle spin (rad/s), camera height range and rest (m above the car's focus), zoom range, idle delay after a drag (s). */
-const ORBIT_SPIN = 0.16
+/** Free orbit: camera height range and rest (m above the car's focus), zoom range. */
 const ORBIT_HEIGHT: [number, number] = [-0.15, 3.2]
 const ORBIT_REST_HEIGHT = 1.5
 const ORBIT_ZOOM: [number, number] = [0.55, 1.3]
-const ORBIT_IDLE_DELAY = 3
 const ORBIT_MAX_FLICK = 3
+/** Garage car swap: the parked car launches out of shot, the next one rolls in and brakes to a stop. Seconds, meters. */
+const DRIVE_OUT_SEC = 0.45
+const DRIVE_OUT_DIST = 16
+const DRIVE_IN_SEC = 0.6
+const DRIVE_IN_DIST = 12
 
 /**
  * Composition root for one play session. React creates exactly one Game,
@@ -82,8 +85,16 @@ export class Game {
   private lapLength = 0
   /** The car as shipped, before garage upgrades. */
   private baseConfig!: VehicleConfig
+  private carId = ''
+  /** Bumped per car switch, so a slow load can't install over a newer pick. */
+  private carSwapToken = 0
+  /** Garage car swap in progress: the car drives off ('out') or arrives ('in'), drawn only — physics stays parked. */
+  private showroomDrive: { mode: 'out' | 'in'; t: number; spin: number; done: () => void } | null = null
+  /** Where the car is parked. The garage camera frames this, so it holds still while a car drives off. */
+  private readonly showroomAnchor = new THREE.Object3D()
+  /** Engine sound override during a garage swap (the parked car's physics idles). */
+  private showroomRev: { rpm: number; throttle: number } | null = null
   private showroomYaw = 0.9
-  private showroomIdle = 0
   /** Orbit state: camera height above the car's focus, zoom factor, flick momentum. */
   private showroomHeight = ORBIT_REST_HEIGHT
   private showroomZoom = 1
@@ -113,14 +124,16 @@ export class Game {
       render: (alpha, dt) => this.renderFrame(alpha, dt),
     })
     this.unsubscribe = gameStore.subscribe((s, prev) => {
+      if (s.settings.car !== prev.settings.car && this.vehicle) void this.switchCar(s.settings.car)
       if (s.settings.track !== prev.settings.track && this.track) void this.switchTrack(s.settings.track)
       else if (s.settings !== prev.settings) this.applySettings(s.settings)
-      if (s.build !== prev.build) this.applyBuild(s.build, prev.build)
+      // A car switch swaps in that car's build too; installCar applies it to the new car.
+      if (s.build !== prev.build && s.settings.car === prev.settings.car) this.applyBuild(s.build, prev.build)
       if (s.phase !== prev.phase) this.updateShowroom(s.phase)
     })
   }
 
-  async init(carId = 'porsche911'): Promise<void> {
+  async init(carId = gameStore.getState().settings.car): Promise<void> {
     gameStore.getState().setPhase('loading')
     await initRapier()
     if (this.disposed) return
@@ -139,7 +152,9 @@ export class Game {
 
     const { config: base, model } = await this.loadCar(carId)
     if (this.disposed) return
-    this.audio.setCarAudio(getCar(carId).audioUrl)
+    const entry = getCar(carId)
+    this.carId = entry.id
+    this.audio.setCarAudio(entry.audioUrl, entry.firingPerRev)
     const build = gameStore.getState().build
     this.baseConfig = base
     gameStore.setState({ carName: base.name })
@@ -169,6 +184,7 @@ export class Game {
     this.vehicle.render(1)
     this.loop.start()
     gameStore.getState().setPhase('menu')
+    void this.preloadCars()
     if (import.meta.env.DEV) (window as unknown as { __game: Game }).__game = this
   }
 
@@ -299,6 +315,24 @@ export class Game {
     setPhase('menu')
   }
 
+  /**
+   * Warm the asset cache with every other car in the picker, one at a time in
+   * the background, so a garage swap never waits on a download.
+   */
+  private async preloadCars(): Promise<void> {
+    const low = gameStore.getState().settings.quality === 'low'
+    for (const car of selectableCars()) {
+      if (car.id === this.carId || this.disposed) continue
+      try {
+        await this.assets.loadJson(car.configUrl)
+        const url = low && car.modelUrlLow ? car.modelUrlLow : car.modelUrl
+        if (await this.assets.exists(url)) await this.assets.loadModel(url)
+      } catch {
+        // Preloading is best effort; switchCar loads (and reports) on demand.
+      }
+    }
+  }
+
   /** Loads the GLB + config from the pipeline, falling back to the placeholder car. */
   private async loadCar(carId: string) {
     const entry = getCar(carId)
@@ -322,7 +356,8 @@ export class Game {
   // ── Commands (called by React) ─────────────────────────────────────────
 
   startRace(): void {
-    const { settings } = gameStore.getState()
+    const { settings, carSwitching } = gameStore.getState()
+    if (carSwitching) return
     this.audio.unlock(settings.masterVolume)
     this.audio.playStart()
     this.resetCar()
@@ -358,14 +393,12 @@ export class Game {
     // Capped so a quick swipe spins the car briskly, not dizzyingly.
     this.orbitVelocity = THREE.MathUtils.clamp(deltaYaw / dt, -ORBIT_MAX_FLICK, ORBIT_MAX_FLICK)
     this.showroomHeight = THREE.MathUtils.clamp(this.showroomHeight + deltaHeight, ORBIT_HEIGHT[0], ORBIT_HEIGHT[1])
-    this.showroomIdle = ORBIT_IDLE_DELAY
   }
 
   /** Pinch / scroll: <1 zooms in, >1 out. */
   zoomShowroom(factor: number): void {
     if (this.showroomFocus === 'wheel') return
     this.showroomZoom = THREE.MathUtils.clamp(this.showroomZoom * factor, ORBIT_ZOOM[0], ORBIT_ZOOM[1])
-    this.showroomIdle = ORBIT_IDLE_DELAY
   }
 
   /** Finger lifted: let a flick carry on with momentum (dropped if the pointer paused before release). */
@@ -375,8 +408,8 @@ export class Game {
   }
 
   /**
-   * Turntable when nobody's dragging: a flick coasts and slows, then the camera
-   * settles into a slow 360° orbit and drifts back to its resting height.
+   * When nobody's dragging, a flick coasts and slows to a stop. The camera then
+   * stays where it was left: no auto-rotation.
    */
   private idleShowroomCamera(dt: number): void {
     if (this.orbitCoasting && Math.abs(this.orbitVelocity) > 0.05) {
@@ -385,12 +418,6 @@ export class Game {
       return
     }
     this.orbitCoasting = false
-    if (this.showroomIdle > 0) {
-      this.showroomIdle -= dt
-      return
-    }
-    this.showroomYaw += dt * ORBIT_SPIN
-    this.showroomHeight += (ORBIT_REST_HEIGHT - this.showroomHeight) * (1 - Math.exp(-0.5 * dt))
   }
 
   /** Garage tabs call this: 'wheel' glides the camera to the front-left wheel. */
@@ -398,7 +425,99 @@ export class Game {
     if (focus === this.showroomFocus) return
     this.showroomFocus = focus
     this.wheelYaw = 0
-    if (focus === 'car') this.showroomIdle = 1.5
+  }
+
+  /** Garage chevrons: step through the cars. The current one drives off and the next drives in. */
+  cycleCar(step: 1 | -1): void {
+    const s = gameStore.getState()
+    if (s.carSwitching || (s.phase !== 'garage' && s.phase !== 'menu')) return
+    s.updateSettings({ car: stepCar(this.carId, step).id })
+  }
+
+  private async switchCar(id: string): Promise<void> {
+    const entry = getCar(id)
+    if (entry.id === this.carId) return
+    this.carId = entry.id
+    const token = ++this.carSwapToken
+    gameStore.setState({ carSwitching: true })
+    const phase = gameStore.getState().phase
+    const showroom = phase === 'menu' || phase === 'garage'
+    const loading = this.loadCar(entry.id)
+    if (showroom) {
+      // The chevron click is a user gesture, so the engines can be heard leaving and arriving.
+      this.audio.unlock(gameStore.getState().settings.masterVolume)
+      await new Promise<void>((done) => (this.showroomDrive = { mode: 'out', t: 0, spin: 0, done }))
+      this.vehicle.model.root.visible = false
+    }
+    const { config, model } = await loading
+    if (token !== this.carSwapToken || this.disposed) return
+    this.installCar(entry, config, model)
+    if (showroom) await new Promise<void>((done) => (this.showroomDrive = { mode: 'in', t: 0, spin: 0, done }))
+    if (token !== this.carSwapToken) return
+    gameStore.setState({ carSwitching: false })
+    const now = gameStore.getState().phase
+    if (now === 'menu' || now === 'garage') this.audio.suspend()
+  }
+
+  /** Swap the player car for a freshly loaded one, rebuilding everything tied to it. */
+  private installCar(entry: CarEntry, base: VehicleConfig, model: CarModel): void {
+    const scene = this.renderer.scene
+    const old = this.vehicle
+    this.effects.dispose()
+    this.headlights.dispose()
+    this.livery.dispose()
+    scene.remove(old.model.root)
+    this.physics.world.removeRigidBody(old.body)
+    this.setShowroomPad(false)
+
+    const build = gameStore.getState().build
+    this.baseConfig = base
+    const config = applyCarBuild(base, build)
+    this.vehicle = new Vehicle(config, model, this.physics.world, this.track.spawn)
+    this.vehicle.controller.surfaceAt = (x, z) => this.track.surfaceAt(x, z)
+    this.vehicle.lightsOn = this.environment.current.headlights
+    this.livery = new CarLivery(model)
+    this.livery.apply(build)
+    scene.add(model.root)
+    this.headlights = new Headlights(model, config)
+    this.headlights.setOn(this.environment.current.headlights)
+    this.effects = new DrivingEffects(this.vehicle)
+    scene.add(this.effects.group)
+    const phase = gameStore.getState().phase
+    const inShowroom = phase === 'menu' || phase === 'garage'
+    this.effects.group.visible = !inShowroom
+    if (inShowroom) this.setShowroomPad(true)
+    this.audio.setCarAudio(entry.audioUrl, entry.firingPerRev)
+    gameStore.setState({ carName: base.name })
+    telemetryStore.setState({ redlineRpm: config.engine.redlineRpm })
+    this.vehicle.render(1)
+  }
+
+  /**
+   * Draws the garage swap: the parked car launches forward out of shot, or the
+   * new one arrives from behind and brakes to its spot. Render-only: the body
+   * stays parked on the pad, the wheels spin to match the distance covered.
+   */
+  private animateShowroomDrive(dt: number): void {
+    const d = this.showroomDrive!
+    const out = d.mode === 'out'
+    const duration = out ? DRIVE_OUT_SEC : DRIVE_IN_SEC
+    d.t = Math.min(d.t + dt, duration)
+    const u = d.t / duration
+    const dist = out ? DRIVE_OUT_DIST * u * u : -DRIVE_IN_DIST * (1 - u) * (1 - u)
+    const speed = out ? (2 * DRIVE_OUT_DIST * u) / duration : (2 * DRIVE_IN_DIST * (1 - u)) / duration
+    const root = this.vehicle.model.root
+    _forward.set(0, 0, 1).applyQuaternion(root.quaternion)
+    root.position.addScaledVector(_forward, dist)
+    d.spin += speed * dt
+    for (const w of this.vehicle.controller.wheels) this.vehicle.model.wheels[w.cfg.id].spinner.rotation.x += d.spin / w.cfg.radius
+    // Rev up as it launches; coast down as it arrives (overrun crackle).
+    this.showroomRev = out ? { rpm: 2500 + 5000 * Math.min(1, u * 1.6), throttle: 1 } : { rpm: 1000 + 3500 * (1 - u), throttle: 0 }
+    if (u >= 1) {
+      this.showroomDrive = null
+      this.showroomRev = null
+      d.done()
+    }
   }
 
   togglePause(): void {
@@ -475,13 +594,16 @@ export class Game {
   private renderFrame(alpha: number, dt: number): void {
     const phase = gameStore.getState().phase
     this.vehicle.render(phase === 'paused' ? 1 : alpha, phase === 'paused' ? 0 : dt)
+    this.showroomAnchor.position.copy(this.vehicle.model.root.position)
+    this.showroomAnchor.quaternion.copy(this.vehicle.model.root.quaternion)
+    if (this.showroomDrive) this.animateShowroomDrive(dt)
     if (phase === 'menu' || phase === 'garage') {
       const wheel = phase === 'garage' && this.showroomFocus === 'wheel'
       if (wheel) {
         // Front-left wheel axle in car space (+X is the car's left), seen from a low front three-quarter.
         const fl = this.vehicle.config.wheels.find((w) => w.id === 'FL') ?? this.vehicle.config.wheels[0]
         this.wheelFraming.focus.set(fl.position[0], fl.radius, fl.position[2])
-        this.camera.showroom(this.vehicle.model.root, Math.PI / 2 - 0.55 + this.wheelYaw, dt, this.wheelFraming)
+        this.camera.showroom(this.showroomAnchor, Math.PI / 2 - 0.55 + this.wheelYaw, dt, this.wheelFraming)
       } else {
         if (this.showroomPadStale) {
           this.setShowroomPad(false)
@@ -498,7 +620,7 @@ export class Game {
         this.carFraming.distance = Math.max(3.2, Math.min(wanted, room))
         this.carFraming.fov = Math.min(64, (SHOWROOM_FOV * wanted) / this.carFraming.distance)
         this.carFraming.height = this.showroomHeight
-        this.camera.showroom(this.vehicle.model.root, this.showroomYaw, dt, this.carFraming)
+        this.camera.showroom(this.showroomAnchor, this.showroomYaw, dt, this.carFraming)
       }
     } else if (phase !== 'paused') {
       this.camera.update(this.vehicle.model.root, this.vehicle.speedKmh, dt, this.vehicle.controller.nitro.intensity, this.vehicle.motion)
@@ -515,8 +637,8 @@ export class Game {
     const sound = this.soundState
     let slip = 0
     for (const w of ctrl.wheels) slip = Math.max(slip, w.slip)
-    sound.rpm = ctrl.drivetrain.rpm
-    sound.throttle = ctrl.throttlePedal
+    sound.rpm = this.showroomRev?.rpm ?? ctrl.drivetrain.rpm
+    sound.throttle = this.showroomRev?.throttle ?? ctrl.throttlePedal
     sound.gear = ctrl.drivetrain.gear
     sound.slip = slip
     sound.nitro = ctrl.nitro.intensity

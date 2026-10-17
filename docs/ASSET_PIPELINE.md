@@ -78,6 +78,29 @@ both the axle centers and the computed mount points.
 *above* the wheels. Keep its bottom above the ground clearance so the box
 doesn't scrape. The wheels carry the car, not the box.
 
+## Preparing a car without Blender
+
+`scripts/cars/prepare-car.mjs` applies the same car contract with
+gltf-transform, from a per-car spec such as `scripts/cars/koenigsegg.config.mjs`:
+
+```bash
+node scripts/cars/prepare-car.mjs scripts/cars/koenigsegg.config.mjs ~/Downloads/koenigsegg_one_pro.glb
+```
+
+The script:
+1. Bakes the node transforms.
+2. Applies `rotateY` (to put the nose at +Z) and `scale`, then grounds the tyres and centres the wheelbase.
+3. Splits the four wheels out of shared tyre, rim and brake meshes. Parts are matched by node or material name. Brake parts are split per piece: round pieces centred on the axle (discs) go on the wheel, and off-centre pieces (calipers) go on `Chassis` with a `caliper` material.
+4. Splits a lights mesh into `headlight` and `taillight` materials.
+5. Renames materials for the livery (`paint`, `rim`) and fixes alpha modes.
+6. Decimates to budget and re-encodes textures as WebP.
+7. Writes `<id>.glb` and `<id>_low.glb` (meshopt).
+
+It prints the axle centres, radii, widths and bounds that `vehicle-config.json` needs.
+Wheel mounts sit at axle height plus `restLength` (0.32 m). Then add the car to
+`src/vehicles/carRegistry.ts` with its `firingPerRev`, its `stats`, and
+`selectable: true`, so it appears in the garage's ‹ › car picker.
+
 ## Track contract
 
 Tracks don't need hand-authored names: `scripts/track/build-track.mjs`

@@ -11,6 +11,7 @@ import {
 } from '../vehicles/CarBuild'
 import { useGameInstance } from './GameContext'
 import { useGame } from './hooks'
+import { CarPicker } from './CarPicker'
 import { Button, Panel, ScreenHeader, Segmented } from './kit'
 import { CarCard } from './MainMenu'
 import { OrbitLayer } from './OrbitLayer'
@@ -28,6 +29,7 @@ export function Garage() {
   const update = useGame((s) => s.updateBuild)
   const reset = useGame((s) => s.resetBuild)
   const [tab, setTab] = useState<Tab>('paint')
+  const switching = useGame((s) => s.carSwitching)
 
   // Wheels tab zooms the camera onto a wheel; everything else frames the whole car.
   useEffect(() => {
@@ -58,9 +60,11 @@ export function Garage() {
         </Panel>
       </div>
 
+      <CarPicker className="garage-carpicker" />
+
       <div className="garage-right">
         {tab !== 'wheels' && <CarCard />}
-        <Button size="lg" variant="primary" onClick={() => game?.startRace()}>
+        <Button size="lg" variant="primary" disabled={switching} onClick={() => game?.startRace()}>
           Race
         </Button>
       </div>

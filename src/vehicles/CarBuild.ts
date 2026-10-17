@@ -124,16 +124,22 @@ export interface BuildStats {
   braking: number
 }
 
-/** 0..1 ratings for the garage stat bars; stock ≈ 0.5, fully upgraded = 1. */
-export function buildStats(build: CarBuild): BuildStats {
-  const scale = (v: number, max: number) => 0.5 + 0.5 * ((v - 1) / (max - 1))
+/** Stock ratings of a mid-field car (the Porsche); each car declares its own. */
+export const BASE_STATS: BuildStats = { power: 0.5, grip: 0.5, handling: 0.5, braking: 0.5 }
+
+/**
+ * 0..1 ratings for the garage stat bars: the car's stock rating, raised toward
+ * 1 as upgrades are fitted (fully upgraded = 1).
+ */
+export function buildStats(build: CarBuild, stock: BuildStats = BASE_STATS): BuildStats {
+  const scale = (v: number, max: number, base: number) => base + (1 - base) * ((v - 1) / (max - 1))
   const pw = ENGINE_TORQUE[build.engine] / WEIGHT[build.weight]
   const susp = SUSPENSION[build.suspension]
   return {
-    power: scale(pw, ENGINE_TORQUE[3] / WEIGHT[2]),
-    grip: scale(TIRE_GRIP[build.tires], TIRE_GRIP.race),
-    handling: scale(susp.stiffness * TIRE_CORNERING[build.tires], SUSPENSION.race.stiffness * TIRE_CORNERING.race),
-    braking: scale(BRAKES[build.brakes] / WEIGHT[build.weight], BRAKES[2] / WEIGHT[2]),
+    power: scale(pw, ENGINE_TORQUE[3] / WEIGHT[2], stock.power),
+    grip: scale(TIRE_GRIP[build.tires], TIRE_GRIP.race, stock.grip),
+    handling: scale(susp.stiffness * TIRE_CORNERING[build.tires], SUSPENSION.race.stiffness * TIRE_CORNERING.race, stock.handling),
+    braking: scale(BRAKES[build.brakes] / WEIGHT[build.weight], BRAKES[2] / WEIGHT[2], stock.braking),
   }
 }
 
@@ -161,8 +167,8 @@ export function sanitizeBuild(raw: unknown): CarBuild {
 export type CarClass = 'D' | 'C' | 'B' | 'A' | 'S'
 
 /** Single headline number for the garage, like a racing game's performance rank. */
-export function performanceRank(build: CarBuild): number {
-  const s = buildStats(build)
+export function performanceRank(build: CarBuild, stock: BuildStats = BASE_STATS): number {
+  const s = buildStats(build, stock)
   const avg = (s.power + s.grip + s.handling + s.braking) / 4
   return Math.round(1800 + 1200 * avg)
 }
