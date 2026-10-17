@@ -293,6 +293,22 @@ kbd { font-family: inherit; font-size: 11px; padding: 1px 6px; border: 1px solid
   mask-image: radial-gradient(ellipse at 50% 55%, transparent 42%, #000 85%);
 }
 .hud--nitro-perfect .hud-speedlines { filter: hue-rotate(-20deg) brightness(1.6); }
+.hud-drift {
+  position: absolute; left: 50%; bottom: calc(var(--gutter) + 120px); transform: translateX(-50%) skewX(var(--skew));
+  display: flex; align-items: baseline; gap: 12px; padding: 4px 20px; pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(4, 20, 36, 0.75) 20%, rgba(4, 20, 36, 0.75) 80%, transparent);
+  font-family: var(--font-display); font-style: italic; text-transform: uppercase; white-space: nowrap;
+}
+.hud-drift__label { font-weight: 800; font-size: 18px; letter-spacing: 0.2em; color: var(--accent-2); }
+.hud-drift__score { font-weight: 900; font-size: 40px; color: #fff; text-shadow: 0 0 18px rgba(25, 195, 255, 0.8), 0 3px 0 #021220; font-variant-numeric: tabular-nums; }
+.hud-drift--banked { background: none; animation: drift-bank 1.6s ease-out both; }
+.hud-drift--banked .hud-drift__score { color: var(--accent); text-shadow: 0 0 22px rgba(255, 210, 0, 0.8), 0 3px 0 #2a1f00; }
+@keyframes drift-bank {
+  0% { opacity: 0; transform: translateX(-50%) skewX(var(--skew)) scale(1.5); }
+  15% { opacity: 1; transform: translateX(-50%) skewX(var(--skew)) scale(1); }
+  75% { opacity: 1; transform: translateX(-50%) skewX(var(--skew)) translateY(0); }
+  100% { opacity: 0; transform: translateX(-50%) skewX(var(--skew)) translateY(-30px); }
+}
 .hud-nitro-call {
   position: absolute; left: 50%; top: 24%; transform: translateX(-50%) skewX(var(--skew));
   font-family: var(--font-display); font-style: italic; font-weight: 900; font-size: clamp(26px, 4vw, 42px);

@@ -21,6 +21,11 @@ export interface Telemetry {
   nitroPerfect: boolean
   /** Just mistimed the perfect tap (flashes briefly). */
   nitroMissed: boolean
+  /** Drift under way, and its points so far. */
+  driftActive: boolean
+  driftScore: number
+  /** Points of the drift that just ended, shown briefly; 0 = nothing to show. */
+  driftBanked: number
   lap: number
   totalLaps: number
   currentLapMs: number
@@ -53,6 +58,9 @@ export const initialTelemetry: Telemetry = {
   nitroWindow: false,
   nitroPerfect: false,
   nitroMissed: false,
+  driftActive: false,
+  driftScore: 0,
+  driftBanked: 0,
   lap: 0,
   totalLaps: 3,
   currentLapMs: 0,

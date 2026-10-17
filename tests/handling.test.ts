@@ -124,26 +124,34 @@ describe('handling', () => {
     expect(residual(assisted.release)).toBeLessThan(residual(raw.release))
   })
 
-  it('holds a countersteered drift that a full-strength assist would straighten', () => {
-    /** Handbrake flick at ~90 km/h, then opposite lock on throttle; returns the body slip angle (deg). */
-    const driftAngle = (cfg: VehicleConfig) => {
-      const { ctrl, step, body } = spawnCar(cfg)
-      while (ctrl.forwardSpeed < 90 / 3.6) step(drive(0))
-      for (let i = 0; i < 40; i++) step({ throttle: 0, brake: 0, steer: 1, handbrake: true, nitro: false })
-      for (let i = 0; i < 40; i++) step({ throttle: 0.7, brake: 0, steer: -0.5, handbrake: false, nitro: false })
+  it('a guided drift settles at a steady angle and keeps its speed (NFS/Asphalt style)', () => {
+    const { ctrl, step, body } = spawnCar(DEFAULT_VEHICLE_CONFIG)
+    while (ctrl.forwardSpeed < 110 / 3.6) step(drive(0))
+    const slip = () => {
       const v = body.linvel()
       const q = body.rotation()
-      // Car forward (+Z) and right (−X) rotated by the body quaternion, in the XZ plane.
       const fx = 2 * (q.x * q.z + q.w * q.y)
       const fz = 1 - 2 * (q.x * q.x + q.y * q.y)
-      const along = v.x * fx + v.z * fz
-      const across = v.x * fz - v.z * fx
-      return (Math.atan2(Math.abs(across), Math.abs(along)) * 180) / Math.PI
+      return (Math.atan2(Math.abs(v.x * fz - v.z * fx), Math.abs(v.x * fx + v.z * fz)) * 180) / Math.PI
     }
-    const drifty = driftAngle({ ...DEFAULT_VEHICLE_CONFIG, driftAssist: 0.2 })
-    const strict = driftAngle({ ...DEFAULT_VEHICLE_CONFIG, driftAssist: 1 })
-    expect(drifty).toBeGreaterThan(15) // still well sideways after 2/3 s of opposite lock
-    expect(drifty).toBeGreaterThan(strict + 4)
+    // Asphalt's drift: tap the brake while turning, then hold the turn on the throttle.
+    for (let i = 0; i < 6; i++) step({ throttle: 0, brake: 0, steer: 1, handbrake: false, nitro: false })
+    for (let i = 0; i < 9; i++) step({ throttle: 0, brake: 1, steer: 1, handbrake: false, nitro: false })
+    const angles: number[] = []
+    for (let i = 0; i < 150; i++) {
+      step({ throttle: 1, brake: 0, steer: 1, handbrake: false, nitro: false })
+      if (i >= 60) angles.push(slip())
+    }
+    expect(ctrl.drift.active).toBe(true)
+    const mean = angles.reduce((a, b) => a + b, 0) / angles.length
+    expect(mean).toBeGreaterThan(25) // properly sideways…
+    expect(mean).toBeLessThan(45)
+    expect(Math.max(...angles) - Math.min(...angles)).toBeLessThan(6) // …and steady, not see-sawing
+    expect(ctrl.forwardSpeed * 3.6).toBeGreaterThan(80) // keeps its pace through the drift
+    // Straightening up ends it and the car gathers itself.
+    for (let i = 0; i < 90; i++) step(drive(0))
+    expect(ctrl.drift.active).toBe(false)
+    expect(slip()).toBeLessThan(10)
   })
 
   it('a gravel trap brings the car to a stop far sooner than tarmac', () => {
@@ -214,7 +222,8 @@ describe('Porsche 911 handling', () => {
     for (let i = 0; i < 40; i++) step(pedals({ steer: 1, handbrake: true }))
     expect(slipAngle(body)).toBeGreaterThan(12)
     for (let i = 0; i < 40; i++) step(pedals({ throttle: 0.7, steer: -0.5 }))
-    expect(slipAngle(body)).toBeGreaterThan(15) // still sideways: the slide holds
+    // Half opposite lock shallows the drift (toward ~15°) without dropping it straight away.
+    expect(slipAngle(body)).toBeGreaterThan(10)
     let t = 0
     while (slipAngle(body) > 3 && t < 240) {
       step(pedals({ throttle: 0.4 }))

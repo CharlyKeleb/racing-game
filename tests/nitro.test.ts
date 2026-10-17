@@ -16,6 +16,7 @@ const CFG: NitroConfig = {
   topSpeedBonus: 0.2,
   rampRate: 5,
   airFillRate: 0.4,
+  driftFillRate: 0.3,
   releaseGraceSec: 0.25,
   perfectWindowStart: 0.8,
   perfectWindowLength: 0.4,
@@ -96,6 +97,12 @@ describe('Nitro', () => {
     run(n, cruising, CFG.releaseGraceSec + 0.02 + 1 / CFG.rampRate)
     expect(n.intensity).toBe(0)
     expect(n.dragScale).toBe(1)
+  })
+
+  it('fills from drifting, even with little tire slip', () => {
+    expect(fillRate({ ...cruising, drifting: true }, CFG)).toBe(CFG.driftFillRate)
+    expect(fillRate({ ...drifting, drifting: true }, CFG)).toBe(Math.max(CFG.fillRate, CFG.driftFillRate))
+    expect(fillRate({ ...cruising, drifting: true, speed: 5 }, CFG)).toBe(0)
   })
 
   it('fills from airtime, but not when slow', () => {

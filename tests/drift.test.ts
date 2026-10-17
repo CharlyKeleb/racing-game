@@ -116,3 +116,73 @@ describe('Drift while sliding', () => {
     expect(d.active).toBe(false)
   })
 })
+
+describe('Arcade drift (NFS / Asphalt)', () => {
+  const tapWhileTurning = (d: Drift, steer = 1) => {
+    run(d, { steer }, 0.1, DEFAULT_DRIFT)
+    run(d, { steer, brake: 1 }, 0.15, DEFAULT_DRIFT)
+    d.update({ ...cruise, steer }, DEFAULT_DRIFT, DT) // released: the tap
+  }
+
+  it('a quick brake tap while turning starts a drift that way', () => {
+    const d = new Drift()
+    tapWhileTurning(d, -1)
+    expect(d.active).toBe(true)
+    expect(d.direction).toBe(-1)
+  })
+
+  it('a long brake while turning is just braking', () => {
+    const d = new Drift()
+    run(d, { steer: 1, brake: 1 }, 0.5, DEFAULT_DRIFT)
+    run(d, { steer: 1 }, 0.3, DEFAULT_DRIFT)
+    expect(d.active).toBe(false)
+  })
+
+  it('braking in a straight line and then turning in is just braking', () => {
+    const d = new Drift()
+    run(d, { brake: 1 }, 0.15, DEFAULT_DRIFT)
+    run(d, { steer: 1, throttle: 0.8 }, 0.5, DEFAULT_DRIFT)
+    expect(d.active).toBe(false)
+  })
+
+  it('steering into the drift deepens the angle and tightens the arc; countersteer opens it', () => {
+    const d = new Drift()
+    tapWhileTurning(d, 1) // a right-hand drift: clockwise about +Y, so negative
+    const g = { angle: 0, pathRate: 0 }
+    const into = { ...d.guide(1, 30, DEFAULT_DRIFT, g) }
+    const centred = { ...d.guide(0, 30, DEFAULT_DRIFT, g) }
+    const counter = { ...d.guide(-1, 30, DEFAULT_DRIFT, g) }
+    expect(into.angle).toBeLessThan(0)
+    expect(into.pathRate).toBeLessThan(0)
+    expect(Math.abs(into.angle)).toBeCloseTo(DEFAULT_DRIFT.holdAngle)
+    expect(Math.abs(centred.angle)).toBeCloseTo(DEFAULT_DRIFT.baseAngle)
+    expect(Math.abs(counter.angle)).toBeCloseTo(DEFAULT_DRIFT.minAngle)
+    expect(Math.abs(into.pathRate)).toBeGreaterThan(Math.abs(centred.pathRate))
+    expect(Math.abs(centred.pathRate)).toBeGreaterThan(Math.abs(counter.pathRate))
+    // The arc is a sideways acceleration: the same g turns slower at higher speed.
+    expect(Math.abs(d.guide(1, 60, DEFAULT_DRIFT, g).pathRate)).toBeLessThan(Math.abs(into.pathRate))
+  })
+
+  it('holding countersteer ends the drift after counterExitTime', () => {
+    const d = new Drift()
+    tapWhileTurning(d, 1)
+    run(d, { steer: -0.6 }, DEFAULT_DRIFT.counterExitTime - 0.1, DEFAULT_DRIFT)
+    expect(d.active).toBe(true)
+    run(d, { steer: -0.6 }, 0.2, DEFAULT_DRIFT)
+    expect(d.active).toBe(false)
+  })
+
+  it('scores points while drifting and banks them when it ends', () => {
+    const d = new Drift()
+    tapWhileTurning(d, 1)
+    run(d, { steer: 1, slipAngle: 0.6, speed: 30 }, 2, DEFAULT_DRIFT)
+    const live = d.score
+    // km/h × degrees per second / 50: 108 km/h × 34° × 2 s / 50 ≈ 148
+    expect(live).toBeGreaterThan(120)
+    expect(live).toBeLessThan(180)
+    run(d, { steer: 0 }, 0.5, DEFAULT_DRIFT)
+    expect(d.active).toBe(false)
+    expect(d.lastScore).toBe(Math.round(live))
+    expect(d.sinceEnd).toBeLessThan(0.5)
+  })
+})
