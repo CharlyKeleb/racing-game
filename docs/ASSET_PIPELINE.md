@@ -112,6 +112,33 @@ To build a bank:
 
 `tests/engineAudio.test.ts` checks that the bank plays at the requested rpm.
 
+## Garage
+
+The menu and garage screens use the NFS 2015 workshop
+(`~/Downloads/garage_nfs_2015.glb`, 11.5 MB). Rebuild it with:
+
+```bash
+npm run build:garage
+```
+
+`scripts/garage/build-garage.mjs` does the following:
+
+- Scales the model ×10 into metres.
+- Probes the whole floor with 256 rays at bonnet and camera height, so thin
+  poles count. It parks the car where a ±50° camera arc has the most room
+  (7.3 m or more), puts the origin there with the floor at y = 0, and turns the
+  room so that arc sits on the menu camera's front three-quarter angle.
+- Marks every material unlit (`KHR_materials_unlit`), because the lighting is
+  baked into the textures. The `Lights_D` glow sheet is drawn additive.
+- Writes WebP textures in two tiers: `garage_high.glb` (≤2048 px, 3.1 MB) and
+  `garage_low.glb` (≤1024 px, 1.1 MB).
+- Writes `garage.json` with wall clearance in 32 directions. The menu camera
+  pulls in, and widens its lens, before a wall or pillar could block the car.
+
+At runtime, `Showroom` lights only the car: an environment map baked from the
+room itself, a key light, two rims, a contact shadow and a warm floor pool.
+Medium and High add a radially faded floor reflection.
+
 ## Licensing
 
 A free download is **not** automatically licensed for redistribution in a

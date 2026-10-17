@@ -37,6 +37,9 @@ const _velocity = new THREE.Vector3()
 const _forward = new THREE.Vector3()
 /** Seconds of driving against the race direction before the HUD says so. */
 const WRONG_WAY_DELAY = 1.2
+/** Garage turntable camera: distance (m) and lens (deg) when there's room. */
+const SHOWROOM_DISTANCE = 7.5
+const SHOWROOM_FOV = 42
 
 /**
  * Composition root for one play session. React creates exactly one Game,
@@ -71,10 +74,12 @@ export class Game {
   private baseConfig!: VehicleConfig
   private showroomYaw = 0.9
   private showroomIdle = 0
+  /** Phase of the idle camera sway across the garage's open arc. */
+  private showroomSway = 0
   /** What the garage camera frames; the Wheels tab zooms onto the front-left wheel. */
   private showroomFocus: ShowroomFocus = 'car'
   private wheelYaw = 0
-  private readonly carFraming: ShowroomFraming = { focus: new THREE.Vector3(0, 0.55, 0), distance: 7.5, height: 1.5, shift: 0, fov: 42 }
+  private readonly carFraming: ShowroomFraming = { focus: new THREE.Vector3(0, 0.55, 0), distance: SHOWROOM_DISTANCE, height: 1.5, shift: 0, fov: SHOWROOM_FOV }
   private readonly wheelFraming: ShowroomFraming = { focus: new THREE.Vector3(), distance: 2.9, height: 0.45, shift: 0.55, fov: 38 }
 
   private telemetryTimer = 0
@@ -135,6 +140,8 @@ export class Game {
     this.showroom = new Showroom(this.renderer.renderer)
     this.showroom.placeAt(spawn.position, spawn.heading)
     scene.add(this.showroom.group)
+    await this.showroom.load(this.assets, gameStore.getState().settings.quality)
+    if (this.disposed) return
 
     this.camera = new ChaseCamera(this.renderer.camera)
     this.race = this.createRace()
@@ -328,6 +335,24 @@ export class Game {
     this.showroomIdle = 2.5
   }
 
+  /**
+   * Idle turntable. In the garage model the camera sways slowly across the
+   * open arc in front of the car (NFS-style) instead of spinning into clutter;
+   * after a drag it eases back onto that path. Without a room it just spins.
+   */
+  private idleShowroomCamera(dt: number): void {
+    const arc = this.showroom.heroArc
+    if (!arc) {
+      this.showroomYaw += dt * 0.25
+      return
+    }
+    this.showroomSway += dt
+    const target = arc.center + arc.halfWidth * 0.8 * Math.sin(this.showroomSway * 0.2)
+    // Shortest way round: a drag may have wound the yaw through several turns.
+    const diff = Math.atan2(Math.sin(target - this.showroomYaw), Math.cos(target - this.showroomYaw))
+    this.showroomYaw += diff * (1 - Math.exp(-0.9 * dt))
+  }
+
   /** Garage tabs call this: 'wheel' glides the camera to the front-left wheel. */
   setShowroomFocus(focus: ShowroomFocus): void {
     if (focus === this.showroomFocus) return
@@ -417,8 +442,15 @@ export class Game {
         this.camera.showroom(this.vehicle.model.root, Math.PI / 2 - 0.55 + this.wheelYaw, dt, this.wheelFraming)
       } else {
         if (this.showroomIdle > 0) this.showroomIdle -= dt
-        else this.showroomYaw += dt * 0.25
+        else this.idleShowroomCamera(dt)
+        // Slide the car right of the garage's left-hand panel. (On landscape phones the
+        // menu's car card turns compact instead — see index.css — so the car stays centred.)
         this.carFraming.shift = phase === 'garage' ? 1.2 : 0
+        // Pull in before a wall or pillar would come between camera and car, and
+        // widen the lens to match so the car stays the same size on screen.
+        const room = this.showroom.cameraClearance(this.showroomYaw)
+        this.carFraming.distance = Math.max(3.2, Math.min(SHOWROOM_DISTANCE, room))
+        this.carFraming.fov = Math.min(64, (SHOWROOM_FOV * SHOWROOM_DISTANCE) / this.carFraming.distance)
         this.camera.showroom(this.vehicle.model.root, this.showroomYaw, dt, this.carFraming)
       }
     } else if (phase !== 'paused') {

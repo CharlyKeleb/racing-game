@@ -460,3 +460,10 @@ html, body { overscroll-behavior: none; }
 /* Touch reset/pause sit left of the minimap. */
 .overlay--touch .touch-top { right: calc(max(var(--gutter), env(safe-area-inset-right)) + 132px); top: max(8px, env(safe-area-inset-top)); }
 .overlay--touch .hud-tl { transform: scale(0.8); transform-origin: top left; }
+
+/* Landscape phones: a compact car card (name, class, rank) so the garage car stays in view. */
+@media (max-height: 520px) {
+  .screen--menu .car-card { width: auto; padding: 10px 14px; gap: 0; }
+  .screen--menu .car-card .ui-stat { display: none; }
+  .screen--menu .car-card__head { margin-bottom: 0; }
+}
