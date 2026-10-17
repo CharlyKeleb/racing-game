@@ -30,6 +30,9 @@ export function TouchControls() {
         </div>
       </div>
       <div className="touch-top">
+        <button className="touch-icon" aria-label="Switch camera" onPointerDown={() => game?.triggerAction('camera')}>
+          ◉
+        </button>
         <button className="touch-icon" aria-label="Reset car" onPointerDown={() => game?.triggerAction('reset')}>
           ↺
         </button>

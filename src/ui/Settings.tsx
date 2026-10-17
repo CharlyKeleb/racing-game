@@ -1,4 +1,4 @@
-import type { QualityPreset } from '../stores/gameStore'
+import type { CameraMode, QualityPreset } from '../stores/gameStore'
 import type { TimeOfDay } from '../world/timeOfDay'
 import { useGame } from './hooks'
 import { Button, Panel, Segmented } from './kit'
@@ -17,6 +17,15 @@ export function Settings({ onClose }: { onClose?: () => void }) {
           ['high', 'High'],
         ]}
         onPick={(quality) => update({ quality })}
+      />
+      <Segmented<CameraMode>
+        label="Camera"
+        value={settings.camera}
+        options={[
+          ['chase', 'Chase'],
+          ['cockpit', 'Cockpit'],
+        ]}
+        onPick={(camera) => update({ camera })}
       />
       <Segmented<TimeOfDay>
         label="Time of day"
