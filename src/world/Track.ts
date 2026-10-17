@@ -75,6 +75,11 @@ export class Track implements RaceTrack {
 
   update(): void {}
 
+  /** One flat ground collider: it's all road as far as arrows are concerned. */
+  isRoadCollider(): boolean {
+    return true
+  }
+
   setQuality(): void {}
 
   viewDistance(): ViewDistance {

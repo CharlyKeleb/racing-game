@@ -21,8 +21,11 @@ const MAX_OFFSET = 5.5
 const ARROW_LEN = 6.5
 const ARROW_WID = 4.2
 /** How far (rad) the arrow turns from straight ahead toward the bend: it points into the corner. */
-const POINT_IN = 0.55
-const HOVER = 0.1
+const POINT_IN = 0.32
+/** Above the measured road plane; polygon offset handles the rest. */
+const HOVER = 0.04
+/** Lateral offsets tried, as fractions of the preferred one, until the whole arrow is on asphalt. */
+const PULL_IN = [1, 0.7, 0.4, 0]
 /** Far arrows fade in over this many points instead of popping. */
 const FADE = 10
 const CYAN = new THREE.Color(0.25, 0.86, 1)
@@ -34,7 +37,21 @@ const _side = new THREE.Vector3()
 const _pos = new THREE.Vector3()
 const _scale = new THREE.Vector3()
 const _c = new THREE.Color()
-const _y = new THREE.Vector3(0, 1, 0)
+const _af = new THREE.Vector3()
+const _al = new THREE.Vector3()
+const _t = new THREE.Vector3()
+const _b = new THREE.Vector3()
+const _n = new THREE.Vector3()
+const _x = new THREE.Vector3()
+const _basis = new THREE.Matrix4()
+
+/** How the guide asks about the road under an arrow. */
+export interface RoadQuery {
+  /** Height of the paved road surface under (x, z), searching near `nearY`; null if there's none. */
+  roadHeight(x: number, nearY: number, z: number): number | null
+  /** Is (x, z) asphalt or kerb (not grass, sand, gravel)? */
+  paved(x: number, z: number): boolean
+}
 
 /**
  * Need for Speed-style route arrows: glowing cyan chevrons painted on the
@@ -52,25 +69,28 @@ export class DirectionGuide {
   private readonly bend: Float32Array
   /** Lateral offset from the centreline for each point's arrow, m. */
   private readonly offset: Float32Array
-  /** Road height under each point's arrow, measured on first use (NaN until then). */
-  private readonly arrowY: Float32Array
-  private readonly groundAt: (x: number, nearY: number, z: number) => number | null
+  /**
+   * Arrow pose per centreline point, solved on first use: 0 = not yet,
+   * 1 = placed (posePos/poseQuat valid), 2 = no room on the asphalt, skip.
+   */
+  private readonly poseState: Uint8Array
+  private readonly posePos: Float32Array
+  private readonly poseQuat: Float32Array
+  private readonly road: RoadQuery
   private time = 0
 
   /**
    * @param edges distance from each line point to the paved edge on its left / right, m.
-   * @param groundAt road height at an XZ point near a height; the centreline's height
-   *   isn't the road's a few meters to the side (camber, kerbs), and an arrow below
-   *   the surface is invisible.
+   * @param road  road surface queries. Each arrow is laid on the measured road plane
+   *   (the Nürburgring has steep grades and camber; a flat arrow there floats at
+   *   one end and sinks at the other) and kept entirely on asphalt.
    */
-  constructor(
-    line: THREE.Vector3[],
-    edges: { left: Float32Array; right: Float32Array },
-    groundAt: (x: number, nearY: number, z: number) => number | null = () => null,
-  ) {
+  constructor(line: THREE.Vector3[], edges: { left: Float32Array; right: Float32Array }, road: RoadQuery) {
     this.line = line
-    this.groundAt = groundAt
-    this.arrowY = new Float32Array(line.length).fill(NaN)
+    this.road = road
+    this.poseState = new Uint8Array(line.length)
+    this.posePos = new Float32Array(line.length * 3)
+    this.poseQuat = new Float32Array(line.length * 4)
     this.bend = leadIn(signedBend(line), LEAD_IN)
     this.offset = new Float32Array(line.length)
     for (let i = 0; i < line.length; i++) {
@@ -115,21 +135,10 @@ export class DirectionGuide {
       const i = ((j % n) + n) % n
       const bend = this.bend[i]
       if (Math.abs(bend) < MIN_BEND) continue
-      const left = bend > 0
-
-      const a = this.line[(i - 1 + n) % n]
-      const b = this.line[(i + 1) % n]
-      _fwd.set(b.x - a.x, 0, b.z - a.z).normalize()
-      // Toward the inside of the bend: left of travel is (fz, 0, -fx) in glTF.
-      _side.set(_fwd.z, 0, -_fwd.x)
-      if (!left) _side.negate()
-      _pos.copy(this.line[i]).addScaledVector(_side, this.offset[i])
-      if (Number.isNaN(this.arrowY[i])) this.arrowY[i] = this.groundAt(_pos.x, _pos.y, _pos.z) ?? _pos.y
-      _pos.y = this.arrowY[i] + HOVER
-
-      // Point mostly down the road, turned in toward the corner.
-      const yaw = Math.atan2(_fwd.x, _fwd.z) + (left ? POINT_IN : -POINT_IN)
-      _q.setFromAxisAngle(_y, yaw)
+      if (this.poseState[i] === 0) this.poseState[i] = this.solvePose(i) ? 1 : 2
+      if (this.poseState[i] === 2) continue
+      _pos.fromArray(this.posePos, i * 3)
+      _q.fromArray(this.poseQuat, i * 4)
       const fade = Math.min(1, (progress.index + AHEAD - j) / FADE)
       _m.compose(_pos, _q, _scale.set(1, 1, 1))
       this.mesh.setMatrixAt(k, _m)
@@ -145,6 +154,62 @@ export class DirectionGuide {
     this.mesh.instanceColor!.needsUpdate = true
   }
 
+  /**
+   * Places point i's arrow: on the inside of the bend, turned into it, pulled
+   * toward the centreline until all four corners are on asphalt, then tilted
+   * to the plane through the measured road heights at its tip, tail and sides.
+   */
+  private solvePose(i: number): boolean {
+    const n = this.line.length
+    const p = this.line[i]
+    const a = this.line[(i - 1 + n) % n]
+    const b = this.line[(i + 1) % n]
+    const left = this.bend[i] > 0
+    _fwd.set(b.x - a.x, 0, b.z - a.z).normalize()
+    // Toward the inside of the bend: left of travel is (fz, 0, -fx) in glTF.
+    _side.set(_fwd.z, 0, -_fwd.x)
+    if (!left) _side.negate()
+    // Arrow axes on the ground: forward (turned into the corner) and its left.
+    const yaw = Math.atan2(_fwd.x, _fwd.z) + (left ? POINT_IN : -POINT_IN)
+    _af.set(Math.sin(yaw), 0, Math.cos(yaw))
+    _al.set(_af.z, 0, -_af.x)
+    const hl = ARROW_LEN / 2
+    const hw = ARROW_WID / 2
+
+    for (const k of PULL_IN) {
+      const off = this.offset[i] * k
+      const cx = p.x + _side.x * off
+      const cz = p.z + _side.z * off
+      // Whole footprint on the paved surface, or try closer to the centreline.
+      let onRoad = true
+      for (const [f, l] of CORNERS) {
+        if (!this.road.paved(cx + _af.x * hl * f + _al.x * hw * l, cz + _af.z * hl * f + _al.z * hw * l)) {
+          onRoad = false
+          break
+        }
+      }
+      if (!onRoad) continue
+      const hF = this.road.roadHeight(cx + _af.x * hl, p.y, cz + _af.z * hl)
+      const hB = this.road.roadHeight(cx - _af.x * hl, p.y, cz - _af.z * hl)
+      const hL = this.road.roadHeight(cx + _al.x * hw, p.y, cz + _al.z * hw)
+      const hR = this.road.roadHeight(cx - _al.x * hw, p.y, cz - _al.z * hw)
+      if (hF === null || hB === null || hL === null || hR === null) continue
+
+      // Surface frame: tangent along the arrow, bitangent across it, normal up.
+      _t.set(_af.x * ARROW_LEN, hF - hB, _af.z * ARROW_LEN).normalize()
+      _b.set(_al.x * ARROW_WID, hL - hR, _al.z * ARROW_WID).normalize()
+      _n.crossVectors(_t, _b).normalize()
+      _x.crossVectors(_n, _t).normalize() // arrow's left, re-orthogonalised
+      _basis.makeBasis(_x, _n, _t)
+      _q.setFromRotationMatrix(_basis)
+      _pos.set(cx, (hF + hB + hL + hR) / 4, cz).addScaledVector(_n, HOVER)
+      _pos.toArray(this.posePos, i * 3)
+      _q.toArray(this.poseQuat, i * 4)
+      return true
+    }
+    return false
+  }
+
   set visible(v: boolean) {
     this.group.visible = v
   }
@@ -156,6 +221,14 @@ export class DirectionGuide {
     this.group.removeFromParent()
   }
 }
+
+/** Footprint corners as (along, across) signs. */
+const CORNERS: readonly [number, number][] = [
+  [1, 1],
+  [1, -1],
+  [-1, 1],
+  [-1, -1],
+]
 
 /** For each point, the sharpest bend within the next `lead` points (keeping its sign), so arrows show on the approach. */
 function leadIn(bend: Float32Array, lead: number): Float32Array {

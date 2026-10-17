@@ -16,6 +16,7 @@ import { Vehicle } from '../vehicles/Vehicle'
 import { resolveVehicleConfig, type VehicleConfig } from '../vehicles/VehicleConfig'
 import { Environment } from '../world/Environment'
 import type { RaceTrack } from '../world/RaceTrack'
+import { Surface } from '../vehicles/Surface'
 import { measureRoadEdges } from '../world/SurfaceMap'
 import { Showroom } from '../world/Showroom'
 import { StreamedTrack } from '../world/StreamedTrack'
@@ -195,7 +196,16 @@ export class Game {
   private attachGuide(): void {
     this.guide?.dispose()
     const edges = measureRoadEdges(this.track.line, (x, z) => this.track.surfaceAt(x, z))
-    this.guide = new DirectionGuide(this.track.line, edges, (x, y, z) => this.physics.groundHeight(x, y, z))
+    const track = this.track
+    this.guide = new DirectionGuide(this.track.line, edges, {
+      // Road colliders only: the terrain mesh is simplified to ~1.5 m and can sit
+      // above the asphalt, which left arrows hovering in the air.
+      roadHeight: (x, y, z) => this.physics.groundHeight(x, y, z, (c) => track.isRoadCollider(c)),
+      paved: (x, z) => {
+        const s = track.surfaceAt(x, z)
+        return s === Surface.Asphalt || s === Surface.Kerb
+      },
+    })
     this.progress = new TrackProgress(this.track.line)
     this.renderer.scene.add(this.guide.group)
     const line = this.track.line

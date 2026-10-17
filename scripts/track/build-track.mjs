@@ -152,7 +152,9 @@ if (process.env.LINE_ONLY) {
   process.exit(0)
 }
 
-const origin = [gates[0].at[0], gates[0].y, gates[0].at[1]]
+// cfg.origin pins the world origin so a rebuild doesn't shift every chunk (and
+// re-upload them all) when gate snapping moves gate 0 by a few metres.
+const origin = cfg.origin ?? [gates[0].at[0], gates[0].y, gates[0].at[1]]
 log('origin (start line)', origin.map((v) => v.toFixed(2)))
 for (const pr of prims)
   for (let i = 0; i < pr.pos.length; i += 3) {
@@ -294,10 +296,10 @@ const hash01 = (n) => { let x = Math.imul(n ^ 0x9e3779b9, 0x85ebca6b); x ^= x >>
 /** Material name the runtime maps to its shared vertex-colour material. */
 const VERTEX_COLOR_MATERIAL = '__vertex_color'
 const srgbToLinear = (c) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4)
-const colorCache = new Map()
-/** Linear RGB average of a material's base colour texture × factor. */
-async function averageColor(matName) {
-  if (colorCache.has(matName)) return colorCache.get(matName)
+const rawCache = new Map()
+/** Linear RGB average of a material's base colour texture × its authored factor. */
+async function rawAverageColor(matName) {
+  if (rawCache.has(matName)) return rawCache.get(matName)
   const m = src.getRoot().listMaterials().find((x) => x.getName() === matName)
   const f = m?.getBaseColorFactor() ?? [1, 1, 1, 1]
   let rgb = [0.6, 0.6, 0.6]
@@ -307,8 +309,36 @@ async function averageColor(matName) {
     rgb = channels.slice(0, 3).map((c) => srgbToLinear(c.mean / 255))
   }
   const color = rgb.map((c, i) => c * f[i])
-  colorCache.set(matName, color)
+  rawCache.set(matName, color)
   return color
+}
+
+/**
+ * Colour correction per material (cfg.albedo): scales a material so its average
+ * linear luminance hits a real-world target, times a hue. The source asphalt is
+ * a flat mid grey (~42 % sRGB) that reads as concrete in sunlight; real asphalt
+ * is ~25–30 % sRGB. Normalising also makes old/new resurfaced patches match.
+ */
+async function albedoTint(matName) {
+  const rule = cfg.albedo?.find(([re]) => re.test(matName))
+  if (!rule) return [1, 1, 1]
+  const [, target, hue = [1, 1, 1]] = rule
+  const [r, g, b] = await rawAverageColor(matName)
+  const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b
+  return hue.map((h) => (h * target) / Math.max(lum, 1e-4))
+}
+
+/** Linear RGB average as shipped (after albedo correction) — the far-LOD vertex colour. */
+async function averageColor(matName) {
+  const raw = await rawAverageColor(matName)
+  const tint = await albedoTint(matName)
+  return raw.map((c, i) => c * tint[i])
+}
+
+async function tintedFactor(m) {
+  const f = m.getBaseColorFactor()
+  const t = await albedoTint(m.getName())
+  return [f[0] * t[0], f[1] * t[1], f[2] * t[2], f[3]]
 }
 
 /** Concatenates geometries into one, painting each with its colour. */
@@ -552,7 +582,7 @@ async function writeMaterials(tier, maxSize) {
     if (!usedMaterials.has(name)) continue
     const layer = layerOf(name)
     const out = doc.createMaterial(name)
-      .setBaseColorFactor(m.getBaseColorFactor())
+      .setBaseColorFactor(await tintedFactor(m))
       .setEmissiveFactor(m.getEmissiveFactor())
       .setDoubleSided(m.getDoubleSided() || layer === 'veg')
       .setMetallicFactor(0)

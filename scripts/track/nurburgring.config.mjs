@@ -9,6 +9,9 @@ export default {
   source: `${process.env.HOME}/Downloads/nurburgring_gp_2022_layout.glb`,
   out: 'public/models/tracks/nurburgring',
 
+  /** World origin in source coords (the start line). Pinned: see build-track.mjs. */
+  origin: [-839.32, 136.92, 2705.29],
+
   /** Streaming grid cell size, meters. ~200 m keeps each chunk < ~300 KB. */
   chunkSize: 200,
 
@@ -61,6 +64,17 @@ export default {
     'trees_new.002': [0.3, 0.1],
     default: [0.1, 0.03],
   },
+
+  /**
+   * Colour correction: [material, target average linear luminance, hue].
+   * Asphalt ≈ 0.042: real circuit tarmac is 0.04–0.05 albedo, which renders
+   * at ≈ sRGB 90 in this game's sun (measured on the start straight). The
+   * source ships it as flat mid grey (0.14), which read as concrete.
+   */
+  albedo: [
+    [/^asph/, 0.042, [0.97, 1.0, 1.05]],
+    [/^pits/, 0.055, [0.98, 1.0, 1.04]],
+  ],
 
   /** Max texture size per material tier. */
   textures: { high: 1024, low: 256 },

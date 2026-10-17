@@ -103,6 +103,8 @@ export class StreamedTrack implements RaceTrack {
   private inFlight = 0
   private planTimer = 0
   private body: RAPIER.RigidBody | null = null
+  /** Handles of the paved-road collision meshes (vs run-off, barriers, terrain). */
+  private readonly roadColliders = new Set<number>()
   private surfaces: SurfaceMap | null = null
   private backdrop: THREE.Object3D | null = null
   private disposed = false
@@ -260,7 +262,8 @@ export class StreamedTrack implements RaceTrack {
       const desc = RAPIER.ColliderDesc.trimesh(vertices, Uint32Array.from(index.array))
         .setFriction(barrier ? 0.25 : 0.9)
         .setRestitution(barrier ? 0.2 : 0)
-      this.world.createCollider(desc, this.body!)
+      const collider = this.world.createCollider(desc, this.body!)
+      if (mesh.name.startsWith('road')) this.roadColliders.add(collider.handle)
       mesh.geometry.dispose()
     })
   }
@@ -407,6 +410,10 @@ export class StreamedTrack implements RaceTrack {
 
   // ── RaceTrack ───────────────────────────────────────────────────────────
 
+  isRoadCollider(collider: RAPIER.Collider): boolean {
+    return this.roadColliders.has(collider.handle)
+  }
+
   respawnAt(index: number): SpawnPoint {
     const cp = this.checkpoints[index] ?? this.checkpoints[0]
     if (index === 0) return this.spawn
@@ -429,7 +436,8 @@ export class StreamedTrack implements RaceTrack {
   viewDistance(quality: QualityPreset): ViewDistance {
     const r = BUDGET[quality].radii.lod1
     // Fog swallows the streaming edge so chunks never visibly pop in.
-    return { fogNear: r * 0.25, fogFar: r * 0.95 }
+    // Haze starts well out: starting it close washed the road out to a pale grey.
+    return { fogNear: r * 0.45, fogFar: r * 0.95 }
   }
 
   /** Debug/HUD: how much of the track is resident. */

@@ -27,12 +27,13 @@ export class PhysicsWorld {
   /**
    * Height of the static ground under (x, z), searching from a little above
    * `nearY` downward; null if nothing's there. Ignores cars. Colliders are only
-   * queryable after the first step that follows their creation.
+   * queryable after the first step that follows their creation. `only` limits
+   * the hit to some colliders (e.g. road surfaces, not the coarse terrain).
    */
-  groundHeight(x: number, nearY: number, z: number): number | null {
+  groundHeight(x: number, nearY: number, z: number, only?: (collider: RAPIER.Collider) => boolean): number | null {
     const top = nearY + 4
     _down.origin = { x, y: top, z }
-    const hit = this.world.castRay(_down, 12, true, RAPIER.QueryFilterFlags.EXCLUDE_DYNAMIC)
+    const hit = this.world.castRay(_down, 12, true, RAPIER.QueryFilterFlags.EXCLUDE_DYNAMIC, undefined, undefined, undefined, only)
     return hit ? top - hit.timeOfImpact : null
   }
 

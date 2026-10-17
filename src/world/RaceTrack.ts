@@ -1,3 +1,4 @@
+import type RAPIER from '@dimforge/rapier3d-compat'
 import type * as THREE from 'three'
 import type { QualityPreset } from '../stores/gameStore'
 import type { Surface } from '../vehicles/Surface'
@@ -24,6 +25,8 @@ export interface RaceTrack {
   readonly line: THREE.Vector3[]
   /** What the ground is at a world XZ position (tire grip, sand / dust effects). */
   surfaceAt(x: number, z: number): Surface
+  /** True for colliders that are the paved road itself (not terrain, run-off or barriers). */
+  isRoadCollider(collider: RAPIER.Collider): boolean
   /** Below this height the car has fallen out of the world. */
   readonly killY: number
   /** Where to put the car after a reset past checkpoint `index`. */
