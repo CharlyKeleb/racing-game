@@ -9,6 +9,11 @@ export interface Telemetry {
   rpm: number
   redlineRpm: number
   gear: number
+  /** Nitro tank, 0..1. */
+  nitro: number
+  nitroActive: boolean
+  /** Enough in the tank to start a boost. */
+  nitroReady: boolean
   lap: number
   totalLaps: number
   currentLapMs: number
@@ -24,6 +29,9 @@ export const initialTelemetry: Telemetry = {
   rpm: 0,
   redlineRpm: 8000,
   gear: 1,
+  nitro: 0,
+  nitroActive: false,
+  nitroReady: false,
   lap: 0,
   totalLaps: 3,
   currentLapMs: 0,

@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { AudioManager } from '../audio/AudioManager'
 import { ChaseCamera, type ShowroomFraming } from '../camera/ChaseCamera'
+import { DrivingEffects } from '../effects/DrivingEffects'
 import { InputManager, type InputState } from '../input/InputManager'
 import { RaceManager } from '../racing/RaceManager'
 import { gameStore, type GamePhase, type Settings } from '../stores/gameStore'
@@ -24,7 +25,7 @@ const TELEMETRY_HZ = 20
 // Handbrake, not brake: brake at standstill would engage reverse.
 export type ShowroomFocus = 'car' | 'wheel'
 
-const LOCKED_INPUT: InputState = { throttle: 0, brake: 0, steer: 0, handbrake: true }
+const LOCKED_INPUT: InputState = { throttle: 0, brake: 0, steer: 0, handbrake: true, nitro: false }
 
 /**
  * Composition root for one play session. React creates exactly one Game,
@@ -48,6 +49,7 @@ export class Game {
   private race!: RaceManager
   private livery!: CarLivery
   private showroom!: Showroom
+  private effects!: DrivingEffects
   /** The car as shipped, before garage upgrades. */
   private baseConfig!: VehicleConfig
   private showroomYaw = 0.9
@@ -102,6 +104,8 @@ export class Game {
     this.livery = new CarLivery(model)
     this.livery.apply(build)
     scene.add(model.root)
+    this.effects = new DrivingEffects(this.vehicle)
+    scene.add(this.effects.group)
 
     const spawn = this.track.spawn
     this.showroom = new Showroom(this.renderer.renderer)
@@ -152,6 +156,7 @@ export class Game {
     const { settings } = gameStore.getState()
     this.audio.unlock(settings.masterVolume)
     this.resetCar()
+    this.effects.clear()
     this.race.start(settings.laps)
   }
 
@@ -200,6 +205,7 @@ export class Game {
     this.race.state = 'idle'
     this.audio.suspend()
     this.resetCar()
+    this.effects.clear()
     gameStore.getState().setPhase('menu')
   }
 
@@ -246,8 +252,9 @@ export class Game {
         this.carFraming.shift = phase === 'garage' ? 1.2 : 0
         this.camera.showroom(this.vehicle.model.root, this.showroomYaw, dt, this.carFraming)
       }
-    } else {
-      this.camera.update(this.vehicle.model.root, this.vehicle.speedKmh, dt)
+    } else if (phase !== 'paused') {
+      this.camera.update(this.vehicle.model.root, this.vehicle.speedKmh, dt, this.vehicle.controller.nitro.intensity)
+      this.effects.update(this.vehicle, dt)
     }
     this.environment.follow(this.vehicle.position)
     this.showroom.update(dt)
@@ -278,6 +285,9 @@ export class Game {
       speedKmh: this.vehicle.speedKmh,
       rpm: ctrl.drivetrain.rpm,
       gear: ctrl.drivetrain.gear,
+      nitro: ctrl.nitro.charge,
+      nitroActive: ctrl.nitro.active,
+      nitroReady: ctrl.nitro.charge >= this.vehicle.config.nitro.minCharge,
       lap: this.race.lap,
       totalLaps: this.race.totalLaps,
       currentLapMs: t.currentLapMs,
@@ -293,7 +303,7 @@ export class Game {
   private updateShowroom(phase: GamePhase): void {
     if (!this.showroom) return
     const inShowroom = phase === 'menu' || phase === 'garage'
-    this.showroom.setActive(this.renderer.scene, inShowroom, [this.track.group, this.environment.group])
+    this.showroom.setActive(this.renderer.scene, inShowroom, [this.track.group, this.environment.group, this.effects.group])
   }
 
   private applyBuild(build: CarBuild, prev: CarBuild): void {
@@ -322,6 +332,7 @@ export class Game {
     this.input.dispose()
     this.audio.dispose()
     this.livery?.dispose()
+    this.effects?.dispose()
     this.showroom?.dispose()
     this.track?.dispose()
     this.environment?.dispose()

@@ -1,7 +1,8 @@
 import RAPIER from '@dimforge/rapier3d-compat'
 import * as THREE from 'three'
 import type { InputState } from '../input/InputManager'
-import { Drivetrain } from './Drivetrain'
+import { Drivetrain, type GearRequest } from './Drivetrain'
+import { Nitro } from './Nitro'
 import { Suspension } from './Suspension'
 import { computeTireForces } from './TirePhysics'
 import type { VehicleConfig, WheelConfig } from './VehicleConfig'
@@ -16,6 +17,11 @@ export interface WheelState {
   spin: number
   /** 0..1, for skid marks / tire squeal. */
   slip: number
+  /**
+   * Sideways speed of the contact patch, m/s. Slip alone is high under hard
+   * straight-line acceleration too; effects use this to tell an actual slide.
+   */
+  slide: number
 }
 
 // Scratch objects — the controller runs at 60 Hz, so avoid per-tick allocation.
@@ -45,12 +51,16 @@ function approach(value: number, target: number, step: number): number {
 export class VehicleController {
   readonly wheels: WheelState[]
   readonly drivetrain: Drivetrain
+  readonly nitro: Nitro
   steerAngle = 0
   /** Signed forward speed of the chassis, m/s. */
   forwardSpeed = 0
   /** Pedals after ramping, 0..1. Keyboards are on/off; this fades them in over ~1/pedalRate s. */
   private throttle = 0
   private brake = 0
+  /** Fraction of the drivetrain's force each wheel gets (0 for undriven wheels). */
+  private readonly driveShare: number[]
+  private readonly drivenRadius: number
   /** Chassis yaw inertia (matches Vehicle's box inertia) and front-to-rear axle distance. */
   private readonly yawInertia: number
   private readonly wheelbase: number
@@ -63,10 +73,22 @@ export class VehicleController {
     this.body = body
     this.world = world
     this.drivetrain = new Drivetrain(cfg.engine)
+    this.nitro = new Nitro(cfg.nitro)
     const [hx, , hz] = cfg.chassisHalfExtents
     this.yawInertia = (cfg.massKg / 3) * (hx * hx + hz * hz)
     const zs = cfg.wheels.map((w) => w.position[2])
     this.wheelbase = Math.max(1, Math.max(...zs) - Math.min(...zs))
+    // Split drive between axles: front = +Z. With both axles driven, the front
+    // gets frontDriveShare; otherwise the driven axle takes everything.
+    const zMid = (Math.max(...zs) + Math.min(...zs)) / 2
+    const isFront = (w: WheelConfig) => w.position[2] > zMid
+    const frontDriven = cfg.wheels.filter((w) => w.driven && isFront(w)).length
+    const rearDriven = cfg.wheels.filter((w) => w.driven && !isFront(w)).length
+    const frontShare = !frontDriven ? 0 : !rearDriven ? 1 : cfg.frontDriveShare
+    this.driveShare = cfg.wheels.map((w) =>
+      !w.driven ? 0 : isFront(w) ? frontShare / frontDriven : (1 - frontShare) / rearDriven,
+    )
+    this.drivenRadius = cfg.wheels.find((w) => w.driven)?.radius ?? 0.35
     this.wheels = cfg.wheels.map((w) => ({
       cfg: w,
       suspension: new Suspension(cfg.suspension),
@@ -74,6 +96,7 @@ export class VehicleController {
       contactPoint: new THREE.Vector3(),
       spin: 0,
       slip: 0,
+      slide: 0,
     }))
   }
 
@@ -106,21 +129,45 @@ export class VehicleController {
     this.throttle = approach(this.throttle, input.throttle, cfg.pedalRate * dt)
     this.brake = approach(this.brake, input.brake, cfg.pedalRate * 2 * dt)
 
-    // Reverse logic: brake at standstill engages reverse; in reverse, pedals swap.
+    // Reverse logic: brake at standstill engages reverse, throttle at standstill
+    // goes back to 1st; in reverse, pedals swap.
     const reversing = this.drivetrain.gear < 0
     // Total speed, not forward speed: forward speed crosses 0 mid-spin.
-    const wantsReverse = input.brake > 0.1 && input.throttle < 0.1 && _vel.length() < 1
+    const stopped = _vel.length() < 1
+    const gearRequest: GearRequest = !stopped
+      ? 0
+      : input.brake > 0.1 && input.throttle < 0.1
+        ? -1
+        : input.throttle > 0.1 && input.brake < 0.1
+          ? 1
+          : 0
     const driveThrottle = reversing ? this.brake : this.throttle
     const brakeInput = reversing ? this.throttle : this.brake
 
-    const driven = this.wheels.filter((w) => w.cfg.driven)
-    const drivenRadius = driven[0]?.cfg.radius ?? 0.35
-    const driveForce = this.drivetrain.update(this.forwardSpeed, drivenRadius, driveThrottle, wantsReverse, dt)
-    const driveForcePerWheel = driven.length ? driveForce / driven.length : 0
+    // Nitro reads last tick's tire slip; boosting only pushes forward gears.
+    let slipSum = 0
+    let groundedCount = 0
+    for (const w of this.wheels) {
+      if (!w.grounded) continue
+      slipSum += w.slip
+      groundedCount++
+    }
+    this.nitro.update(
+      {
+        slip: groundedCount ? slipSum / groundedCount : 0,
+        speed: _vel.length(),
+        grounded: groundedCount > 0,
+        wantsBoost: input.nitro && !reversing,
+      },
+      dt,
+    )
+
+    const driveForce = this.drivetrain.update(this.forwardSpeed, this.drivenRadius, driveThrottle, gearRequest, dt)
 
     const massShare = cfg.massKg / this.wheels.length
 
-    for (const w of this.wheels) {
+    for (let i = 0; i < this.wheels.length; i++) {
+      const w = this.wheels[i]
       const wc = w.cfg
       _mount.set(wc.position[0], wc.position[1], wc.position[2]).applyQuaternion(_q).add(_pos)
 
@@ -133,6 +180,7 @@ export class VehicleController {
       w.grounded = !!hit
       if (!hit) {
         w.slip = 0
+        w.slide = 0
         if (wc.driven) w.spin += driveThrottle * 30 * dt
         continue
       }
@@ -155,7 +203,7 @@ export class VehicleController {
       const vLong = _vel.dot(_wFwd)
       const vLat = _vel.dot(_wRight)
 
-      let longitudinal = wc.driven ? driveForcePerWheel : 0
+      let longitudinal = driveForce * this.driveShare[i]
       const brake = (cfg.brakeForce / this.wheels.length) * brakeInput + (wc.handbrake && input.handbrake ? cfg.handbrakeForce / 2 : 0)
       if (brake > 0) {
         // Clamp so brakes stop the wheel instead of reversing it.
@@ -176,6 +224,7 @@ export class VehicleController {
         cfg.tires,
       )
       w.slip = tire.slip
+      w.slide = Math.abs(vLat)
 
       // Apply tire forces slightly above the contact patch to tame body roll.
       _point.copy(w.contactPoint).addScaledVector(_up, wc.radius * 0.6)
@@ -190,11 +239,19 @@ export class VehicleController {
 
     this.applyStabilityAssist(input.handbrake, speed, dt)
 
+    // Nitro is thrust at the center of mass, not tire force: the rears are
+    // already near their grip limit under power, so routing it through the
+    // friction circle would mostly turn into wheelspin. Grounded only.
+    if (this.nitro.intensity > 0 && groundedCount > 0) {
+      _impulse.copy(_fwd).multiplyScalar(this.nitro.force * dt)
+      body.applyImpulse(_impulse, true)
+    }
+
     // Aerodynamics: quadratic drag + downforce.
     _vel.set(lv.x, lv.y, lv.z)
     const v2 = _vel.lengthSq()
     if (v2 > 0.01) {
-      _impulse.copy(_vel).normalize().multiplyScalar(-cfg.dragCoefficient * v2 * dt)
+      _impulse.copy(_vel).normalize().multiplyScalar(-cfg.dragCoefficient * this.nitro.dragScale * v2 * dt)
       _impulse.addScaledVector(_up, -cfg.downforceCoefficient * this.forwardSpeed * this.forwardSpeed * dt)
       body.applyImpulse(_impulse, true)
     }
@@ -225,9 +282,11 @@ export class VehicleController {
     this.throttle = 0
     this.brake = 0
     this.drivetrain.reset()
+    this.nitro.reset()
     for (const w of this.wheels) {
       w.suspension.reset()
       w.slip = 0
+      w.slide = 0
     }
   }
 }

@@ -1,5 +1,6 @@
 import { formatTime } from '../racing/LapTimer'
 import { useGame, useTelemetry } from './hooks'
+import { Meter } from './kit'
 
 const RPM_SEGMENTS = 24
 
@@ -16,7 +17,8 @@ export function Hud() {
   const lit = Math.round(rpmT * RPM_SEGMENTS)
 
   return (
-    <div className="hud">
+    <div className={t.nitroActive ? 'hud hud--nitro' : 'hud'}>
+      <div className="hud-speedlines" aria-hidden="true" />
       <div className="hud-tl">
         <div className="hud-lap">
           <span className="eyebrow">Lap</span>
@@ -48,6 +50,12 @@ export function Hud() {
             <i key={i} className={i < lit ? (i >= RPM_SEGMENTS - 3 ? 'on red' : 'on') : ''} />
           ))}
         </div>
+        <Meter
+          label="Nitro"
+          value={t.nitro}
+          state={t.nitroActive ? 'active' : t.nitroReady ? 'ready' : 'empty'}
+          hint={t.nitroReady && !t.nitroActive ? <kbd>Shift</kbd> : undefined}
+        />
         <div className="speedo__row">
           <span className="speedo__gear">{gearLabel(t.gear)}</span>
           <span className="speedo__speed mono">{Math.round(t.speedKmh)}</span>

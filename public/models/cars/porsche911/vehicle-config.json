@@ -6,9 +6,29 @@
   "chassisCenter": [0, 0.65, 0.025],
   "centerOfMass": [0, 0.35, -0.2],
   "wheels": [
-    { "id": "FL", "position": [0.768, 0.659, 1.26], "radius": 0.339, "width": 0.277, "steered": true, "driven": false, "handbrake": false },
-    { "id": "FR", "position": [-0.768, 0.659, 1.26], "radius": 0.339, "width": 0.277, "steered": true, "driven": false, "handbrake": false },
+    { "id": "FL", "position": [0.768, 0.659, 1.26], "radius": 0.339, "width": 0.277, "steered": true, "driven": true, "handbrake": false },
+    { "id": "FR", "position": [-0.768, 0.659, 1.26], "radius": 0.339, "width": 0.277, "steered": true, "driven": true, "handbrake": false },
     { "id": "RL", "position": [0.775, 0.659, -1.26], "radius": 0.339, "width": 0.292, "steered": false, "driven": true, "handbrake": true },
     { "id": "RR", "position": [-0.775, 0.659, -1.26], "radius": 0.339, "width": 0.292, "steered": false, "driven": true, "handbrake": true }
-  ]
+  ],
+  "engine": {
+    "idleRpm": 900,
+    "redlineRpm": 7500,
+    "torqueCurve": [
+      [900, 260],
+      [1800, 430],
+      [2300, 530],
+      [5000, 530],
+      [6500, 486],
+      [7500, 400]
+    ],
+    "gearRatios": [-4.1, 4.89, 3.17, 2.15, 1.56, 1.18, 0.94, 0.76, 0.61],
+    "finalDrive": 3.31,
+    "efficiency": 0.86,
+    "shiftUpRpm": 7200,
+    "shiftDownRpm": 3400,
+    "shiftTimeSec": 0.08
+  },
+  "frontDriveShare": 0.35,
+  "dragCoefficient": 0.36
 }

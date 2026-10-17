@@ -205,7 +205,8 @@ The game runs before any authored asset exists:
 - [x] Procedural engine audio + tire squeal
 - [ ] Import and render the McLaren GLB (run the [Blender MCP prep](blender/PREPARE_CAR_WITH_BLENDER_MCP.md))
 - [ ] Separate and animate all four wheels from the real model (rig code is ready)
-- [ ] Skid marks + tire smoke driven by `WheelState.slip`
+- [x] Skid marks + tire smoke driven by `WheelState.slip` (`src/effects/`)
+- [x] Nitro: meter fills from tire slip, Shift / gamepad X or RB to boost (`Nitro.ts`, pure)
 - [ ] Handling tuning pass on the real car's dimensions
 - [ ] Performance pass: stable 60 FPS on a mid-range laptop
 

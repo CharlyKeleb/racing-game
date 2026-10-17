@@ -12,6 +12,8 @@ export interface InputState {
   /** -1 (left) .. 1 (right) */
   steer: number
   handbrake: boolean
+  /** Nitro boost held. */
+  nitro: boolean
 }
 
 /** Edge-triggered actions, consumed once per press. */
@@ -26,10 +28,10 @@ const KEY_ACTIONS: Record<string, InputAction> = {
 
 const GAMEPAD_DEADZONE = 0.12
 /** Standard mapping button indices. */
-const PAD = { A: 0, B: 1, Y: 3, LT: 6, RT: 7, START: 9 } as const
+const PAD = { A: 0, B: 1, X: 2, Y: 3, RB: 5, LT: 6, RT: 7, START: 9 } as const
 
 export class InputManager {
-  readonly state: InputState = { throttle: 0, brake: 0, steer: 0, handbrake: false }
+  readonly state: InputState = { throttle: 0, brake: 0, steer: 0, handbrake: false, nitro: false }
   private readonly keys = new Set<string>()
   private readonly pending = new Set<InputAction>()
   private readonly prevPadButtons: boolean[] = []
@@ -47,6 +49,7 @@ export class InputManager {
     let brake = k.has('KeyS') || k.has('ArrowDown') ? 1 : 0
     let steer = (k.has('KeyD') || k.has('ArrowRight') ? 1 : 0) - (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0)
     let handbrake = k.has('Space')
+    let nitro = k.has('ShiftLeft') || k.has('ShiftRight')
 
     const pad = navigator.getGamepads?.().find((p) => p?.connected)
     if (pad) {
@@ -55,6 +58,7 @@ export class InputManager {
       throttle = Math.max(throttle, pad.buttons[PAD.RT]?.value ?? 0)
       brake = Math.max(brake, pad.buttons[PAD.LT]?.value ?? 0)
       handbrake ||= !!pad.buttons[PAD.A]?.pressed
+      nitro ||= !!pad.buttons[PAD.X]?.pressed || !!pad.buttons[PAD.RB]?.pressed
       this.edge(pad, PAD.START, 'pause')
       this.edge(pad, PAD.Y, 'camera')
       this.edge(pad, PAD.B, 'reset')
@@ -64,6 +68,7 @@ export class InputManager {
     this.state.brake = brake
     this.state.steer = Math.max(-1, Math.min(1, steer))
     this.state.handbrake = handbrake
+    this.state.nitro = nitro
   }
 
   /** Returns true once per press. */
