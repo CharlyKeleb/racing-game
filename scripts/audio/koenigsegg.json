@@ -1,9 +1,27 @@
 {
-  "comment": "Koenigsegg One:1 stand-in V8: marcelweiss's CC0 Mercedes S63 AMG twin-turbo V8 (Freesound 505321). The recording is idle plus short blips, so the layers stop at ~1900 rpm and GranularEngine carries them up the rev range.",
+  "comment": "Koenigsegg Regera onboard acceleration at Goodwood 2018, by Mr JWW (CC BY 3.0), used with approval as the One:1 stand-in. Source: https://commons.wikimedia.org/wiki/File:Regera_Goodwood_2018.ogg . Convert the original to 44100 Hz mono PCM16 as regera.wav. RPMs are pitch estimates, not measured telemetry; idle and upper revs are pitch-shifted from the available acceleration layers.",
   "firingPerRev": 4,
   "segments": [
-    [ "idle", "505321_7236652-hq.wav", 0.02, 0.36, 930 ],
-    [ "low", "505321_7236652-hq.wav", 5.78, 6.12, 1170 ],
-    [ "mid", "505321_7236652-hq.wav", 5.16, 5.34, 1900 ]
+    [
+      "low",
+      "regera.wav",
+      0.6,
+      0.88,
+      1800
+    ],
+    [
+      "mid",
+      "regera.wav",
+      1.2,
+      1.65,
+      2050
+    ],
+    [
+      "high",
+      "regera.wav",
+      1.75,
+      2.05,
+      2100
+    ]
   ]
 }

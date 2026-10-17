@@ -100,6 +100,8 @@ export class Game {
   /** Where the car is parked. The garage camera frames this, so it holds still while a car drives off. */
   private readonly showroomAnchor = new THREE.Object3D()
   /** Engine sound override during a garage swap (the parked car's physics idles). */
+  private revHeld = false
+  private revRpm = 0
   private showroomRev: { rpm: number; throttle: number } | null = null
   private showroomYaw = 0.9
   /** Orbit state: camera height above the car's focus, zoom factor, flick momentum. */
@@ -365,9 +367,11 @@ export class Game {
 
   /** Menu track picker: tear down the current track and stream in the next. */
   private async switchTrack(id: string): Promise<void> {
-    if (getTrack(id).id === this.track.id) return
-    const { setPhase } = gameStore.getState()
-    setPhase('loading')
+    if (getTrack(id).id === this.track.id || gameStore.getState().trackSwitching) return
+    const oldAnchor = this.showroomAnchor.clone()
+    gameStore.setState({ trackSwitching: true, loadProgress: 0 })
+    // Keep the last garage frame visible while physics and track assets are replaced.
+    this.loop.stop()
     this.clearRaceLoading()
     this.race.state = 'idle'
     this.track.dispose()
@@ -384,11 +388,18 @@ export class Game {
     this.attachGuide()
     this.showroom.placeAt(this.track.spawn.position, this.track.spawn.heading)
     this.resetCar()
+    this.setShowroomPad(false)
+    this.setShowroomPad(true)
+    this.vehicle.render(1)
+    this.showroomAnchor.position.copy(this.vehicle.model.root.position)
+    this.showroomAnchor.quaternion.copy(this.vehicle.model.root.quaternion)
+    this.camera.relocateShowroom(oldAnchor, this.showroomAnchor)
     this.applySettings(gameStore.getState().settings)
     // The showroom is already active, so it won't re-hide the new track/guide itself.
     this.track.group.visible = false
     this.guide.group.visible = false
-    setPhase('menu')
+    gameStore.setState({ trackSwitching: false })
+    this.loop.start()
   }
 
   /**
@@ -433,7 +444,7 @@ export class Game {
 
   startRace(): void {
     const { settings, carSwitching } = gameStore.getState()
-    if (this.disposed || carSwitching || this.raceQueued) return
+    if (this.disposed || carSwitching || gameStore.getState().trackSwitching || this.raceQueued) return
     if (!this.trackReady) {
       // Pressed before the track's visuals finished loading behind the menu:
       // show the loading screen, then start. Audio unlocks now, while this is
@@ -542,6 +553,15 @@ export class Game {
    * First click or tap in the menu: start audio (browsers only allow it from a
    * user gesture) so the garage has its room tone before any race.
    */
+  /** Audition the current engine without moving the parked car. */
+  revEngine(held: boolean): void {
+    if (!held) { this.revHeld = false; return }
+    const s = gameStore.getState()
+    if (this.disposed || s.carSwitching || (s.phase !== 'menu' && s.phase !== 'garage')) return
+    this.audio.unlock(s.settings.masterVolume)
+    this.revHeld = true
+  }
+
   unlockAudio(): void {
     this.audio.unlock(gameStore.getState().settings.masterVolume)
   }
@@ -549,7 +569,7 @@ export class Game {
   /** Garage chevrons: step through the cars. The current one drives off and the next drives in. */
   cycleCar(step: 1 | -1): void {
     const s = gameStore.getState()
-    if (s.carSwitching || (s.phase !== 'garage' && s.phase !== 'menu')) return
+    if (s.carSwitching || s.trackSwitching || (s.phase !== 'garage' && s.phase !== 'menu')) return
     s.updateSettings({ car: stepCar(this.carId, step).id })
   }
 
@@ -557,6 +577,8 @@ export class Game {
     const entry = getCar(id)
     if (entry.id === this.carId) return
     this.carId = entry.id
+    this.revHeld = false
+    this.revRpm = 0
     const token = ++this.carSwapToken
     gameStore.setState({ carSwitching: true })
     const phase = gameStore.getState().phase
@@ -720,7 +742,13 @@ export class Game {
       this.showroomAnchor.quaternion.copy(this.vehicle.model.root.quaternion)
     }
     if (this.showroomDrive) this.animateShowroomDrive(dt)
-    this.audio.setMenuEngine(this.showroomRev !== null)
+    const audition = (phase === 'menu' || phase === 'garage') && !gameStore.getState().carSwitching
+    if (!audition) { this.revHeld = false; this.revRpm = 0 }
+    const idle = this.vehicle.config.engine.idleRpm
+    const target = this.revHeld ? this.vehicle.config.engine.redlineRpm * 0.92 : idle
+    this.revRpm = THREE.MathUtils.damp(Math.max(idle, this.revRpm), target, this.revHeld ? 3 : 4, dt)
+    const revAudible = audition && (this.revHeld || this.revRpm > idle + 50)
+    this.audio.setMenuEngine(this.showroomRev !== null || revAudible)
     if (phase === 'menu' || phase === 'garage') {
       const wheel = phase === 'garage' && this.showroomFocus === 'wheel'
       if (wheel) {
@@ -761,8 +789,8 @@ export class Game {
     const sound = this.soundState
     let slip = 0
     for (const w of ctrl.wheels) slip = Math.max(slip, w.slip)
-    sound.rpm = this.showroomRev?.rpm ?? ctrl.drivetrain.rpm
-    sound.throttle = this.showroomRev?.throttle ?? ctrl.throttlePedal
+    sound.rpm = this.showroomRev?.rpm ?? (revAudible ? this.revRpm : ctrl.drivetrain.rpm)
+    sound.throttle = this.showroomRev?.throttle ?? (revAudible ? (this.revHeld ? 1 : 0) : ctrl.throttlePedal)
     sound.gear = ctrl.drivetrain.gear
     sound.slip = slip
     sound.nitro = ctrl.nitro.intensity

@@ -2,17 +2,23 @@ import { useEffect, useState } from 'react'
 import { buildStats, carClass, performanceRank } from '../vehicles/CarBuild'
 import { getCar } from '../vehicles/carRegistry'
 import { CURRENT_MODE, GAME_MODES } from '../racing/gameModes'
-import { TRACKS } from '../world/tracks'
 import { useGameInstance } from './GameContext'
 import { useGame } from './hooks'
 import { CarPicker } from './CarPicker'
 import { Button, ClassBadge, StatBar } from './kit'
 import { OrbitLayer } from './OrbitLayer'
 import { Settings } from './Settings'
+import { RaceSetup } from './RaceSetup'
+import { Circuit, TrackSelection } from './TrackSelection'
+import trackPreviews from './trackPreviews.json'
+import { RevButton } from './RevButton'
+import { TIME_PRESETS } from '../world/timeOfDay'
 
 export function MainMenu() {
   const game = useGameInstance()
   const [showSettings, setShowSettings] = useState(false)
+  const [showRaceSetup, setShowRaceSetup] = useState(false)
+  const settings = useGame((s) => s.settings)
   // Browsers only start audio from a user gesture: the first click or key in
   // the menu brings up the garage's room tone.
   useEffect(() => {
@@ -25,7 +31,7 @@ export function MainMenu() {
       window.removeEventListener('keydown', start)
     }
   }, [game])
-  const switching = useGame((s) => s.carSwitching)
+  const switching = useGame((s) => s.carSwitching || s.trackSwitching)
 
   return (
     <div className="screen screen--menu">
@@ -43,11 +49,15 @@ export function MainMenu() {
         <div className="menu-car">
           <CarPicker />
           <CarCard />
+          <RevButton />
         </div>
         <div className="menu-actions">
           <ModeSelect />
           <TrackPicker />
-          <Button size="md" onClick={() => game?.openGarage()}>
+          <Button size="sm" variant="ghost" onClick={() => setShowRaceSetup(true)}>
+            Race setup · {settings.laps} {settings.laps === 1 ? 'lap' : 'laps'} · {TIME_PRESETS[settings.timeOfDay].label}
+          </Button>
+          <Button size="md" disabled={switching} onClick={() => game?.openGarage()}>
             Garage
           </Button>
           <Button size="lg" variant="primary" disabled={switching} onClick={() => game?.startRace()} autoFocus>
@@ -56,6 +66,7 @@ export function MainMenu() {
         </div>
       </div>
 
+      {showRaceSetup && <RaceSetup onClose={() => setShowRaceSetup(false)} />}
       {showSettings && (
         <div className="modal" onClick={() => setShowSettings(false)}>
           <div onClick={(e) => e.stopPropagation()}>
@@ -146,19 +157,23 @@ function ModeSelect() {
   )
 }
 
-/** Tap to cycle tracks; switching streams the new track in behind a loading screen. */
+/** Open the circuit browser without starting a track download. */
 function TrackPicker() {
-  const trackId = useGame((s) => s.settings.track)
+  const [open, setOpen] = useState(false)
   const trackName = useGame((s) => s.trackName)
-  const update = useGame((s) => s.updateSettings)
-  const next = () => {
-    const i = TRACKS.findIndex((t) => t.id === trackId)
-    update({ track: TRACKS[(i + 1) % TRACKS.length].id })
-  }
-  return (
-    <button className="menu-track" onClick={next} aria-label={`Track: ${trackName}. Tap to change.`}>
-      <span className="eyebrow">Track ▸</span>
-      {trackName}
+  const trackId = useGame((s) => s.settings.track)
+  const loading = useGame((s) => s.trackSwitching)
+  const progress = useGame((s) => s.loadProgress)
+  const preview = trackPreviews[trackId as keyof typeof trackPreviews]
+  return <>
+    <button className="menu-track" disabled={loading} aria-busy={loading} onClick={() => setOpen(true)} aria-label={`Choose circuit: ${trackName}`}>
+      <span className="menu-track__map" aria-hidden="true"><Circuit id={preview ? trackId : 'nurburgring'} /></span>
+      <span className="menu-track__details">
+        <span className="eyebrow">Selected circuit <span aria-hidden="true">↗</span></span>
+        <span className="menu-track__name">{trackName}</span>
+        <span className="menu-track__meta">{loading ? `Loading circuit · ${Math.round(progress * 100)}%` : <>{preview?.lengthKm ?? '—'} km per lap <i>/</i> Change circuit</>}</span>
+      </span>
     </button>
-  )
+    {open && <TrackSelection onClose={() => setOpen(false)} />}
+  </>
 }

@@ -32,6 +32,7 @@ export interface GameState {
   /** Display name of the loaded car, set by the engine. */
   carName: string
   /** True while the garage swaps cars (one drives off, the next drives in). */
+  trackSwitching: boolean
   carSwitching: boolean
   /** Display name of the loaded track, set by the engine. */
   trackName: string
@@ -112,6 +113,7 @@ const initialBuilds = loadBuilds()
 export const gameStore = createStore<GameState>()((set, get) => ({
   phase: 'boot',
   carName: '',
+  trackSwitching: false,
   carSwitching: false,
   trackName: '',
   loadProgress: 0,

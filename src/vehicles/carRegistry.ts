@@ -52,7 +52,7 @@ export const CARS: CarEntry[] = [
     modelUrl: '/models/cars/koenigsegg/koenigsegg.glb',
     modelUrlLow: '/models/cars/koenigsegg/koenigsegg_low.glb',
     configUrl: '/models/cars/koenigsegg/vehicle-config.json',
-    // A real twin-turbo V8 (Mercedes S63 AMG recording) until we have the One:1's own.
+    // Regera onboard V8 recording, used as a stand-in for the One:1 (see audio credits).
     audioUrl: '/audio/koenigsegg/',
     firingPerRev: 4,
     selectable: true,

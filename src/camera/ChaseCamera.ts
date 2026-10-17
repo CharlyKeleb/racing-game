@@ -211,6 +211,16 @@ export class ChaseCamera {
     this.kick = this.appliedKick = 0
   }
 
+  /** Move the garage between track origins without changing the view relative to the car. */
+  relocateShowroom(from: THREE.Object3D, to: THREE.Object3D): void {
+    from.updateMatrix()
+    to.updateMatrix()
+    const transform = to.matrix.clone().multiply(from.matrix.clone().invert())
+    this.camera.position.applyMatrix4(transform)
+    this.lookTarget.applyMatrix4(transform)
+    this.camera.lookAt(this.lookTarget)
+  }
+
   snap(): void {
     this.initialised = false
   }
