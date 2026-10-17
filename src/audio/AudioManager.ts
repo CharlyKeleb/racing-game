@@ -1,5 +1,6 @@
 import { Howler } from 'howler'
 import { CarSound, type CarSoundState } from './CarSound'
+import { GarageAmbience } from './GarageAmbience'
 import { decodeWav16, type EngineBank } from './GranularEngine'
 import type { EngineBankMessage } from './engineWorklet'
 import engineWorkletUrl from './engineWorklet.ts?worker&url'
@@ -36,6 +37,12 @@ export class AudioManager {
   private ignition: AudioBuffer | null = null
   private loading: Promise<void> | null = null
   private lastTime = 0
+  /** The car's sound runs through this, so the menu can hold the engine quiet. */
+  private carBus!: GainNode
+  private ambience: GarageAmbience | null = null
+  /** 'menu' = garage room tone, engine held quiet (except a swap's rev); 'race' = engine up, room tone out. */
+  private scene: 'menu' | 'race' = 'menu'
+  private menuEngine = false
   /** True while the game is paused; otherwise the context must stay running. */
   private paused = false
   private resumeTriedAt = -Infinity
@@ -82,7 +89,10 @@ export class AudioManager {
     this.master = ctx.createGain()
     this.master.connect(ctx.destination)
     this.setVolume(volume)
-    this.sound = new CarSound(ctx, this.master)
+    this.carBus = ctx.createGain()
+    this.carBus.connect(this.master)
+    this.sound = new CarSound(ctx, this.carBus)
+    this.ambience = new GarageAmbience(ctx, this.master)
     this.sound.setFiringPerRev(this.firingPerRev)
 
     this.synthGain = ctx.createGain()
@@ -102,6 +112,7 @@ export class AudioManager {
     this.synthSquare.start()
 
     this.loading = this.loadCarAudio(ctx, this.sound)
+    this.applyMix()
   }
 
   private async loadCarAudio(ctx: AudioContext, sound: CarSound): Promise<void> {
@@ -123,8 +134,11 @@ export class AudioManager {
       const bank = JSON.parse(new TextDecoder().decode(manifest)) as EngineBank
       // Parsed by hand: decodeAudioData would resample and shift the pitch marks.
       const { pcm } = decodeWav16(wav)
-      if (ignition) this.ignition = await ctx.decodeAudioData(ignition)
-      if (liftOff) sound.setLiftOffClip(await ctx.decodeAudioData(liftOff))
+      // The one-shots are optional: a car without them (or a dev server that
+      // answers a missing file with index.html) still gets its recorded engine.
+      const decode = (buf: ArrayBuffer | null) => (buf ? ctx.decodeAudioData(buf).catch(() => null) : Promise.resolve(null))
+      this.ignition = await decode(ignition)
+      sound.setLiftOffClip(await decode(liftOff))
 
       const node = new AudioWorkletNode(ctx, 'granular-engine', { numberOfInputs: 0, outputChannelCount: [1] })
       const msg: EngineBankMessage = { pcm, bank }
@@ -153,6 +167,27 @@ export class AudioManager {
       this.sound.playClip(this.ignition, 0.9)
       this.sound.holdEngineUntil(ctx.currentTime + IGNITION_SETTLE)
     })
+  }
+
+  /** Menu/garage vs. on track: sets the room tone and whether the engine is heard. */
+  setScene(scene: 'menu' | 'race'): void {
+    this.scene = scene
+    this.applyMix()
+  }
+
+  /** In the menu, let the engine be heard (a car swap revs out and rolls in). */
+  setMenuEngine(on: boolean): void {
+    if (on === this.menuEngine) return
+    this.menuEngine = on
+    this.applyMix()
+  }
+
+  private applyMix(): void {
+    const ctx = this.ctx
+    if (!ctx || !this.carBus) return
+    const engine = this.scene === 'race' || this.menuEngine ? 1 : 0
+    this.carBus.gain.setTargetAtTime(engine, ctx.currentTime, 0.12)
+    this.ambience?.setLevel(this.scene === 'menu' ? 1 : 0)
   }
 
   setVolume(volume: number): void {
@@ -204,6 +239,7 @@ export class AudioManager {
 
   dispose(): void {
     this.sound?.dispose()
+    this.ambience?.dispose()
     this.sampled?.disconnect()
     this.sampled?.port.close()
     this.master?.disconnect()

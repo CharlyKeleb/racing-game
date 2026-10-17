@@ -1,9 +1,13 @@
 """Cut steady segments of engine recordings into a grain bank for GranularEngine.
 
-usage: python3 scripts/audio/make_engine_bank.py <recordings dir> <out dir>
+usage: python3 scripts/audio/make_engine_bank.py <car spec .json> <recordings dir> <out dir>
+  e.g. python3 scripts/audio/make_engine_bank.py scripts/audio/porsche911.json ~/recordings public/audio/porsche911
 
-<recordings dir> holds the Freesound previews listed in SEGMENTS, converted to
-16-bit mono WAV (macOS: afconvert -f WAVE -d LEI16@44100 -c 1 in.mp3 out.wav).
+The spec (scripts/audio/<car>.json) gives the engine's firing pulses per rev
+(flat-six 3, V8 4) and the segments: [name, file, start s, end s, expected rpm].
+Pick stretches where the rpm is nearly steady; the expected rpm stops the pitch
+tracker locking an octave off. <recordings dir> holds those files as 16-bit
+mono WAV (macOS: afconvert -f WAVE -d LEI16@44100 -c 1 in.mp3 out.wav).
 Writes engine-bank.wav + engine-bank.json: each layer is a level-matched
 segment with a pitch mark on every firing pulse. Needs numpy.
 """
@@ -13,15 +17,6 @@ import wave
 
 import numpy as np
 
-# (name, file, start s, end s, expected rpm). Pick stretches where the rpm is
-# nearly steady; the expected rpm stops the pitch tracker locking an octave off.
-SEGMENTS = [
-    ('idle', '113216_137116-hq.wav', 4.0, 8.0, 1240),
-    ('low', '113214_137116-hq.wav', 25.78, 26.02, 2400),
-    ('mid', '113214_137116-hq.wav', 26.08, 26.30, 2650),
-    ('high', '113214_137116-hq.wav', 26.40, 26.66, 2930),
-]
-FIRING_PER_REV = 3  # flat-six
 TARGET_RMS = 10 ** (-16 / 20)
 PAD = 2048
 
@@ -59,15 +54,18 @@ def pitch_marks(seg, sr, freq):
         m = n
 
 
-def main(src, out):
+def main(spec_path, src, out):
+    with open(spec_path) as f:
+        spec = json.load(f)
+    firing = spec['firingPerRev']
     bank, layers, cursor, sr = [], [], 0, 44100
-    for name, fn, a, b, guess in SEGMENTS:
+    for name, fn, a, b, guess in spec['segments']:
         x, sr = load(f'{src}/{fn}')
         seg = x[int(a * sr): int(b * sr)].copy()
         seg -= seg.mean()
-        g = guess * FIRING_PER_REV / 60
+        g = guess * firing / 60
         marks = pitch_marks(seg, sr, firing_freq(seg[: int(0.2 * sr)], sr, g * 0.8, g * 1.25))
-        rpm = sr / np.median(np.diff(marks)) * 60 / FIRING_PER_REV
+        rpm = sr / np.median(np.diff(marks)) * 60 / firing
         seg = np.clip(seg * TARGET_RMS / np.sqrt((seg ** 2).mean()), -1, 1)
         layers.append({'name': name, 'rpm': round(float(rpm)), 'start': cursor, 'length': len(seg),
                        'marks': [int(v) for v in marks]})
@@ -81,8 +79,8 @@ def main(src, out):
         w.setframerate(sr)
         w.writeframes(pcm.tobytes())
     with open(f'{out}/engine-bank.json', 'w') as f:
-        json.dump({'sampleRate': sr, 'firingPerRev': FIRING_PER_REV, 'layers': layers}, f)
+        json.dump({'sampleRate': sr, 'firingPerRev': firing, 'layers': layers}, f)
 
 
 if __name__ == '__main__':
-    main(sys.argv[1], sys.argv[2])
+    main(sys.argv[1], sys.argv[2], sys.argv[3])
