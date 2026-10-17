@@ -32,8 +32,13 @@ export class ChaseCamera {
   mode: CameraMode = 'chase'
   private readonly camera: THREE.PerspectiveCamera
   private readonly lookTarget = new THREE.Vector3()
-  /** Chase position before shake, so the shake never feeds back into the smoothing. */
-  private readonly chasePos = new THREE.Vector3()
+  /**
+   * Camera and aim point relative to the car, smoothed. Smoothing the offset
+   * (not the world position) keeps the camera from trailing further behind
+   * the faster the car goes, while turns and bumps still swing it softly.
+   */
+  private readonly chaseOffset = new THREE.Vector3()
+  private readonly lookOffset = new THREE.Vector3()
   private initialised = false
 
   /**
@@ -41,19 +46,19 @@ export class ChaseCamera {
    * the lower middle of the screen with the horizon just above its roof.
    * Distance is from the car's centre, so ~2.4 m behind the bumper.
    */
-  distance = 4.7
-  height = 1.45
+  distance = 4.3
+  height = 1.35
   /** Extra chase distance at top speed, meters. */
-  speedPullBack = 0.9
+  speedPullBack = 0.5
   /** Aim point: this far ahead of the car's centre and this high, so the camera looks down the road, not at the roof. */
   lookAhead = 9
   lookHeight = 0.95
-  baseFov = 62
-  maxFovBoost = 16
+  baseFov = 60
+  maxFovBoost = 12
   /** Extra degrees of FOV at full nitro. */
-  nitroFovKick = 14
+  nitroFovKick = 9
   /** Extra chase distance at full nitro, meters (the car surges away from the lens). */
-  nitroPullBack = 1.4
+  nitroPullBack = 0.7
   /** Camera shake amplitude at top speed and at full nitro, meters. */
   speedShake = 0.025
   nitroShake = 0.05
@@ -100,14 +105,17 @@ export class ChaseCamera {
       _look.copy(target.position).addScaledVector(_fwd, this.lookAhead)
       _look.y += this.lookHeight
 
+      _desired.sub(target.position)
+      _look.sub(target.position)
       if (!this.initialised) {
-        this.chasePos.copy(_desired)
-        this.lookTarget.copy(_look)
+        this.chaseOffset.copy(_desired)
+        this.lookOffset.copy(_look)
         this.initialised = true
       }
-      this.chasePos.lerp(_desired, damp(6, dt))
-      this.camera.position.copy(this.chasePos)
-      this.lookTarget.lerp(_look, damp(12, dt))
+      this.chaseOffset.lerp(_desired, damp(6, dt))
+      this.lookOffset.lerp(_look, damp(12, dt))
+      this.camera.position.copy(target.position).add(this.chaseOffset)
+      this.lookTarget.copy(target.position).add(this.lookOffset)
       this.camera.lookAt(this.lookTarget)
       // Shake in camera space after aiming, so it jitters the view, not the chase.
       this.camera.translateX(_shake.x)
