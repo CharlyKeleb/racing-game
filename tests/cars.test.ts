@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { gameStore } from '../src/stores/gameStore'
 import { buildStats, carClass, DEFAULT_BUILD, performanceRank } from '../src/vehicles/CarBuild'
@@ -38,5 +39,28 @@ describe('per-car builds', () => {
     s().resetBuild()
     s().updateSettings({ car: 'koenigsegg' })
     expect(s().build.paint).toBe('#abcdef') // resetting the Porsche left the Koenigsegg alone
+  })
+})
+
+describe('car card specs', () => {
+  it('match each selectable car\'s physics config', () => {
+    for (const car of selectableCars()) {
+      const cfg = JSON.parse(readFileSync(`public${car.configUrl}`, 'utf8'))
+      const curve: [number, number][] = cfg.engine.torqueCurve
+      // Peak power over the curve, sampled every 50 rpm: kW = Nm × rpm / 9549, hp = kW × 1.341.
+      let peakKw = 0
+      for (let rpm = curve[0][0]; rpm <= curve[curve.length - 1][0]; rpm += 50) {
+        const i = curve.findIndex(([r]) => r >= rpm)
+        const [r0, t0] = curve[Math.max(0, i - 1)]
+        const [r1, t1] = curve[i]
+        const t = r1 === r0 ? t1 : t0 + ((rpm - r0) / (r1 - r0)) * (t1 - t0)
+        peakKw = Math.max(peakKw, (t * rpm) / 9549)
+      }
+      expect(Math.abs(peakKw * 1.341 - car.specs.powerHp) / car.specs.powerHp).toBeLessThan(0.03)
+      expect(car.specs.torqueNm).toBe(Math.max(...curve.map(([, t]) => t)))
+      expect(car.specs.weightKg).toBe(cfg.massKg)
+      const drivenFront = cfg.wheels.some((w: { id: string; driven: boolean }) => w.id.startsWith('F') && w.driven)
+      expect(car.specs.drivetrain).toBe(drivenFront ? 'AWD' : 'RWD')
+    }
   })
 })

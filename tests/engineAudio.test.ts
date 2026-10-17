@@ -109,33 +109,38 @@ describe('AudioManager', () => {
   })
 })
 
-// The shipped Porsche bank (Git LFS). Skipped when only the LFS pointer is checked out.
-const BANK_DIR = 'public/audio/porsche911'
-const wavPath = `${BANK_DIR}/engine-bank.wav`
-const hasBank = existsSync(wavPath) && readFileSync(wavPath).subarray(0, 4).toString() === 'RIFF'
+// The shipped engine banks (Git LFS). Skipped when only the LFS pointer is checked out.
+for (const [car, redline] of [
+  ['porsche911', 7500],
+  ['koenigsegg', 8250],
+] as const) {
+  const dir = `public/audio/${car}`
+  const wavPath = `${dir}/engine-bank.wav`
+  const hasBank = existsSync(wavPath) && readFileSync(wavPath).subarray(0, 4).toString() === 'RIFF'
 
-describe.skipIf(!hasBank)('Porsche 911 engine bank', () => {
-  const bank = JSON.parse(readFileSync(`${BANK_DIR}/engine-bank.json`, 'utf8')) as EngineBank
-  const file = readFileSync(wavPath)
-  const { pcm, sampleRate } = decodeWav16(file.buffer.slice(file.byteOffset, file.byteOffset + file.byteLength))
+  describe.skipIf(!hasBank)(`${car} engine bank`, () => {
+    const bank = JSON.parse(readFileSync(`${dir}/engine-bank.json`, 'utf8')) as EngineBank
+    const file = readFileSync(wavPath)
+    const { pcm, sampleRate } = decodeWav16(file.buffer.slice(file.byteOffset, file.byteOffset + file.byteLength))
 
-  it('manifest matches the audio', () => {
-    expect(sampleRate).toBe(bank.sampleRate)
-    for (const l of bank.layers) {
-      expect(l.start + l.length).toBeLessThanOrEqual(pcm.length)
-      expect(l.marks.length).toBeGreaterThan(10)
-      expect(l.marks.at(-1)!).toBeLessThan(l.length)
-    }
+    it('manifest matches the audio', () => {
+      expect(sampleRate).toBe(bank.sampleRate)
+      for (const l of bank.layers) {
+        expect(l.start + l.length).toBeLessThanOrEqual(pcm.length)
+        expect(l.marks.length).toBeGreaterThan(10)
+        expect(l.marks.at(-1)!).toBeLessThan(l.length)
+      }
+    })
+
+    it('plays the real recording at the requested rpm across the rev range', () => {
+      for (const rpm of [900, 2500, 5000, redline]) {
+        const out = render(new GranularEngine(pcm, bank, OUT_RATE), rpm, 0.4)
+        const want = OUT_RATE / ((rpm / 60) * bank.firingPerRev)
+        // Real engines have strong half orders: every other pulse can win.
+        const ratio = period(out.subarray(4000), Math.floor(want * 0.3), Math.ceil(want * 2.2)) / want
+        expect(Math.min(Math.abs(ratio - 1), Math.abs(ratio - 2))).toBeLessThan(0.05)
+        expect(out.every(Number.isFinite)).toBe(true)
+      }
+    })
   })
-
-  it('plays the real recording at the requested rpm across the rev range', () => {
-    for (const rpm of [900, 2500, 5000, 7500]) {
-      const out = render(new GranularEngine(pcm, bank, OUT_RATE), rpm, 0.4)
-      const want = firingPeriod(rpm)
-      // Real flat-sixes have strong half orders: every other pulse can win.
-      const ratio = period(out.subarray(4000), Math.floor(want * 0.3), Math.ceil(want * 2.2)) / want
-      expect(Math.min(Math.abs(ratio - 1), Math.abs(ratio - 2))).toBeLessThan(0.05)
-      expect(out.every(Number.isFinite)).toBe(true)
-    }
-  })
-})
+}

@@ -1,0 +1,34 @@
+{
+  "comment": "Porsche 911 flat-six: victormalloy's CC0 Porsche recordings (see public/audio/porsche911/CREDITS.md).",
+  "firingPerRev": 3,
+  "segments": [
+    [
+      "idle",
+      "113216_137116-hq.wav",
+      4.0,
+      8.0,
+      1240
+    ],
+    [
+      "low",
+      "113214_137116-hq.wav",
+      25.78,
+      26.02,
+      2400
+    ],
+    [
+      "mid",
+      "113214_137116-hq.wav",
+      26.08,
+      26.3,
+      2650
+    ],
+    [
+      "high",
+      "113214_137116-hq.wav",
+      26.4,
+      26.66,
+      2930
+    ]
+  ]
+}

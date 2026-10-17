@@ -1,7 +1,7 @@
 import RAPIER from '@dimforge/rapier3d-compat'
 import * as THREE from 'three'
 import type { InputState } from '../input/InputManager'
-import { Drift } from './Drift'
+import { Drift, type DriftGuide } from './Drift'
 import { Drivetrain, type GearRequest } from './Drivetrain'
 import { Nitro } from './Nitro'
 import { Surface, surfaceProps } from './Surface'
@@ -40,6 +40,10 @@ const _mount = new THREE.Vector3()
 const _vel = new THREE.Vector3()
 const _impulse = new THREE.Vector3()
 const _point = new THREE.Vector3()
+const _vh = new THREE.Vector3()
+const _fh = new THREE.Vector3()
+const _cross = new THREE.Vector3()
+const _carve = new THREE.Vector3()
 /** Body slip angle (rad) above which a countersteered slide counts as a drift. */
 const DRIFT_MIN_ANGLE = 0.1
 const _ray = new RAPIER.Ray({ x: 0, y: 0, z: 0 }, { x: 0, y: -1, z: 0 })
@@ -59,6 +63,7 @@ export class VehicleController {
   readonly drivetrain: Drivetrain
   readonly nitro: Nitro
   readonly drift = new Drift()
+  private readonly driftGuide: DriftGuide = { angle: 0, pathRate: 0 }
   steerAngle = 0
   /** Signed forward speed of the chassis, m/s. */
   forwardSpeed = 0
@@ -181,6 +186,7 @@ export class VehicleController {
         speed: _vel.length(),
         grounded: groundedCount > 0,
         airborne: groundedCount === 0,
+        drifting: this.drift.active,
         wantsBoost: input.nitro && !reversing,
       },
       dt,
@@ -197,7 +203,9 @@ export class VehicleController {
         speed,
         steer: input.steer,
         throttle: driveThrottle,
-        brake: brakeInput,
+        // The raw pedal, not the ramped one: the ramp's fade after release would
+        // overlap turning in and read as a tap made while steering.
+        brake: reversing ? input.throttle : input.brake,
         handbrake: input.handbrake,
         slipAngle: Math.atan2(sideways, Math.max(speed, 0.1)),
         downshift,
@@ -273,7 +281,8 @@ export class VehicleController {
           dt,
           surfaceGrip: ground.grip,
           surfaceDrag: ground.drag,
-          lateralGripScale: this.isRear[i] ? rearGrip : 1,
+          // In a drift the guidance carves the path, so the tires' sideways grip steps back.
+          lateralGripScale: (this.isRear[i] ? rearGrip : 1) * (1 - cfg.drift.lateralRelief * this.drift.amount),
           combined: this.isRear[i] && combinedRear,
         },
         cfg.tires,
@@ -293,6 +302,7 @@ export class VehicleController {
     }
 
     this.applyStabilityAssist(input.handbrake, speed, lv, dt)
+    this.applyDriftGuidance(input.steer, groundedCount, dt)
 
     // Nitro is thrust at the center of mass, not tire force: the rears are
     // already near their grip limit under power, so routing it through the
@@ -352,9 +362,48 @@ export class VehicleController {
       const scale = cfg.driftAssist + (1 - cfg.driftAssist) * t
       rate *= 1 - relax * (1 - scale)
     }
+    // A guided drift holds its own angle (applyDriftGuidance); the assist steps aside.
+    rate *= 1 - this.drift.amount
     const k = 1 - Math.exp(-rate * dt)
     _impulse.copy(_up).multiplyScalar(-excess * this.yawInertia * k)
     this.body.applyTorqueImpulse(_impulse, true)
+  }
+
+  /**
+   * Arcade drift (NFS / Asphalt): while a drift is on, carve the direction of
+   * travel along the drift's arc, keeping the speed (less a little scrub), and
+   * swing the body to the drift angle. Both are blended in by `drift.amount`,
+   * so entries and exits ease rather than snap. Steering sets the angle and
+   * the arc (see Drift.guide).
+   */
+  private applyDriftGuidance(steer: number, groundedCount: number, dt: number): void {
+    const amount = this.drift.amount
+    if (amount < 0.01 || groundedCount < 2) return
+    const cfgD = this.cfg.drift
+    const body = this.body
+    const lv = body.linvel()
+    _vh.set(lv.x, lv.y, lv.z)
+    _vh.addScaledVector(_up, -_vh.dot(_up))
+    const speed = _vh.length()
+    if (speed < 4) return
+    const guide = this.drift.guide(steer, speed, cfgD, this.driftGuide)
+
+    // Carve: turn the travel direction at the arc's rate, keeping its speed.
+    _carve.copy(_vh).applyAxisAngle(_up, guide.pathRate * dt).multiplyScalar(Math.exp(-cfgD.scrub * dt))
+    _impulse.subVectors(_carve, _vh).multiplyScalar(this.cfg.massKg * amount)
+    body.applyImpulse(_impulse, true)
+
+    // Angle: body slip β (signed, travel direction → nose) toward the target,
+    // on top of turning with the arc.
+    _fh.copy(_fwd).addScaledVector(_up, -_fwd.dot(_up)).normalize()
+    _vh.divideScalar(speed)
+    const beta = Math.atan2(_cross.crossVectors(_vh, _fh).dot(_up), _vh.dot(_fh))
+    const av = body.angvel()
+    const yawRate = av.x * _up.x + av.y * _up.y + av.z * _up.z
+    const wanted = guide.pathRate + cfgD.angleGain * (guide.angle - beta)
+    const k = 1 - Math.exp(-cfgD.yawResponse * dt)
+    _impulse.copy(_up).multiplyScalar((wanted - yawRate) * k * amount * this.yawInertia)
+    body.applyTorqueImpulse(_impulse, true)
   }
 
   /** Throttle pedal after ramping, 0..1: what the engine actually gets (audio reads it). */

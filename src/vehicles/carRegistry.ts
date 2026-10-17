@@ -19,6 +19,18 @@ export interface CarEntry {
   selectable: boolean
   /** Stock 0..1 ratings for the garage card; upgrades raise them toward 1. Mid-field = 0.5. */
   stats: BuildStats
+  /** Stock figures for the car card. Power matches the config's torque curve (tested); 0–100 and top speed are measured in-game. */
+  specs: CarSpecs
+}
+
+export interface CarSpecs {
+  powerHp: number
+  torqueNm: number
+  /** 0–100 km/h, seconds. */
+  zeroToHundred: number
+  topSpeedKmh: number
+  drivetrain: 'AWD' | 'RWD' | 'FWD'
+  weightKg: number
 }
 
 export const CARS: CarEntry[] = [
@@ -32,6 +44,7 @@ export const CARS: CarEntry[] = [
     firingPerRev: 3,
     selectable: true,
     stats: { power: 0.5, grip: 0.5, handling: 0.5, braking: 0.5 },
+    specs: { powerHp: 444, torqueNm: 530, zeroToHundred: 3.5, topSpeedKmh: 308, drivetrain: 'AWD', weightKg: 1565 },
   },
   {
     id: 'koenigsegg',
@@ -39,9 +52,12 @@ export const CARS: CarEntry[] = [
     modelUrl: '/models/cars/koenigsegg/koenigsegg.glb',
     modelUrlLow: '/models/cars/koenigsegg/koenigsegg_low.glb',
     configUrl: '/models/cars/koenigsegg/vehicle-config.json',
+    // A real twin-turbo V8 (Mercedes S63 AMG recording) until we have the One:1's own.
+    audioUrl: '/audio/koenigsegg/',
     firingPerRev: 4,
     selectable: true,
     stats: { power: 0.98, grip: 0.8, handling: 0.76, braking: 0.84 },
+    specs: { powerHp: 1341, torqueNm: 1371, zeroToHundred: 3.8, topSpeedKmh: 437, drivetrain: 'RWD', weightKg: 1360 },
   },
   {
     id: 'bmw',
@@ -55,6 +71,7 @@ export const CARS: CarEntry[] = [
     firingPerRev: 3,
     selectable: true,
     stats: { power: 0.6, grip: 0.86, handling: 0.86, braking: 0.8 },
+    specs: { powerHp: 370, torqueNm: 380, zeroToHundred: 4.4, topSpeedKmh: 271, drivetrain: 'RWD', weightKg: 1150 },
   },
   {
     id: 'mclaren',
@@ -64,6 +81,7 @@ export const CARS: CarEntry[] = [
     firingPerRev: 4,
     selectable: false,
     stats: { power: 0.5, grip: 0.5, handling: 0.5, braking: 0.5 },
+    specs: { powerHp: 710, torqueNm: 770, zeroToHundred: 2.9, topSpeedKmh: 341, drivetrain: 'RWD', weightKg: 1420 },
   },
 ]
 

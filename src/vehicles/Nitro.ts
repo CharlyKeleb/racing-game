@@ -10,6 +10,8 @@ export interface NitroInput {
   grounded: boolean
   /** True while no wheel touches the ground (a jump, a crest taken flat out). */
   airborne: boolean
+  /** True during a drift (Drift.active): the main way to earn nitro. */
+  drifting?: boolean
   /** Boost button held. */
   wantsBoost: boolean
 }
@@ -146,12 +148,12 @@ export class Nitro {
   }
 }
 
-/** Tank fraction per second from tire slip and airtime; 0 below the minimum speed. */
+/** Tank fraction per second from drifting, tire slip and airtime; 0 below the minimum speed. */
 export function fillRate(input: NitroInput, cfg: NitroConfig): number {
   if (input.speed < cfg.minFillSpeed) return 0
   if (input.airborne) return cfg.airFillRate
   if (!input.grounded) return 0
+  const drift = input.drifting ? cfg.driftFillRate : 0
   const over = (input.slip - cfg.slipThreshold) / (1 - cfg.slipThreshold)
-  if (over <= 0) return 0
-  return cfg.fillRate * Math.min(1, over)
+  return Math.max(drift, over > 0 ? cfg.fillRate * Math.min(1, over) : 0)
 }

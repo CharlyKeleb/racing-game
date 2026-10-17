@@ -48,6 +48,17 @@ export function Hud() {
 
       {t.wrongWay && <div className="hud-wrongway">Wrong way</div>}
 
+      {t.driftActive ? (
+        <div className="hud-drift">
+          <span className="hud-drift__label">Drift</span>
+          <b className="hud-drift__score">{t.driftScore.toLocaleString()}</b>
+        </div>
+      ) : t.driftBanked > 0 ? (
+        <div className="hud-drift hud-drift--banked" key={t.driftBanked}>
+          <b className="hud-drift__score">+{t.driftBanked.toLocaleString()}</b>
+        </div>
+      ) : null}
+
       {t.nitroPerfect ? (
         <div className="hud-nitro-call hud-nitro-call--perfect">Perfect nitro</div>
       ) : t.nitroWindow ? (

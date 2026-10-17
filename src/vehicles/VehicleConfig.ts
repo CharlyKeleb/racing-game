@@ -83,6 +83,8 @@ export interface NitroConfig {
   rampRate: number
   /** Tank fraction gained per second while all four wheels are off the ground. */
   airFillRate: number
+  /** Tank fraction gained per second during a drift. */
+  driftFillRate: number
   /** Seconds after release before a burn ends, so a quick re-tap keeps it going. */
   releaseGraceSec: number
   /** Perfect nitro: the timing window opens this long into a burn, seconds… */
@@ -228,6 +230,7 @@ export const DEFAULT_VEHICLE_CONFIG: VehicleConfig = {
     topSpeedBonus: 0.15,
     rampRate: 5,
     airFillRate: 0.3,
+    driftFillRate: 0.3,
     releaseGraceSec: 0.25,
     perfectWindowStart: 0.8,
     perfectWindowLength: 0.4,
