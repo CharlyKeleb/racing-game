@@ -4,6 +4,7 @@ import { TRACKS } from '../world/tracks'
 import { useGameInstance } from './GameContext'
 import { useGame } from './hooks'
 import { Button, ClassBadge, StatBar } from './kit'
+import { OrbitLayer } from './OrbitLayer'
 import { Settings } from './Settings'
 
 export function MainMenu() {
@@ -12,6 +13,7 @@ export function MainMenu() {
 
   return (
     <div className="screen screen--menu">
+      <OrbitLayer />
       <header className="menu-top">
         <div className="logo">
           RACING<span>/</span>GAME

@@ -36,7 +36,7 @@ interface GarageManifest {
   /** Distance to the nearest wall at camera height in 32 directions; k → (sin a, cos a), a = k/32·2π. */
   clearance: number[]
   ceiling: number
-  /** Resting camera yaw (car frame) and the half-width of the open arc around it, radians. */
+  /** Resting camera yaw (car frame; Game's showroomYaw starts here) and the half-width of the open arc around it, radians. */
   heroYaw: number
   heroArc: number
 }
@@ -57,6 +57,10 @@ export class Showroom {
   /** Scene the showroom was last activated in, to hot-swap reflections when the room loads. */
   private sceneRef: THREE.Scene | null = null
   private fallbackFloor!: THREE.Mesh
+  private key!: THREE.SpotLight
+  private readonly tyreBlobs: THREE.Mesh[] = []
+  private blobGeo!: THREE.PlaneGeometry
+  private blobMat!: THREE.MeshBasicMaterial
 
   constructor(renderer: THREE.WebGLRenderer) {
     this.renderer = renderer
@@ -99,7 +103,10 @@ export class Showroom {
       this.manifest = manifest
       this.group.add(room)
       this.fallbackFloor.visible = false
-      if (quality !== 'low') this.buildFloorSheen()
+      if (quality !== 'low') {
+        this.buildFloorSheen()
+        this.buildShadowCatcher()
+      }
       // Re-bake reflections from the real room if they were baked from the fallback.
       if (this.envMap) {
         this.envMap = this.bakeEnvironment()
@@ -112,14 +119,34 @@ export class Showroom {
 
   /** Centers the room on the car's spot, facing `heading` (yaw, radians). */
   placeAt(position: THREE.Vector3, heading: number): void {
-    this.group.position.set(position.x, 0, position.z)
+    this.group.position.set(position.x, this.group.position.y, position.z)
     this.group.rotation.y = heading
   }
 
-  /** The open arc the idle camera should sway through, or null to spin freely (no room model). */
-  get heroArc(): { center: number; halfWidth: number } | null {
-    const m = this.manifest
-    return m ? { center: m.heroYaw, halfWidth: m.heroArc } : null
+  /**
+   * Seats the garage floor at the height the car's tyres actually rest on.
+   * The car stands on a flat physics pad (see Game.updateShowroom) a few
+   * centimetres above the track, so the room has to come up to meet it.
+   */
+  setFloorHeight(y: number): void {
+    this.group.position.y = y
+  }
+
+  /** Dark contact patches under each tyre: the strongest "it's touching the floor" cue. */
+  setCarFootprint(wheels: { position: [number, number, number]; width: number; radius: number }[]): void {
+    for (const blob of this.tyreBlobs) {
+      blob.removeFromParent()
+    }
+    this.tyreBlobs.length = 0
+    for (const w of wheels) {
+      const blob = new THREE.Mesh(this.blobGeo, this.blobMat)
+      blob.scale.set(w.width * 1.5, 1, w.radius * 1.9)
+      blob.position.set(w.position[0], 0.012, w.position[2])
+      blob.renderOrder = 3
+      this.bakeHidden.push(blob)
+      this.tyreBlobs.push(blob)
+      this.group.add(blob)
+    }
   }
 
   /**
@@ -218,17 +245,36 @@ export class Showroom {
     this.group.add(this.fallbackFloor)
   }
 
-  /** Soft dark ellipse under the car: the unlit floor can't receive real shadows. */
+  /**
+   * The room is unlit, so it can't receive shadows itself. An invisible floor
+   * plane that renders only the shadow (ShadowMaterial) lays the car's real
+   * shadow from the overhead key light onto the baked concrete.
+   */
+  private buildShadowCatcher(): void {
+    const geo = new THREE.PlaneGeometry(14, 14)
+    geo.rotateX(-Math.PI / 2)
+    const mat = new THREE.ShadowMaterial({ opacity: 0.55, color: 0x050302 })
+    this.disposables.push(geo, mat)
+    const catcher = new THREE.Mesh(geo, mat)
+    catcher.position.y = 0.004
+    catcher.receiveShadow = true
+    catcher.renderOrder = 2
+    this.bakeHidden.push(catcher)
+    this.group.add(catcher)
+    this.key.castShadow = true
+  }
+
+  /** Soft dark ellipse under the car (ambient occlusion): grounds it on every tier. */
   private buildContactShadow(): void {
     const [c, g] = canvas(256, 256)
     const grad = g.createRadialGradient(128, 128, 10, 128, 128, 128)
-    grad.addColorStop(0, 'rgba(0,0,0,0.95)')
-    grad.addColorStop(0.5, 'rgba(0,0,0,0.75)')
+    grad.addColorStop(0, 'rgba(0,0,0,0.97)')
+    grad.addColorStop(0.62, 'rgba(0,0,0,0.82)')
     grad.addColorStop(1, 'rgba(0,0,0,0)')
     g.fillStyle = grad
     g.fillRect(0, 0, 256, 256)
     const tex = new THREE.CanvasTexture(c)
-    const geo = new THREE.PlaneGeometry(3.1, 5.9)
+    const geo = new THREE.PlaneGeometry(2.6, 5.4)
     geo.rotateX(-Math.PI / 2)
     const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, fog: false, polygonOffset: true, polygonOffsetFactor: -2 })
     this.disposables.push(tex, geo, mat)
@@ -237,6 +283,20 @@ export class Showroom {
     shadow.renderOrder = 2
     this.bakeHidden.push(shadow)
     this.group.add(shadow)
+
+    // Tyre contact blob texture, shared by the four patches (see setCarFootprint).
+    const [bc, bg] = canvas(64, 64)
+    const bgrad = bg.createRadialGradient(32, 32, 2, 32, 32, 32)
+    bgrad.addColorStop(0, 'rgba(0,0,0,0.9)')
+    bgrad.addColorStop(0.6, 'rgba(0,0,0,0.5)')
+    bgrad.addColorStop(1, 'rgba(0,0,0,0)')
+    bg.fillStyle = bgrad
+    bg.fillRect(0, 0, 64, 64)
+    const btex = new THREE.CanvasTexture(bc)
+    this.blobGeo = new THREE.PlaneGeometry(1, 1)
+    this.blobGeo.rotateX(-Math.PI / 2)
+    this.blobMat = new THREE.MeshBasicMaterial({ map: btex, transparent: true, depthWrite: false, fog: false, polygonOffset: true, polygonOffsetFactor: -3 })
+    this.disposables.push(btex, this.blobGeo, this.blobMat)
     this.buildLightPool()
   }
 
@@ -329,13 +389,22 @@ export class Showroom {
   private buildLights(): void {
     const hemi = new THREE.HemisphereLight(0xe8e2d4, 0x14110d, 0.45)
 
-    const key = new THREE.SpotLight(0xfff0dc, 420, 18, THREE.MathUtils.degToRad(40), 0.7, 1.5)
-    key.position.set(0.3, 5, 0.6)
+    // Tuned to the room's baked light: warm and a little dimmer than a studio key,
+    // so the car doesn't look pasted on top of the garage.
+    const key = new THREE.SpotLight(0xffe7c8, 330, 18, THREE.MathUtils.degToRad(42), 0.8, 1.5)
+    key.position.set(0.6, 4.4, 0.9)
     key.target.position.set(0, 0, 0)
+    key.shadow.mapSize.set(1024, 1024)
+    key.shadow.bias = -0.0004
+    key.shadow.normalBias = 0.02
+    key.shadow.radius = 6
+    key.shadow.camera.near = 1
+    key.shadow.camera.far = 10
+    this.key = key
 
-    const rimCool = new THREE.PointLight(0x9cc8ff, 55, 14, 1.6)
+    const rimCool = new THREE.PointLight(0x9cc8ff, 40, 14, 1.6)
     rimCool.position.set(-4.5, 2.2, -4)
-    const rimWarm = new THREE.PointLight(0xffc489, 45, 14, 1.6)
+    const rimWarm = new THREE.PointLight(0xffc489, 35, 14, 1.6)
     rimWarm.position.set(5, 2.0, 3.5)
 
     this.group.add(hemi, key, key.target, rimCool, rimWarm)

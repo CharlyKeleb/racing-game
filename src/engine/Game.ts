@@ -1,3 +1,4 @@
+import RAPIER from '@dimforge/rapier3d-compat'
 import * as THREE from 'three'
 import { AudioManager } from '../audio/AudioManager'
 import { ChaseCamera, type ShowroomFraming } from '../camera/ChaseCamera'
@@ -40,6 +41,13 @@ const WRONG_WAY_DELAY = 1.2
 /** Garage turntable camera: distance (m) and lens (deg) when there's room. */
 const SHOWROOM_DISTANCE = 7.5
 const SHOWROOM_FOV = 42
+/** Free orbit: idle spin (rad/s), camera height range and rest (m above the car's focus), zoom range, idle delay after a drag (s). */
+const ORBIT_SPIN = 0.16
+const ORBIT_HEIGHT: [number, number] = [-0.15, 3.2]
+const ORBIT_REST_HEIGHT = 1.5
+const ORBIT_ZOOM: [number, number] = [0.55, 1.3]
+const ORBIT_IDLE_DELAY = 3
+const ORBIT_MAX_FLICK = 3
 
 /**
  * Composition root for one play session. React creates exactly one Game,
@@ -74,8 +82,15 @@ export class Game {
   private baseConfig!: VehicleConfig
   private showroomYaw = 0.9
   private showroomIdle = 0
-  /** Phase of the idle camera sway across the garage's open arc. */
-  private showroomSway = 0
+  /** Orbit state: camera height above the car's focus, zoom factor, flick momentum. */
+  private showroomHeight = ORBIT_REST_HEIGHT
+  private showroomZoom = 1
+  private orbitVelocity = 0
+  private orbitCoasting = false
+  private lastOrbitAt = 0
+  /** Flat pad the car stands on in the garage (the track under the spawn has camber). */
+  private showroomPad: RAPIER.Collider | null = null
+  private showroomPadStale = false
   /** What the garage camera frames; the Wheels tab zooms onto the front-left wheel. */
   private showroomFocus: ShowroomFocus = 'car'
   private wheelYaw = 0
@@ -325,32 +340,55 @@ export class Game {
     gameStore.getState().setPhase('menu')
   }
 
-  /** Drag-to-rotate in the garage; pauses the auto-turntable for a moment. */
-  rotateShowroom(deltaRadians: number): void {
+  /**
+   * Orbit the showroom camera (drag / swipe): full 360° around the car, up and
+   * down within the room. Remembers the drag speed so a flick keeps spinning.
+   */
+  rotateShowroom(deltaYaw: number, deltaHeight = 0): void {
     if (this.showroomFocus === 'wheel') {
-      this.wheelYaw = THREE.MathUtils.clamp(this.wheelYaw + deltaRadians, -0.7, 0.7)
+      this.wheelYaw = THREE.MathUtils.clamp(this.wheelYaw + deltaYaw, -0.7, 0.7)
       return
     }
-    this.showroomYaw += deltaRadians
-    this.showroomIdle = 2.5
+    const now = performance.now()
+    const dt = Math.max(0.008, Math.min(0.1, (now - this.lastOrbitAt) / 1000))
+    this.lastOrbitAt = now
+    this.showroomYaw += deltaYaw
+    // Capped so a quick swipe spins the car briskly, not dizzyingly.
+    this.orbitVelocity = THREE.MathUtils.clamp(deltaYaw / dt, -ORBIT_MAX_FLICK, ORBIT_MAX_FLICK)
+    this.showroomHeight = THREE.MathUtils.clamp(this.showroomHeight + deltaHeight, ORBIT_HEIGHT[0], ORBIT_HEIGHT[1])
+    this.showroomIdle = ORBIT_IDLE_DELAY
+  }
+
+  /** Pinch / scroll: <1 zooms in, >1 out. */
+  zoomShowroom(factor: number): void {
+    if (this.showroomFocus === 'wheel') return
+    this.showroomZoom = THREE.MathUtils.clamp(this.showroomZoom * factor, ORBIT_ZOOM[0], ORBIT_ZOOM[1])
+    this.showroomIdle = ORBIT_IDLE_DELAY
+  }
+
+  /** Finger lifted: let a flick carry on with momentum (dropped if the pointer paused before release). */
+  releaseShowroom(): void {
+    if (performance.now() - this.lastOrbitAt > 80) this.orbitVelocity = 0
+    this.orbitCoasting = true
   }
 
   /**
-   * Idle turntable. In the garage model the camera sways slowly across the
-   * open arc in front of the car (NFS-style) instead of spinning into clutter;
-   * after a drag it eases back onto that path. Without a room it just spins.
+   * Turntable when nobody's dragging: a flick coasts and slows, then the camera
+   * settles into a slow 360° orbit and drifts back to its resting height.
    */
   private idleShowroomCamera(dt: number): void {
-    const arc = this.showroom.heroArc
-    if (!arc) {
-      this.showroomYaw += dt * 0.25
+    if (this.orbitCoasting && Math.abs(this.orbitVelocity) > 0.05) {
+      this.showroomYaw += this.orbitVelocity * dt
+      this.orbitVelocity *= Math.exp(-2.2 * dt)
       return
     }
-    this.showroomSway += dt
-    const target = arc.center + arc.halfWidth * 0.8 * Math.sin(this.showroomSway * 0.2)
-    // Shortest way round: a drag may have wound the yaw through several turns.
-    const diff = Math.atan2(Math.sin(target - this.showroomYaw), Math.cos(target - this.showroomYaw))
-    this.showroomYaw += diff * (1 - Math.exp(-0.9 * dt))
+    this.orbitCoasting = false
+    if (this.showroomIdle > 0) {
+      this.showroomIdle -= dt
+      return
+    }
+    this.showroomYaw += dt * ORBIT_SPIN
+    this.showroomHeight += (ORBIT_REST_HEIGHT - this.showroomHeight) * (1 - Math.exp(-0.5 * dt))
   }
 
   /** Garage tabs call this: 'wheel' glides the camera to the front-left wheel. */
@@ -441,16 +479,21 @@ export class Game {
         this.wheelFraming.focus.set(fl.position[0], fl.radius, fl.position[2])
         this.camera.showroom(this.vehicle.model.root, Math.PI / 2 - 0.55 + this.wheelYaw, dt, this.wheelFraming)
       } else {
-        if (this.showroomIdle > 0) this.showroomIdle -= dt
-        else this.idleShowroomCamera(dt)
+        if (this.showroomPadStale) {
+          this.setShowroomPad(false)
+          this.setShowroomPad(true)
+        }
+        this.idleShowroomCamera(dt)
         // Slide the car right of the garage's left-hand panel. (On landscape phones the
         // menu's car card turns compact instead — see index.css — so the car stays centred.)
         this.carFraming.shift = phase === 'garage' ? 1.2 : 0
         // Pull in before a wall or pillar would come between camera and car, and
         // widen the lens to match so the car stays the same size on screen.
+        const wanted = SHOWROOM_DISTANCE * this.showroomZoom
         const room = this.showroom.cameraClearance(this.showroomYaw)
-        this.carFraming.distance = Math.max(3.2, Math.min(SHOWROOM_DISTANCE, room))
-        this.carFraming.fov = Math.min(64, (SHOWROOM_FOV * SHOWROOM_DISTANCE) / this.carFraming.distance)
+        this.carFraming.distance = Math.max(3.2, Math.min(wanted, room))
+        this.carFraming.fov = Math.min(64, (SHOWROOM_FOV * wanted) / this.carFraming.distance)
+        this.carFraming.height = this.showroomHeight
         this.camera.showroom(this.vehicle.model.root, this.showroomYaw, dt, this.carFraming)
       }
     } else if (phase !== 'paused') {
@@ -537,10 +580,48 @@ export class Game {
   }
 
   /** Menu and garage show the car in the showroom; racing shows the track. */
+  /**
+   * In the garage the car stands on a flat pad just above the track under the
+   * spawn (which has camber, so the car would sit tilted and the tyres would
+   * float over the garage floor). The garage floor is seated at the pad's top.
+   */
+  private setShowroomPad(on: boolean): void {
+    const world = this.physics.world
+    if (!on) {
+      if (this.showroomPad) world.removeCollider(this.showroomPad, true)
+      this.showroomPad = null
+      return
+    }
+    if (this.showroomPad) return
+    const spawn = this.track.spawn
+    const cos = Math.cos(spawn.heading)
+    const sin = Math.sin(spawn.heading)
+    // Colliders aren't queryable until the first physics step: if the road
+    // didn't answer, use the spawn height for now and rebuild next frame.
+    let top = spawn.position.y - 0.6
+    this.showroomPadStale = false
+    for (const w of this.vehicle.config.wheels) {
+      const [x, , z] = w.position
+      const wx = spawn.position.x + x * cos + z * sin
+      const wz = spawn.position.z - x * sin + z * cos
+      const h = this.physics.groundHeight(wx, spawn.position.y, wz, (c) => c !== this.showroomPad)
+      if (h === null) this.showroomPadStale = true
+      else top = Math.max(top, h)
+    }
+    top += 0.01
+    const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), spawn.heading)
+    this.showroomPad = world.createCollider(
+      RAPIER.ColliderDesc.cuboid(6, 0.05, 6).setTranslation(spawn.position.x, top - 0.05, spawn.position.z).setRotation(q).setFriction(1.2),
+    )
+    this.showroom.setFloorHeight(top)
+    this.showroom.setCarFootprint(this.vehicle.config.wheels)
+  }
+
   private updateShowroom(phase: GamePhase): void {
     if (!this.showroom) return
     const inShowroom = phase === 'menu' || phase === 'garage'
     this.showroom.setActive(this.renderer.scene, inShowroom, [this.track.group, this.environment.group, this.effects.group, this.guide.group])
+    this.setShowroomPad(inShowroom)
     // Re-assert the time of day: it may have changed while the showroom had the scene.
     if (!inShowroom) this.environment.apply(this.renderer.scene)
   }

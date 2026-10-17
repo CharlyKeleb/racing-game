@@ -2,6 +2,9 @@ import * as THREE from 'three'
 import type { CameraMode } from '../stores/gameStore'
 import type { VehicleMotion } from '../vehicles/Vehicle'
 
+/** Race camera near plane (m). The showroom pushes it out; update() restores it. */
+const NEAR = 0.1
+
 const _desired = new THREE.Vector3()
 const _look = new THREE.Vector3()
 const _fwd = new THREE.Vector3()
@@ -95,6 +98,10 @@ export class ChaseCamera {
    * @param motion the car's smoothed acceleration and velocity, for surge, bank and drift framing.
    */
   update(target: THREE.Object3D, speedKmh: number, dt: number, boost = 0, motion?: VehicleMotion): void {
+    if (this.camera.near !== NEAR) {
+      this.camera.near = NEAR
+      this.camera.updateProjectionMatrix()
+    }
     const speedT = Math.min(speedKmh / 300, 1)
     this.time += dt
     this.kick += (boost - this.kick) * damp(boost > this.kick ? 10 : 2.5, dt)
@@ -188,10 +195,16 @@ export class ChaseCamera {
     this.camera.position.lerp(_desired, k)
     this.lookTarget.lerp(_look, k)
     this.camera.lookAt(this.lookTarget)
+    // Clip away anything hugging the lens (pillars, shelving the orbit passes
+    // beside); the subject is always further than this.
+    const near = THREE.MathUtils.clamp(framing.distance - 2.2, NEAR, 1.6)
+    let dirty = Math.abs(this.camera.near - near) > 0.01
+    if (dirty) this.camera.near = near
     if (Math.abs(this.camera.fov - framing.fov) > 0.01) {
       this.camera.fov = THREE.MathUtils.lerp(this.camera.fov, framing.fov, damp(4, dt))
-      this.camera.updateProjectionMatrix()
+      dirty = true
     }
+    if (dirty) this.camera.updateProjectionMatrix()
     // Hand back to the chase cam without a swoop from the turntable.
     this.initialised = false
     this.kick = this.appliedKick = 0

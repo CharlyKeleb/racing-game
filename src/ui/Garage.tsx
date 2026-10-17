@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   CALIPER_PRESETS,
   PAINT_PRESETS,
@@ -13,6 +13,7 @@ import { useGameInstance } from './GameContext'
 import { useGame } from './hooks'
 import { Button, Panel, ScreenHeader, Segmented } from './kit'
 import { CarCard } from './MainMenu'
+import { OrbitLayer } from './OrbitLayer'
 
 type Tab = 'paint' | 'wheels' | 'performance'
 const TABS: [Tab, string][] = [
@@ -36,7 +37,7 @@ export function Garage() {
 
   return (
     <div className="screen screen--garage">
-      <DragToRotate onRotate={(d) => game?.rotateShowroom(d)} />
+      <OrbitLayer />
       <ScreenHeader title="Garage" onBack={() => game?.closeGarage()} />
 
       <div className="garage-left">
@@ -206,26 +207,5 @@ function Swatches({
         </label>
       </div>
     </div>
-  )
-}
-
-/** Full-screen layer behind the panels: drag horizontally to spin the car. */
-function DragToRotate({ onRotate }: { onRotate(deltaRadians: number): void }) {
-  const last = useRef<number | null>(null)
-  return (
-    <div
-      className="drag-layer"
-      onPointerDown={(e) => {
-        last.current = e.clientX
-        e.currentTarget.setPointerCapture(e.pointerId)
-      }}
-      onPointerMove={(e) => {
-        if (last.current === null) return
-        onRotate(-(e.clientX - last.current) * 0.008)
-        last.current = e.clientX
-      }}
-      onPointerUp={() => (last.current = null)}
-      onPointerCancel={() => (last.current = null)}
-    />
   )
 }

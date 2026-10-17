@@ -467,3 +467,7 @@ html, body { overscroll-behavior: none; }
   .screen--menu .car-card .ui-stat { display: none; }
   .screen--menu .car-card__head { margin-bottom: 0; }
 }
+
+/* Let drags in the empty parts of the menu bars reach the orbit layer behind them. */
+.menu-top, .menu-bottom { pointer-events: none; }
+.menu-top > *, .menu-bottom > * { pointer-events: auto; }
