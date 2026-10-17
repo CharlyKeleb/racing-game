@@ -109,6 +109,9 @@ export class StreamedTrack implements RaceTrack {
   private backdrop: THREE.Object3D | null = null
   private disposed = false
 
+  private visuals: Promise<void> | null = null
+  private visualsReady = false
+
   private constructor(baseUrl: string, manifest: TrackManifest, opts: LoadOptions) {
     this.baseUrl = baseUrl
     this.manifest = manifest
@@ -148,20 +151,32 @@ export class StreamedTrack implements RaceTrack {
    * Loads everything needed to start racing at the spawn point. Resolves once
    * the car's surroundings are in full detail; the rest streams in while driving.
    */
+  /**
+   * Loads what the race logic needs: manifest, collision and the surface map
+   * (~0.5 MB). Everything you see comes from `loadVisuals`, which boot runs
+   * behind the menu: the garage hides the track, so the menu needn't wait.
+   */
   static async load(manifestUrl: string, opts: LoadOptions): Promise<StreamedTrack> {
     const manifest = await opts.assets.loadJson<TrackManifest>(manifestUrl)
     if (!manifest) throw new Error(`Track manifest missing: ${manifestUrl}`)
     const baseUrl = manifestUrl.slice(0, manifestUrl.lastIndexOf('/') + 1)
     const track = new StreamedTrack(baseUrl, manifest, opts)
-    const progress = opts.onProgress ?? (() => {})
-
-    progress(0.05)
-    await Promise.all([track.loadMaterials(BUDGET[opts.quality].tier), track.loadCollision(), track.loadSurfaces()])
-    progress(0.35)
-    await track.loadBackdrop()
-    progress(0.45)
-    await track.preload(track.spawn.position, (p) => progress(0.45 + p * 0.55))
+    await Promise.all([track.loadCollision(), track.loadSurfaces()])
     return track
+  }
+
+  /** Materials, backdrop and the chunks around the grid. Streaming starts once this is done. */
+  loadVisuals(onProgress: (p: number) => void = () => {}): Promise<void> {
+    this.visuals ??= (async () => {
+      onProgress(0.05)
+      await this.loadMaterials(BUDGET[this.quality].tier)
+      onProgress(0.4)
+      await this.loadBackdrop()
+      onProgress(0.5)
+      await this.preload(this.spawn.position, (p) => onProgress(0.5 + p * 0.5))
+      this.visualsReady = true
+    })()
+    return this.visuals
   }
 
   // ── Setup ───────────────────────────────────────────────────────────────
@@ -305,6 +320,8 @@ export class StreamedTrack implements RaceTrack {
   // ── Streaming ───────────────────────────────────────────────────────────
 
   update(position: THREE.Vector3, velocity: THREE.Vector3, dt: number): void {
+    // Nothing to stream into until the materials are in (see loadVisuals).
+    if (!this.visualsReady) return
     // Integrate at most one finished chunk per frame: GPU upload of a fresh
     // chunk is the main hitch source on mobile.
     const next = this.ready.shift()
@@ -425,6 +442,11 @@ export class StreamedTrack implements RaceTrack {
 
   async setQuality(quality: QualityPreset): Promise<void> {
     if (quality === this.quality) return
+    // Before the visuals load, just remember it: loadVisuals uses this.quality.
+    if (!this.visualsReady) {
+      this.quality = quality
+      return
+    }
     const prevTier = BUDGET[this.quality].tier
     this.quality = quality
     const b = BUDGET[quality]

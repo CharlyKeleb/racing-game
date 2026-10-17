@@ -51,6 +51,11 @@ export class Showroom {
   private dust!: THREE.Points
   private envMap: THREE.Texture | null = null
   private manifest: GarageManifest | null = null
+  /** The loaded room model, which detail it is, and what it owns (freed when swapped). */
+  private room: THREE.Object3D | null = null
+  private roomTier: 'low' | 'high' | null = null
+  private roomDisposables: { dispose(): void }[] = []
+  private wantsHigh = false
   private saved: { fog: THREE.Scene['fog']; background: THREE.Scene['background']; environment: THREE.Texture | null; intensity: number } | null = null
   private active = false
   private time = 0
@@ -76,46 +81,76 @@ export class Showroom {
    * Streams in the garage model for this quality tier. Safe to skip or fail:
    * the showroom then shows a dark floor with the car lit as normal.
    */
+  /**
+   * Bring up the garage for the menu with the light (1.1 MB) model; on High and
+   * Medium, `upgrade()` later swaps in the sharp-textured one (3 MB, same
+   * geometry), so first boot doesn't wait for it.
+   */
   async load(assets: AssetManager, quality: QualityPreset): Promise<void> {
+    this.wantsHigh = quality !== 'low'
     try {
       const manifest = await assets.loadJson<GarageManifest>(MANIFEST_URL)
       if (!manifest) return
-      const base = MANIFEST_URL.slice(0, MANIFEST_URL.lastIndexOf('/') + 1)
-      const gltf = await assets.loadGltf(base + manifest.models[quality === 'low' ? 'low' : 'high'])
-      const room = gltf.scene
-      room.traverse((o) => {
-        const mesh = o as THREE.Mesh
-        if (!mesh.isMesh) return
-        const mat = mesh.material as THREE.MeshBasicMaterial
-        mat.fog = false
-        if (mat.userData.glow) {
-          // Bulb and tube glows on black: add light, never darken or occlude.
-          mat.blending = THREE.AdditiveBlending
-          mat.transparent = true
-          mat.depthWrite = false
-          mesh.renderOrder = 5
-        }
-        this.disposables.push(mesh.geometry, mat)
-        if (mat.map) this.disposables.push(mat.map)
-        o.matrixAutoUpdate = false
-        o.updateMatrix()
-      })
       this.manifest = manifest
-      this.group.add(room)
+      await this.loadRoom(assets, 'low')
       this.fallbackFloor.visible = false
-      if (quality !== 'low') {
+      if (this.wantsHigh) {
         this.buildFloorSheen()
         this.buildShadowCatcher()
-      }
-      // Re-bake reflections from the real room if they were baked from the fallback.
-      if (this.envMap) {
-        this.envMap = this.bakeEnvironment()
-        if (this.active && this.sceneRef) this.sceneRef.environment = this.envMap
       }
     } catch (err) {
       console.warn('[Showroom] garage model unavailable, using a plain floor', err)
     }
   }
+
+  /** Swap in the high-detail room (High / Medium presets). Safe to call any time after load. */
+  async upgrade(assets: AssetManager): Promise<void> {
+    if (!this.wantsHigh || !this.manifest || this.roomTier === 'high') return
+    try {
+      await this.loadRoom(assets, 'high')
+    } catch (err) {
+      console.warn('[Showroom] high-detail garage unavailable, keeping the light one', err)
+    }
+  }
+
+  private async loadRoom(assets: AssetManager, tier: 'low' | 'high'): Promise<void> {
+    const base = MANIFEST_URL.slice(0, MANIFEST_URL.lastIndexOf('/') + 1)
+    const gltf = await assets.loadGltf(base + this.manifest!.models[tier])
+    const room = gltf.scene
+    const owned: { dispose(): void }[] = []
+    room.traverse((o) => {
+      const mesh = o as THREE.Mesh
+      if (!mesh.isMesh) return
+      const mat = mesh.material as THREE.MeshBasicMaterial
+      mat.fog = false
+      if (mat.userData.glow) {
+        // Bulb and tube glows on black: add light, never darken or occlude.
+        mat.blending = THREE.AdditiveBlending
+        mat.transparent = true
+        mat.depthWrite = false
+        mesh.renderOrder = 5
+      }
+      owned.push(mesh.geometry, mat)
+      if (mat.map) owned.push(mat.map)
+      o.matrixAutoUpdate = false
+      o.updateMatrix()
+    })
+    // Replace the previous room, if any, and free it.
+    if (this.room) {
+      this.room.removeFromParent()
+      for (const d of this.roomDisposables) d.dispose()
+    }
+    this.room = room
+    this.roomTier = tier
+    this.roomDisposables = owned
+    this.group.add(room)
+    // Re-bake reflections from the room now in place.
+    if (this.envMap) {
+      this.envMap = this.bakeEnvironment()
+      if (this.active && this.sceneRef) this.sceneRef.environment = this.envMap
+    }
+  }
+
 
   /** Centers the room on the car's spot, facing `heading` (yaw, radians). */
   placeAt(position: THREE.Vector3, heading: number): void {
@@ -412,6 +447,7 @@ export class Showroom {
 
   dispose(): void {
     for (const d of this.disposables) d.dispose()
+    for (const d of this.roomDisposables) d.dispose()
     this.reflector?.dispose()
     this.group.removeFromParent()
   }

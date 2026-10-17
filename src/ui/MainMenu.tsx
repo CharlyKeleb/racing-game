@@ -70,6 +70,8 @@ export function MainMenu() {
 /** Name, class, rank and stats of the current build. Shared by menu and garage. */
 export function CarCard() {
   const name = useGame((s) => s.carName)
+  // Mid-swap the engine still has the old car; name the incoming one, like the picker and specs do.
+  const switching = useGame((s) => s.carSwitching)
   const build = useGame((s) => s.build)
   const carId = useGame((s) => s.settings.car)
   const stock = getCar(carId).stats
@@ -80,7 +82,7 @@ export function CarCard() {
       <div className="car-card__head">
         <ClassBadge value={carClass(rank)} size="lg" />
         <div>
-          <div className="car-card__name">{name || 'Loading…'}</div>
+          <div className="car-card__name">{switching ? getCar(carId).name : name || 'Loading…'}</div>
           <div className="car-card__rank">
             <span className="eyebrow">Rank</span> <b>{rank}</b>
           </div>
