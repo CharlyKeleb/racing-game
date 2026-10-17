@@ -1,8 +1,11 @@
 import { formatTime } from '../racing/LapTimer'
 import { useGame, useTelemetry } from './hooks'
 import { Meter } from './kit'
+import { Minimap } from './Minimap'
+import { Speedometer } from './Speedometer'
 
-const RPM_SEGMENTS = 24
+/** Dial full scale. Comfortably above the 911's ~306 km/h top speed. */
+const DIAL_MAX_KMH = 340
 
 function gearLabel(gear: number): string {
   if (gear < 0) return 'R'
@@ -13,8 +16,6 @@ function gearLabel(gear: number): string {
 export function Hud() {
   const t = useTelemetry((s) => s)
   const phase = useGame((s) => s.phase)
-  const rpmT = Math.min(t.rpm / t.redlineRpm, 1)
-  const lit = Math.round(rpmT * RPM_SEGMENTS)
 
   return (
     <div className={t.nitroActive ? 'hud hud--nitro' : 'hud'}>
@@ -36,7 +37,12 @@ export function Hud() {
           </div>
         </div>
       </div>
-      <div className="hud-fps mono">{t.fps} FPS</div>
+      <div className="hud-tr">
+        <Minimap />
+        <div className="hud-fps mono">{t.fps} FPS</div>
+      </div>
+
+      {t.wrongWay && <div className="hud-wrongway">Wrong way</div>}
 
       {phase === 'countdown' && t.countdown > 0 && (
         <div className="countdown" key={Math.ceil(t.countdown)}>
@@ -45,22 +51,13 @@ export function Hud() {
       )}
 
       <div className="speedo">
-        <div className="speedo__rpm" aria-hidden="true">
-          {Array.from({ length: RPM_SEGMENTS }, (_, i) => (
-            <i key={i} className={i < lit ? (i >= RPM_SEGMENTS - 3 ? 'on red' : 'on') : ''} />
-          ))}
-        </div>
+        <Speedometer speedKmh={t.speedKmh} maxKmh={DIAL_MAX_KMH} rpm={t.rpm} redlineRpm={t.redlineRpm} gear={gearLabel(t.gear)} nitro={t.nitroActive} />
         <Meter
           label="Nitro"
           value={t.nitro}
           state={t.nitroActive ? 'active' : t.nitroReady ? 'ready' : 'empty'}
           hint={t.nitroReady && !t.nitroActive ? <kbd>Shift</kbd> : undefined}
         />
-        <div className="speedo__row">
-          <span className="speedo__gear">{gearLabel(t.gear)}</span>
-          <span className="speedo__speed mono">{Math.round(t.speedKmh)}</span>
-          <span className="speedo__unit">km/h</span>
-        </div>
       </div>
     </div>
   )

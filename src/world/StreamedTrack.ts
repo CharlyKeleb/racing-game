@@ -18,6 +18,8 @@ export interface TrackManifest {
   collision: string
   spawn: { position: [number, number, number]; heading: number }
   checkpoints: { index: number; position: [number, number, number]; tangent: [number, number, number]; radius: number }[]
+  line: [number, number, number][]
+  lineLength: number
   chunks: { id: string; min: [number, number, number]; max: [number, number, number]; lods: { url: string; bytes: number; tris: number }[] }[]
 }
 
@@ -73,6 +75,7 @@ export class StreamedTrack implements RaceTrack {
   readonly group = new THREE.Group()
   readonly checkpoints: Checkpoint[]
   readonly spawn: SpawnPoint
+  readonly line: THREE.Vector3[]
   readonly killY: number
   readonly name: string
   readonly id: string
@@ -119,6 +122,7 @@ export class StreamedTrack implements RaceTrack {
       radius: c.radius,
     }))
     this.spawn = { position: new THREE.Vector3(...manifest.spawn.position), heading: manifest.spawn.heading }
+    this.line = manifest.line.map((p) => new THREE.Vector3(...p))
     this.chunks = manifest.chunks.map((c) => ({
       info: { minX: c.min[0], minZ: c.min[2], maxX: c.max[0], maxZ: c.max[2], lodCount: c.lods.length },
       urls: c.lods.map((l) => baseUrl + l.url),

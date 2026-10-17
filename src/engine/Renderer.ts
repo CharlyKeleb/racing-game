@@ -27,7 +27,7 @@ export class Renderer {
     // Tone mapping is applied by the post stack; see PostFX.
     this.renderer.toneMapping = THREE.NoToneMapping
     this.renderer.shadowMap.enabled = true
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap
+    this.renderer.shadowMap.type = THREE.PCFShadowMap
     container.appendChild(this.renderer.domElement)
 
     // Image-based lighting so PBR car paint has something to reflect.
@@ -52,7 +52,8 @@ export class Renderer {
     this.goodWindows = 0
     this.renderer.setPixelRatio(this.ratio)
     this.renderer.shadowMap.enabled = quality !== 'low'
-    this.renderer.shadowMap.type = quality === 'high' ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap
+    // PCFSoftShadowMap was removed in three r186 (it falls back to PCF anyway).
+    this.renderer.shadowMap.type = THREE.PCFShadowMap
     this.postfxEnabled = postfx
     this.renderer.toneMapping = postfx ? THREE.NoToneMapping : THREE.ACESFilmicToneMapping
     this.resize()

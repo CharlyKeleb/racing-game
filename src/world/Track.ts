@@ -26,6 +26,7 @@ export class Track implements RaceTrack {
   readonly killY = -50
   readonly curve: THREE.CatmullRomCurve3
   readonly checkpoints: Checkpoint[]
+  readonly line: THREE.Vector3[]
   readonly definition: ProceduralTrackDefinition
   private readonly disposables: { dispose(): void }[] = []
 
@@ -44,6 +45,7 @@ export class Track implements RaceTrack {
 
     this.group.add(this.buildGround(), this.buildRoad(def.roadWidth), this.buildKerbs(def.roadWidth), this.buildScenery(def.roadWidth))
     this.checkpoints = this.buildCheckpoints(def)
+    this.line = this.curve.getSpacedPoints(Math.round(this.curve.getLength() / 4)).slice(0, -1)
     this.group.add(this.buildStartLine(def.roadWidth))
   }
 

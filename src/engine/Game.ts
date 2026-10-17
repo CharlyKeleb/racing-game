@@ -1,7 +1,9 @@
 import * as THREE from 'three'
 import { AudioManager } from '../audio/AudioManager'
 import { ChaseCamera, type ShowroomFraming } from '../camera/ChaseCamera'
+import { DirectionGuide } from '../effects/DirectionGuide'
 import { DrivingEffects } from '../effects/DrivingEffects'
+import { TrackProgress } from '../racing/TrackProgress'
 import { InputManager, type InputState } from '../input/InputManager'
 import { RaceManager } from '../racing/RaceManager'
 import { gameStore, type GamePhase, type Settings } from '../stores/gameStore'
@@ -29,6 +31,9 @@ export type ShowroomFocus = 'car' | 'wheel'
 
 const LOCKED_INPUT: InputState = { throttle: 0, brake: 0, steer: 0, handbrake: true, nitro: false }
 const _velocity = new THREE.Vector3()
+const _forward = new THREE.Vector3()
+/** Seconds of driving against the race direction before the HUD says so. */
+const WRONG_WAY_DELAY = 1.2
 
 /**
  * Composition root for one play session. React creates exactly one Game,
@@ -53,6 +58,9 @@ export class Game {
   private livery!: CarLivery
   private showroom!: Showroom
   private effects!: DrivingEffects
+  private guide!: DirectionGuide
+  private progress!: TrackProgress
+  private wrongWayTime = 0
   /** The car as shipped, before garage upgrades. */
   private baseConfig!: VehicleConfig
   private showroomYaw = 0.9
@@ -119,6 +127,7 @@ export class Game {
 
     this.camera = new ChaseCamera(this.renderer.camera)
     this.race = this.createRace()
+    this.attachGuide()
 
     this.applySettings(gameStore.getState().settings)
     telemetryStore.setState({ redlineRpm: config.engine.redlineRpm })
@@ -178,6 +187,22 @@ export class Game {
     })
   }
 
+  /** Direction chevrons + progress tracking + minimap outline for the current track. */
+  private attachGuide(): void {
+    this.guide?.dispose()
+    this.guide = new DirectionGuide(this.track.line)
+    this.progress = new TrackProgress(this.track.line)
+    this.renderer.scene.add(this.guide.group)
+    // ~300 points is plenty for a 160 px map.
+    const step = Math.max(1, Math.floor(this.track.line.length / 300))
+    gameStore.setState({
+      minimap: {
+        points: this.track.line.filter((_, i) => i % step === 0).map((p) => [p.x, p.z]),
+        gates: this.track.checkpoints.map((c) => [c.position.x, c.position.z]),
+      },
+    })
+  }
+
   /** Procedural tracks build instantly; streamed ones load collision + nearby chunks first. */
   private async loadTrack(id: string): Promise<RaceTrack> {
     const def = getTrack(id)
@@ -217,12 +242,14 @@ export class Game {
     if (this.disposed) return this.track.dispose()
     this.renderer.scene.add(this.track.group)
     this.race = this.createRace()
+    this.attachGuide()
     this.showroom.placeAt(this.track.spawn.position, this.track.spawn.heading)
     this.resetCar()
     this.applySettings(gameStore.getState().settings)
+    // The showroom is already active, so it won't re-hide the new track/guide itself.
+    this.track.group.visible = false
+    this.guide.group.visible = false
     setPhase('menu')
-    // Re-apply showroom visibility: the new track group starts visible.
-    this.updateShowroom('menu')
   }
 
   /** Loads the GLB + config from the pipeline, falling back to the placeholder car. */
@@ -307,12 +334,14 @@ export class Game {
   resetCar(): void {
     this.vehicle.respawn(this.track.spawn)
     this.camera.snap()
+    this.progress?.reset()
   }
 
   /** Mid-race reset (R / touch button / falling off the world): back to the last checkpoint. */
   resetToCheckpoint(): void {
     this.vehicle.respawn(this.track.respawnAt(this.race.lastCheckpoint))
     this.camera.snap()
+    this.progress.reset()
   }
 
   /** Feed from the on-screen touch controls. */
@@ -371,6 +400,7 @@ export class Game {
     } else if (phase !== 'paused') {
       this.camera.update(this.vehicle.model.root, this.vehicle.speedKmh, dt, this.vehicle.controller.nitro.intensity)
       this.effects.update(this.vehicle, dt)
+      this.updateGuide(dt)
     }
     this.environment.follow(this.vehicle.position)
     this.showroom.update(dt)
@@ -397,7 +427,20 @@ export class Game {
     }
   }
 
+  private updateGuide(dt: number): void {
+    const p = this.vehicle.position
+    this.progress.update(p.x, p.z)
+    this.guide.update(this.progress, dt)
+    // Wrong way: heading against the centreline while actually moving.
+    const t = this.progress.tangent()
+    _forward.set(0, 0, 1).applyQuaternion(this.vehicle.quaternion)
+    const against = _forward.x * t.x + _forward.z * t.z < -0.4 && this.vehicle.speedKmh > 12
+    this.wrongWayTime = against && gameStore.getState().phase === 'racing' ? this.wrongWayTime + dt : 0
+  }
+
   private publishTelemetry(): void {
+    const q = this.vehicle.quaternion
+    _forward.set(0, 0, 1).applyQuaternion(q)
     const ctrl = this.vehicle.controller
     const t = this.race.timer
     telemetryStore.setState({
@@ -415,6 +458,10 @@ export class Game {
       totalMs: t.totalMs,
       countdown: this.race.countdown,
       fps: this.fps,
+      carX: this.vehicle.position.x,
+      carZ: this.vehicle.position.z,
+      heading: Math.atan2(_forward.x, _forward.z),
+      wrongWay: this.wrongWayTime > WRONG_WAY_DELAY,
     })
   }
 
@@ -422,7 +469,7 @@ export class Game {
   private updateShowroom(phase: GamePhase): void {
     if (!this.showroom) return
     const inShowroom = phase === 'menu' || phase === 'garage'
-    this.showroom.setActive(this.renderer.scene, inShowroom, [this.track.group, this.environment.group, this.effects.group])
+    this.showroom.setActive(this.renderer.scene, inShowroom, [this.track.group, this.environment.group, this.effects.group, this.guide.group])
   }
 
   private applyBuild(build: CarBuild, prev: CarBuild): void {
@@ -459,6 +506,7 @@ export class Game {
     this.audio.dispose()
     this.livery?.dispose()
     this.effects?.dispose()
+    this.guide?.dispose()
     this.showroom?.dispose()
     this.track?.dispose()
     this.environment?.dispose()

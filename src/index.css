@@ -286,18 +286,54 @@ kbd { font-family: inherit; font-size: 11px; padding: 1px 6px; border: 1px solid
 }
 
 .speedo { position: absolute; right: var(--gutter); bottom: var(--gutter); display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
-.speedo__rpm { display: grid; grid-template-columns: repeat(24, 1fr); gap: 3px; width: min(300px, calc(100vw - 2 * var(--gutter))); }
-.speedo__rpm i { height: 10px; background: rgba(255, 255, 255, 0.14); transform: skewX(var(--skew)); }
-.speedo__rpm i.on { background: var(--accent-2); box-shadow: 0 0 10px rgba(25, 195, 255, 0.6); }
-.speedo__rpm i.on.red { background: var(--danger); box-shadow: 0 0 10px rgba(255, 59, 59, 0.7); }
-.speedo__row { display: flex; align-items: flex-end; gap: 10px; }
-.speedo__speed { font-style: italic; font-weight: 900; font-size: 88px; line-height: 0.85; min-width: 3ch; text-align: right; }
-.speedo__unit { font-weight: 700; font-size: 16px; color: var(--muted); text-transform: uppercase; padding-bottom: 6px; }
-.speedo__gear {
-  display: grid; place-items: center; width: 50px; height: 56px; margin-right: 6px;
-  font-style: italic; font-weight: 900; font-size: 40px; color: var(--accent-ink); background: var(--accent);
-  transform: skewX(var(--skew)); text-shadow: none;
+
+/* ── Analog gauge ───────────────────────────────────────────────────── */
+.gauge { width: clamp(150px, 19vw, 230px); aspect-ratio: 1; filter: drop-shadow(0 6px 18px rgba(0, 0, 0, 0.55)); }
+.gauge svg { width: 100%; height: 100%; display: block; overflow: visible; }
+.gauge__bezel { fill: #0b0f17; stroke: rgba(200, 215, 240, 0.35); stroke-width: 2; }
+.gauge__face { fill: rgba(6, 9, 15, 0.86); stroke: rgba(255, 255, 255, 0.06); stroke-width: 1; }
+.gauge__band { fill: none; stroke: rgba(255, 255, 255, 0.08); stroke-width: 2; }
+.gauge__tick { stroke: rgba(255, 255, 255, 0.55); stroke-width: 1.2; }
+.gauge__tick--major { stroke: #fff; stroke-width: 2.4; }
+.gauge__num { fill: #f2f4f8; font-family: var(--font-display); font-weight: 700; font-style: italic; font-size: 12px; text-shadow: none; }
+.gauge__tach-track { fill: none; stroke: rgba(255, 255, 255, 0.1); stroke-width: 5; }
+.gauge__tach-red { fill: none; stroke: rgba(255, 59, 59, 0.75); stroke-width: 5; }
+.gauge__tach-tick { stroke: rgba(255, 255, 255, 0.35); stroke-width: 1; }
+.gauge__tach-fill { fill: none; stroke: var(--accent); stroke-width: 5; stroke-linecap: butt; transition: d 0.08s linear; }
+.gauge--redline .gauge__tach-fill { stroke: var(--danger); }
+.gauge__tach-label { fill: var(--muted); font-family: var(--font-display); font-size: 7px; letter-spacing: 0.12em; text-transform: uppercase; }
+.gauge__needle { transform-origin: 100px 100px; transition: transform 0.09s linear; }
+.gauge__needle polygon { fill: #ff3b1f; filter: drop-shadow(0 0 4px rgba(255, 70, 30, 0.9)); }
+.gauge--nitro .gauge__needle polygon { fill: var(--accent-2); filter: drop-shadow(0 0 6px rgba(25, 195, 255, 1)); }
+.gauge__hub { fill: #0d1119; stroke: rgba(255, 255, 255, 0.18); stroke-width: 1.5; }
+.gauge__speed { fill: #fff; font-family: var(--font-display); font-weight: 900; font-style: italic; font-size: 26px; font-variant-numeric: tabular-nums; }
+.gauge__unit { fill: var(--muted); font-family: var(--font-display); font-weight: 700; font-size: 8px; letter-spacing: 0.14em; text-transform: uppercase; }
+.gauge__gear-box { fill: var(--accent); }
+.gauge--redline .gauge__gear-box { fill: var(--danger); }
+.gauge__gear { fill: var(--accent-ink); font-family: var(--font-display); font-weight: 900; font-style: italic; font-size: 20px; }
+
+/* ── Minimap ────────────────────────────────────────────────────────── */
+.hud-tr { position: absolute; top: var(--gutter); right: var(--gutter); display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.hud-tr .hud-fps { position: static; }
+.minimap {
+  width: clamp(110px, 15vw, 190px); aspect-ratio: 1; padding: 6px;
+  background: var(--glass-flat); border: 1px solid var(--line);
+  clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
 }
+.minimap svg { width: 100%; height: 100%; display: block; }
+.minimap__edge { fill: none; stroke: rgba(0, 0, 0, 0.75); stroke-width: 5; stroke-linejoin: round; }
+.minimap__track { fill: none; stroke: rgba(235, 240, 250, 0.9); stroke-width: 2.4; stroke-linejoin: round; }
+.minimap__start { stroke: var(--accent); stroke-width: 1.6; }
+.minimap__car { transition: transform 0.06s linear; }
+.minimap__car path { fill: var(--accent); stroke: #000; stroke-width: 0.8; filter: drop-shadow(0 0 2px rgba(255, 210, 0, 0.9)); }
+
+/* ── Wrong way ──────────────────────────────────────────────────────── */
+.hud-wrongway {
+  position: absolute; top: 22%; left: 50%; transform: translateX(-50%) skewX(var(--skew));
+  padding: 8px 26px; font-weight: 900; font-style: italic; font-size: clamp(26px, 5vw, 48px); letter-spacing: 0.08em;
+  text-transform: uppercase; color: #141414; background: #ffb000; animation: wrongway 0.6s steps(2) infinite;
+}
+@keyframes wrongway { 50% { opacity: 0.35; } }
 
 /* ── Small screens ──────────────────────────────────────────────────── */
 @media (max-width: 720px) {
@@ -309,7 +345,6 @@ kbd { font-family: inherit; font-size: 11px; padding: 1px 6px; border: 1px solid
   .garage-right { left: var(--gutter); align-items: stretch; }
   .garage-right .car-card { display: none; }
   .ui-btn--lg { height: 54px; font-size: 24px; min-width: 0; }
-  .speedo__speed { font-size: 60px; }
   .hud-lap b { font-size: 30px; }
 }
 
@@ -356,7 +391,12 @@ html, body { overscroll-behavior: none; }
 .touch-icon { width: 46px; height: 46px; font-size: 18px; color: var(--ink); background: rgba(8, 13, 26, 0.55); border: 1px solid var(--line); border-radius: 0; transform: skewX(var(--skew)); }
 
 /* HUD rearranged around the thumbs: speed top-centre, fps under the buttons. */
-.overlay--touch .speedo { top: max(10px, env(safe-area-inset-top)); bottom: auto; right: 50%; transform: translateX(50%) scale(0.72); transform-origin: top center; }
+.overlay--touch .speedo { top: max(6px, env(safe-area-inset-top)); bottom: auto; right: 50%; transform: translateX(50%); align-items: center; }
+.overlay--touch .gauge { width: 118px; }
+.overlay--touch .speedo .ui-meter { width: 118px; }
 .overlay--touch .speedo .ui-meter__hint { display: none; }
-.overlay--touch .hud-fps { top: calc(max(var(--gutter), env(safe-area-inset-top)) + 54px); }
+.overlay--touch .hud-tr { top: max(8px, env(safe-area-inset-top)); right: max(var(--gutter), env(safe-area-inset-right)); }
+.overlay--touch .minimap { width: 96px; }
+/* Touch reset/pause sit left of the minimap. */
+.overlay--touch .touch-top { right: calc(max(var(--gutter), env(safe-area-inset-right)) + 108px); top: max(8px, env(safe-area-inset-top)); }
 .overlay--touch .hud-tl { transform: scale(0.8); transform-origin: top left; }

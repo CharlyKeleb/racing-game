@@ -80,5 +80,11 @@ export default {
     { at: [-560, 2407], dir: [-0.3, 0.95] }, // Coca-Cola Kurve
   ],
   checkpointRadius: 28,
+
+  /** Racing surface the centreline is traced over (excludes service roads). */
+  lineSurface: /^(asph\.003|asph_new|curb_b\.|curbs_new)/,
+  lineSpacing: 4,
+  /** Extra waypoints after gate N, where the shortest road path isn't the circuit. */
+  lineVia: {},
   spawnBehind: 14,
 }

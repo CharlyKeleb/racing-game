@@ -22,6 +22,12 @@ export interface Telemetry {
   totalMs: number
   countdown: number
   fps: number
+  /** Car position on the XZ plane and yaw (0 = facing +Z), for the minimap. */
+  carX: number
+  carZ: number
+  heading: number
+  /** Driving against the race direction for a moment. */
+  wrongWay: boolean
 }
 
 export const initialTelemetry: Telemetry = {
@@ -40,6 +46,10 @@ export const initialTelemetry: Telemetry = {
   totalMs: 0,
   countdown: 0,
   fps: 0,
+  carX: 0,
+  carZ: 0,
+  heading: 0,
+  wrongWay: false,
 }
 
 export const telemetryStore = createStore<Telemetry>()(() => initialTelemetry)

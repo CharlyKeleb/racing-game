@@ -78,6 +78,11 @@ for (let gz = Math.ceil(minZ / step) * step; gz <= maxZ; gz += step) {
   const y = (gz - minZ) * ppm
   svg += `<line x1="0" y1="${y}" x2="${W}" y2="${y}" stroke="#555" stroke-width="1"/><text x="2" y="${y - 2}" fill="#0ff" font-size="11">${gz}</text>`
 }
+if (process.env.LINE) {
+  const fs = await import('node:fs')
+  const pts = JSON.parse(fs.readFileSync(process.env.LINE, 'utf8')).map(([x, z]) => `${((x - minX) * ppm).toFixed(1)},${((z - minZ) * ppm).toFixed(1)}`)
+  svg += `<polyline points="${pts.join(' ')}" fill="none" stroke="#ffb000" stroke-width="3"/>`
+}
 if (process.env.MARKERS) {
   const fs = await import('node:fs')
   for (const [n, g] of JSON.parse(fs.readFileSync(process.env.MARKERS, 'utf8')).entries()) {

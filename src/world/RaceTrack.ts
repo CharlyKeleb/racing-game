@@ -19,6 +19,8 @@ export interface RaceTrack {
   readonly group: THREE.Group
   readonly checkpoints: Checkpoint[]
   readonly spawn: SpawnPoint
+  /** Closed centreline in race direction, ~4 m spacing, point 0 at the start line. */
+  readonly line: THREE.Vector3[]
   /** Below this height the car has fallen out of the world. */
   readonly killY: number
   /** Where to put the car after a reset past checkpoint `index`. */

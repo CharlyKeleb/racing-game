@@ -21,6 +21,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import sharp from 'sharp'
+import { traceCenterline } from './centerline.mjs'
 
 const configPath = process.argv[2]
 if (!configPath) throw new Error('usage: build-track.mjs <config.mjs>')
@@ -121,6 +122,36 @@ if (process.env.GATES_ONLY) {
   await fs.writeFile('.cache/gates.json', JSON.stringify(gates.map((g) => ({ at: g.at, dir: g.dir }))))
   process.exit(0)
 }
+// Centreline for the minimap and in-world direction chevrons. Via points
+// (cfg.lineVia[gateIndex]) force the route where service roads would shortcut.
+const lineWaypoints = gates.flatMap((g, i) => [g.at, ...(cfg.lineVia?.[i] ?? [])])
+const line = traceCenterline(prims, cfg.lineSurface, lineWaypoints, { spacing: cfg.lineSpacing ?? 4 })
+log(`centreline ${line.points.length} points, ${(line.length / 1000).toFixed(2)} km`)
+// Hand-placed gates are approximate (gate 0 originally landed in the pit lane).
+// Snap each onto the traced centreline and take its direction from the line, so
+// gates — and the spawn behind gate 0 — sit mid-track and face exactly along it.
+for (const [gi, g] of gates.entries()) {
+  const pts = line.points
+  let best = 0
+  for (let i = 1; i < pts.length; i++) {
+    if (Math.hypot(pts[i][0] - g.at[0], pts[i][2] - g.at[1]) < Math.hypot(pts[best][0] - g.at[0], pts[best][2] - g.at[1])) best = i
+  }
+  const p = pts[best], a = pts[(best - 2 + pts.length) % pts.length], b = pts[(best + 2) % pts.length]
+  const moved = Math.hypot(p[0] - g.at[0], p[2] - g.at[1])
+  const dir = [b[0] - a[0], b[2] - a[2]]
+  const dot = dir[0] * g.dir[0] + dir[1] * g.dir[1]
+  if (dot <= 0) throw new Error(`gate ${gi}: configured direction disagrees with the centreline — the loop runs backwards?`)
+  g.at = [p[0], p[2]]
+  g.y = p[1]
+  g.dir = dir
+  log(`gate ${gi} → centreline (moved ${moved.toFixed(1)} m)`)
+}
+if (process.env.LINE_ONLY) {
+  await fs.writeFile('.cache/line.json', JSON.stringify(line.points.map(([x, , z]) => [x, z])))
+  await fs.writeFile('.cache/gates.json', JSON.stringify(gates.map((g) => ({ at: g.at, dir: g.dir }))))
+  process.exit(0)
+}
+
 const origin = [gates[0].at[0], gates[0].y, gates[0].at[1]]
 log('origin (start line)', origin.map((v) => v.toFixed(2)))
 for (const pr of prims)
@@ -553,6 +584,12 @@ async function writeMaterials(tier, maxSize) {
 const matBytes = { high: await writeMaterials('high', cfg.textures.high), low: await writeMaterials('low', cfg.textures.low) }
 
 // ── 9. Manifest ────────────────────────────────────────────────────────────
+/** Re-index the closed line so point 0 is the one nearest the start line (the origin). */
+function rotateToStart(pts) {
+  let best = 0
+  for (let i = 1; i < pts.length; i++) if (Math.hypot(pts[i][0], pts[i][2]) < Math.hypot(pts[best][0], pts[best][2])) best = i
+  return [...pts.slice(best), ...pts.slice(0, best)]
+}
 const xzLen = (d) => Math.hypot(d[0], d[1])
 const checkpoints = gates.map((g, index) => {
   const l = xzLen(g.dir)
@@ -577,6 +614,9 @@ const manifest = {
   collision: 'collision.glb',
   spawn: { position: [round(spawnXZ[0]), round((spawnGround?.y ?? 0) + 0.6), round(spawnXZ[1])], heading: round(Math.atan2(t[0], t[2])) },
   checkpoints,
+  // Closed centreline [x, y, z] every ~4 m, starting at the start line, in race direction.
+  line: rotateToStart(line.points.map(([x, y, z]) => [round(x - origin[0]), round(y - origin[1]), round(z - origin[2])])),
+  lineLength: Math.round(line.length),
   chunks: manifestChunks,
   stats: {
     lod0Tris: totals.lod0, lod1Tris: totals.lod1, collisionTris: totals.col,

@@ -29,6 +29,8 @@ export interface GameState {
   trackName: string
   /** 0..1 while a track is loading. */
   loadProgress: number
+  /** Track outline for the minimap: centreline [x, z] pairs, start line first. Set on track load. */
+  minimap: { points: [number, number][]; gates: [number, number][] } | null
   error: string | null
   settings: Settings
   /** Garage customisation, applied by the engine on change. */
@@ -85,6 +87,7 @@ export const gameStore = createStore<GameState>()((set, get) => ({
   carName: '',
   trackName: '',
   loadProgress: 0,
+  minimap: null,
   error: null,
   settings: loadSettings(),
   build: loadBuild(),
