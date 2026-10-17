@@ -1,7 +1,9 @@
 import RAPIER from '@dimforge/rapier3d-compat'
 import * as THREE from 'three'
 import type { SpawnPoint } from '../vehicles/Vehicle'
+import type { Surface } from '../vehicles/Surface'
 import type { RaceTrack, ViewDistance } from './RaceTrack'
+import { SurfaceMap } from './SurfaceMap'
 import type { ProceduralTrackDefinition } from './tracks'
 
 export interface Checkpoint {
@@ -14,6 +16,8 @@ export interface Checkpoint {
 }
 
 const SAMPLES = 600
+/** Kerb ribbon width either side of the road, meters (see buildKerbs). */
+const KERB_WIDTH = 1.2
 const GROUND_SIZE = 1200
 
 /**
@@ -29,6 +33,7 @@ export class Track implements RaceTrack {
   readonly line: THREE.Vector3[]
   readonly definition: ProceduralTrackDefinition
   private readonly disposables: { dispose(): void }[] = []
+  private readonly surfaces: SurfaceMap
 
   constructor(def: ProceduralTrackDefinition, world: RAPIER.World) {
     this.definition = def
@@ -38,8 +43,8 @@ export class Track implements RaceTrack {
       'centripetal',
     )
 
-    // Physics: a single large flat ground. Road and grass share it; grip
-    // differences per surface are a later feature (collider user data).
+    // Physics: a single large flat ground. Road and grass share it; grip per
+    // surface comes from surfaceAt().
     const ground = world.createRigidBody(RAPIER.RigidBodyDesc.fixed())
     world.createCollider(RAPIER.ColliderDesc.cuboid(GROUND_SIZE / 2, 1, GROUND_SIZE / 2).setTranslation(0, -1, 0).setFriction(1), ground)
 
@@ -47,6 +52,11 @@ export class Track implements RaceTrack {
     this.checkpoints = this.buildCheckpoints(def)
     this.line = this.curve.getSpacedPoints(Math.round(this.curve.getLength() / 4)).slice(0, -1)
     this.group.add(this.buildStartLine(def.roadWidth))
+    this.surfaces = SurfaceMap.fromRibbon(this.curve.getSpacedPoints(SAMPLES), def.roadWidth / 2, KERB_WIDTH)
+  }
+
+  surfaceAt(x: number, z: number): Surface {
+    return this.surfaces.at(x, z)
   }
 
   get name(): string {
@@ -136,8 +146,8 @@ export class Track implements RaceTrack {
     const tex = this.track(this.kerbTexture())
     const mat = this.track(new THREE.MeshStandardMaterial({ map: tex, roughness: 0.7 }))
     const g = new THREE.Group()
-    g.add(new THREE.Mesh(this.ribbon(width / 2, width / 2 + 1.2, 0.015, 4), mat))
-    g.add(new THREE.Mesh(this.ribbon(-width / 2 - 1.2, -width / 2, 0.015, 4), mat))
+    g.add(new THREE.Mesh(this.ribbon(width / 2, width / 2 + KERB_WIDTH, 0.015, 4), mat))
+    g.add(new THREE.Mesh(this.ribbon(-width / 2 - KERB_WIDTH, -width / 2, 0.015, 4), mat))
     g.children.forEach((m) => (m.receiveShadow = true))
     return g
   }

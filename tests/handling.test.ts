@@ -1,6 +1,7 @@
 import RAPIER from '@dimforge/rapier3d-compat'
 import { beforeAll, describe, expect, it } from 'vitest'
 import type { InputState } from '../src/input/InputManager'
+import { Surface } from '../src/vehicles/Surface'
 import { DEFAULT_VEHICLE_CONFIG, type VehicleConfig } from '../src/vehicles/VehicleConfig'
 import { VehicleController } from '../src/vehicles/VehicleController'
 
@@ -40,7 +41,7 @@ function spawnCar(cfg: VehicleConfig) {
     world.step()
     return body.angvel().y * (180 / Math.PI)
   }
-  return { ctrl, step }
+  return { ctrl, step, body }
 }
 
 const drive = (steer: number): InputState => ({ throttle: 1, brake: 0, steer, handbrake: false, nitro: false })
@@ -98,5 +99,46 @@ describe('handling smoothness', () => {
     const raw = holdTurn({ ...DEFAULT_VEHICLE_CONFIG, yawStability: 0 })
     const residual = (r: number[]) => Math.abs(r[30])
     expect(residual(assisted.release)).toBeLessThan(residual(raw.release))
+  })
+
+  it('holds a countersteered drift that a full-strength assist would straighten', () => {
+    /** Handbrake flick at ~90 km/h, then opposite lock on throttle; returns the body slip angle (deg). */
+    const driftAngle = (cfg: VehicleConfig) => {
+      const { ctrl, step, body } = spawnCar(cfg)
+      while (ctrl.forwardSpeed < 90 / 3.6) step(drive(0))
+      for (let i = 0; i < 40; i++) step({ throttle: 0, brake: 0, steer: 1, handbrake: true, nitro: false })
+      for (let i = 0; i < 40; i++) step({ throttle: 0.7, brake: 0, steer: -0.5, handbrake: false, nitro: false })
+      const v = body.linvel()
+      const q = body.rotation()
+      // Car forward (+Z) and right (−X) rotated by the body quaternion, in the XZ plane.
+      const fx = 2 * (q.x * q.z + q.w * q.y)
+      const fz = 1 - 2 * (q.x * q.x + q.y * q.y)
+      const along = v.x * fx + v.z * fz
+      const across = v.x * fz - v.z * fx
+      return (Math.atan2(Math.abs(across), Math.abs(along)) * 180) / Math.PI
+    }
+    const drifty = driftAngle({ ...DEFAULT_VEHICLE_CONFIG, driftAssist: 0.2 })
+    const strict = driftAngle({ ...DEFAULT_VEHICLE_CONFIG, driftAssist: 1 })
+    expect(drifty).toBeGreaterThan(15) // still well sideways after 2/3 s of opposite lock
+    expect(drifty).toBeGreaterThan(strict + 4)
+  })
+
+  it('a gravel trap brings the car to a stop far sooner than tarmac', () => {
+    const coastDistance = (surface: Surface) => {
+      const { ctrl, step } = spawnCar(DEFAULT_VEHICLE_CONFIG)
+      while (ctrl.forwardSpeed < 100 / 3.6) step(drive(0))
+      ctrl.surfaceAt = () => surface
+      let d = 0
+      for (let i = 0; i < 60 * 8 && ctrl.forwardSpeed > 1; i++) {
+        step({ throttle: 0, brake: 0, steer: 0, handbrake: false, nitro: false })
+        d += ctrl.forwardSpeed * DT
+      }
+      return { d, speed: ctrl.forwardSpeed }
+    }
+    const sand = coastDistance(Surface.Sand)
+    const road = coastDistance(Surface.Asphalt)
+    expect(sand.speed).toBeLessThan(1) // stopped within 8 s
+    expect(sand.d).toBeLessThan(90)
+    expect(road.d).toBeGreaterThan(sand.d * 2)
   })
 })

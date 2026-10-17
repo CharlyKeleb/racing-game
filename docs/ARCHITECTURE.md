@@ -140,8 +140,21 @@ tick:
    power oversteer. The handbrake scales rear grip down for drifts.
 7. Apply tire impulses slightly above the contact patch to reduce body roll.
 
-Then **aero**: quadratic drag and speed² downforce. The steering angle is
-smoothed and shrinks with speed.
+Each wheel also looks up the **surface** under its contact patch
+(`RaceTrack.surfaceAt` → `Surface.ts`). Grass and gravel traps scale grip down,
+and loose surfaces add heavy rolling drag. The tire model reports `slide`, the
+speed the contact patch actually skids at: past the peak slip angle, locked by
+the handbrake, or spinning under power. ABS braking and grippy cornering read
+zero. Skid marks and smoke key off `slide`, not the friction-circle usage.
+
+Then **aero**: quadratic drag through the centre of mass, and speed² downforce
+split over the axles by `downforceFrontShare`. The steering angle is smoothed and
+shrinks with speed.
+
+The **stability assist** trims yaw beyond what the steering asks for. When the
+car is sideways and the driver countersteers, it backs off to `driftAssist`, so
+a slide can be held on throttle and opposite lock. Past `maxDriftAngle` it comes
+back in full to catch a spin.
 
 The automatic gearbox shifts up at `shiftUpRpm` and down at `shiftDownRpm`.
 Holding brake at a standstill (total speed < 1 m/s) engages reverse, and the

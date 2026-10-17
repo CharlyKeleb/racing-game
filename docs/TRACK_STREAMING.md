@@ -7,10 +7,12 @@ ship to a phone. An offline pipeline turns it into a **streamed package**, and
 
 ```
 ~/Downloads/nurburgring_gp_2022_layout.glb
-        │  npm run build:track   (scripts/track/build-track.mjs + nurburgring.config.mjs, ~7 s)
+        │  npm run build:track   (scripts/track/build-track.mjs + nurburgring.config.mjs, ~7 s,
+        │                         then derive-from-chunks.mjs)
         ▼
 public/models/tracks/nurburgring/
-  track.json            manifest: chunks + bounds, spawn, checkpoints, stats
+  track.json            manifest: chunks + bounds, spawn, checkpoints, centreline, stats
+  surface.bin           surface type per 1 m cell (asphalt, kerb, grass, sand, gravel), RLE   70 KB
   materials_high.glb    93 materials, WebP textures ≤1024   2.4 MB ┐ one is loaded,
   materials_low.glb     same, textures ≤256                 0.7 MB ┘ shared by every chunk
   collision.glb         70k-tri Rapier mesh (road, run-off, barriers, terrain)  0.4 MB
@@ -117,6 +119,21 @@ triangles.
   captures its own pointer, so three-finger steer + gas + nitro works.
 - The viewport is locked (no pinch or double-tap zoom), with `touch-action: none`
   on the canvas and safe-area insets for notches.
+
+## Centreline and surface map (derive-from-chunks.mjs)
+
+`npm run derive:track` works from the shipped LOD0 chunks alone, so it runs
+without the source GLB:
+
+- **Centreline**: traced over `lineSurface` through the gates plus `lineVia`
+  points (source coordinates). It drives the minimap, the roadside corner boards
+  and wrong-way detection. Where the shortest road path between two gates isn't
+  the circuit, add a via point. The Mercedes Arena needed one; without it the
+  line doubled back down the arena's entry road.
+- **Surface map**: the top-most road or ground material per 1 m cell, mapped to
+  `Surface` codes (`src/vehicles/Surface.ts`). Tires read it for grip and rolling
+  drag (gravel traps stop the car), and the effects read it for sand spray and
+  dust. Off the grid counts as open terrain, which drives like grass.
 
 ## Race logic on a real track
 

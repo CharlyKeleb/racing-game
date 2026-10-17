@@ -115,8 +115,19 @@ export interface VehicleConfig {
    * or over-rotating. 0 = off; ~6 feels assisted; handbrake bypasses it.
    */
   yawStability: number
+  /**
+   * Fraction of `yawStability` kept while the driver countersteers a slide,
+   * 0..1. Lower = drifts are easier to hold; 1 = the assist straightens every slide.
+   */
+  driftAssist: number
+  /** Body slip angle (rad) where the assist comes back in full to stop a spin. */
+  maxDriftAngle: number
+  /** Aero drag, N per (m/s)²: ½·ρ·Cd·A (Cd 0.30 × 2.0 m² ≈ 0.37). */
   dragCoefficient: number
+  /** Downforce, N per (m/s)² of forward speed. Negative = lift. */
   downforceCoefficient: number
+  /** Share of downforce on the front axle (aero balance), 0..1. */
+  downforceFrontShare: number
   nitro: NitroConfig
   /** Exhaust tips in car-local space, for nitro flames. Derived from the chassis when absent. */
   exhausts?: [number, number, number][]
@@ -175,8 +186,11 @@ export const DEFAULT_VEHICLE_CONFIG: VehicleConfig = {
   steerFalloffSpeed: 9,
   pedalRate: 6,
   yawStability: 8,
+  driftAssist: 0.3,
+  maxDriftAngle: 0.7,
   dragCoefficient: 0.46,
   downforceCoefficient: 1.6,
+  downforceFrontShare: 0.42,
   nitro: {
     durationSec: 4,
     fillRate: 0.25,

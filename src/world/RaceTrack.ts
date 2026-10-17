@@ -1,5 +1,6 @@
 import type * as THREE from 'three'
 import type { QualityPreset } from '../stores/gameStore'
+import type { Surface } from '../vehicles/Surface'
 import type { SpawnPoint } from '../vehicles/Vehicle'
 import type { Checkpoint } from './Track'
 
@@ -21,6 +22,8 @@ export interface RaceTrack {
   readonly spawn: SpawnPoint
   /** Closed centreline in race direction, ~4 m spacing, point 0 at the start line. */
   readonly line: THREE.Vector3[]
+  /** What the ground is at a world XZ position (tire grip, sand / dust effects). */
+  surfaceAt(x: number, z: number): Surface
   /** Below this height the car has fallen out of the world. */
   readonly killY: number
   /** Where to put the car after a reset past checkpoint `index`. */

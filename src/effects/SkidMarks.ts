@@ -1,11 +1,15 @@
 import * as THREE from 'three'
+import { surfaceProps } from '../vehicles/Surface'
 import type { WheelState } from '../vehicles/VehicleController'
 
 const MAX_SEGMENTS = 2400
-/** Slip (0..1) where marks start; full darkness at slip 1. */
-const SLIP_THRESHOLD = 0.6
-/** Sideways speed (m/s) needed too, so traction-limited launches don't paint the straight. */
-const MIN_SLIDE = 1
+/**
+ * Sliding speed of the contact patch (m/s, WheelState.slide) where marks start
+ * and where they're darkest. A tire cornering hard but within its grip doesn't
+ * slide, so it leaves nothing: marks mean a real slide, lock-up or wheelspin.
+ */
+const MIN_SLIDE = 1.2
+const FULL_SLIDE = 8
 const MAX_OPACITY = 0.55
 /** Seconds a mark stays before it finishes fading out. */
 const LIFETIME = 24
@@ -134,7 +138,8 @@ export class SkidMarks {
         right: new THREE.Vector3(),
         alpha: 0,
       })
-      if (!w.grounded || w.slip < SLIP_THRESHOLD || w.slide < MIN_SLIDE) {
+      // Rubber only marks tarmac; loose surfaces throw spray instead.
+      if (!w.grounded || w.slide < MIN_SLIDE || surfaceProps(w.surface).loose > 0) {
         trail.active = false
         continue
       }
@@ -157,7 +162,7 @@ export class SkidMarks {
         continue
       }
 
-      const alpha = MAX_OPACITY * Math.min(1, (w.slip - SLIP_THRESHOLD) / (1 - SLIP_THRESHOLD) + 0.25)
+      const alpha = MAX_OPACITY * Math.min(1, 0.2 + (0.8 * (w.slide - MIN_SLIDE)) / (FULL_SLIDE - MIN_SLIDE))
       const half = w.cfg.width * 0.45
       _side.set(-dz / len, 0, dx / len).multiplyScalar(half)
       if (!trail.hasEdges) {

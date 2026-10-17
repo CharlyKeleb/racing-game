@@ -55,6 +55,17 @@ export class AssetManager {
     }
   }
 
+  /** Raw bytes, or null when missing. */
+  async loadBinary(url: string): Promise<Uint8Array | null> {
+    try {
+      const res = await fetch(url)
+      if (!res.ok || res.headers.get('content-type')?.includes('text/html')) return null
+      return new Uint8Array(await res.arrayBuffer())
+    } catch {
+      return null
+    }
+  }
+
   /** Cheap existence check so we can fall back to placeholder assets quietly. */
   async exists(url: string): Promise<boolean> {
     try {

@@ -46,8 +46,10 @@ export function Minimap() {
         <polygon className="minimap__edge" points={fit.path} />
         <polygon className="minimap__track" points={fit.path} />
         <line className="minimap__start" {...fit.startLine} />
-        <g className="minimap__car" style={{ transform: `translate(${cx}px, ${cz}px) rotate(${deg}deg)` }}>
-          <path d="M0,-5 L3.6,4 L0,2.2 L-3.6,4 Z" />
+        {/* Only the position glides: a transition on the rotation would spin the
+            marker the long way round whenever the heading wraps past ±180°. */}
+        <g className="minimap__car" style={{ transform: `translate(${cx}px, ${cz}px)` }}>
+          <path d="M0,-5 L3.6,4 L0,2.2 L-3.6,4 Z" transform={`rotate(${deg.toFixed(1)})`} />
         </g>
       </svg>
     </div>

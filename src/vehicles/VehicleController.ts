@@ -3,6 +3,7 @@ import * as THREE from 'three'
 import type { InputState } from '../input/InputManager'
 import { Drivetrain, type GearRequest } from './Drivetrain'
 import { Nitro } from './Nitro'
+import { Surface, surfaceProps } from './Surface'
 import { Suspension } from './Suspension'
 import { computeTireForces } from './TirePhysics'
 import type { VehicleConfig, WheelConfig } from './VehicleConfig'
@@ -15,13 +16,15 @@ export interface WheelState {
   contactPoint: THREE.Vector3
   /** Accumulated roll angle for the visual wheel, radians. */
   spin: number
-  /** 0..1, for skid marks / tire squeal. */
+  /** 0..1 use of the friction circle, for nitro fill and tire squeal. */
   slip: number
   /**
-   * Sideways speed of the contact patch, m/s. Slip alone is high under hard
-   * straight-line acceleration too; effects use this to tell an actual slide.
+   * Speed the contact patch is actually sliding at, m/s (see TireOutput.slide).
+   * Zero in normal grippy cornering, so skid marks and smoke mean a real slide.
    */
   slide: number
+  /** What the tire is on, for grip and for sand / dust effects. */
+  surface: Surface
 }
 
 // Scratch objects — the controller runs at 60 Hz, so avoid per-tick allocation.
@@ -36,6 +39,8 @@ const _mount = new THREE.Vector3()
 const _vel = new THREE.Vector3()
 const _impulse = new THREE.Vector3()
 const _point = new THREE.Vector3()
+/** Body slip angle (rad) above which a countersteered slide counts as a drift. */
+const DRIFT_MIN_ANGLE = 0.1
 const _ray = new RAPIER.Ray({ x: 0, y: 0, z: 0 }, { x: 0, y: -1, z: 0 })
 
 /** Moves `value` toward `target` by at most `step`. */
@@ -55,6 +60,8 @@ export class VehicleController {
   steerAngle = 0
   /** Signed forward speed of the chassis, m/s. */
   forwardSpeed = 0
+  /** Ground type under a world XZ point; the track sets this. Default: all asphalt. */
+  surfaceAt: (x: number, z: number) => Surface = () => Surface.Asphalt
   /** Pedals after ramping, 0..1. Keyboards are on/off; this fades them in over ~1/pedalRate s. */
   private throttle = 0
   private brake = 0
@@ -64,6 +71,9 @@ export class VehicleController {
   /** Chassis yaw inertia (matches Vehicle's box inertia) and front-to-rear axle distance. */
   private readonly yawInertia: number
   private readonly wheelbase: number
+  /** Axle positions along the car (local Z), where downforce acts. */
+  private readonly frontAxleZ: number
+  private readonly rearAxleZ: number
   private readonly cfg: VehicleConfig
   private readonly body: RAPIER.RigidBody
   private readonly world: RAPIER.World
@@ -78,6 +88,8 @@ export class VehicleController {
     this.yawInertia = (cfg.massKg / 3) * (hx * hx + hz * hz)
     const zs = cfg.wheels.map((w) => w.position[2])
     this.wheelbase = Math.max(1, Math.max(...zs) - Math.min(...zs))
+    this.frontAxleZ = Math.max(...zs)
+    this.rearAxleZ = Math.min(...zs)
     // Split drive between axles: front = +Z. With both axles driven, the front
     // gets frontDriveShare; otherwise the driven axle takes everything.
     const zMid = (Math.max(...zs) + Math.min(...zs)) / 2
@@ -97,6 +109,7 @@ export class VehicleController {
       spin: 0,
       slip: 0,
       slide: 0,
+      surface: Surface.Asphalt,
     }))
   }
 
@@ -186,6 +199,8 @@ export class VehicleController {
       }
 
       w.contactPoint.copy(_mount).addScaledVector(_up, -hit.timeOfImpact)
+      w.surface = this.surfaceAt(w.contactPoint.x, w.contactPoint.z)
+      const ground = surfaceProps(w.surface)
 
       // Suspension pushes the chassis along its up axis.
       _impulse.copy(_up).multiplyScalar(load * dt)
@@ -220,11 +235,13 @@ export class VehicleController {
           handbrake: wc.handbrake && input.handbrake,
           massShare,
           dt,
+          surfaceGrip: ground.grip,
+          surfaceDrag: ground.drag,
         },
         cfg.tires,
       )
       w.slip = tire.slip
-      w.slide = Math.abs(vLat)
+      w.slide = tire.slide
 
       // Apply tire forces slightly above the contact patch to tame body roll.
       _point.copy(w.contactPoint).addScaledVector(_up, wc.radius * 0.6)
@@ -237,7 +254,7 @@ export class VehicleController {
       w.spin += (vLong / wc.radius) * dt
     }
 
-    this.applyStabilityAssist(input.handbrake, speed, dt)
+    this.applyStabilityAssist(input.handbrake, speed, lv, dt)
 
     // Nitro is thrust at the center of mass, not tire force: the rears are
     // already near their grip limit under power, so routing it through the
@@ -247,13 +264,20 @@ export class VehicleController {
       body.applyImpulse(_impulse, true)
     }
 
-    // Aerodynamics: quadratic drag + downforce.
+    // Aerodynamics: quadratic drag through the centre of mass, downforce
+    // (from airflow along the car, so forward speed) split over the axles by
+    // the car's aero balance — a rear wing pins the rear, not the middle.
     _vel.set(lv.x, lv.y, lv.z)
     const v2 = _vel.lengthSq()
     if (v2 > 0.01) {
       _impulse.copy(_vel).normalize().multiplyScalar(-cfg.dragCoefficient * this.nitro.dragScale * v2 * dt)
-      _impulse.addScaledVector(_up, -cfg.downforceCoefficient * this.forwardSpeed * this.forwardSpeed * dt)
       body.applyImpulse(_impulse, true)
+      const down = cfg.downforceCoefficient * this.forwardSpeed * this.forwardSpeed * dt
+      const comY = cfg.centerOfMass[1]
+      _point.set(0, comY, this.frontAxleZ).applyQuaternion(_q).add(_pos)
+      body.applyImpulseAtPoint(_impulse.copy(_up).multiplyScalar(-down * cfg.downforceFrontShare), _point, true)
+      _point.set(0, comY, this.rearAxleZ).applyQuaternion(_q).add(_pos)
+      body.applyImpulseAtPoint(_impulse.copy(_up).multiplyScalar(-down * (1 - cfg.downforceFrontShare)), _point, true)
     }
   }
 
@@ -261,17 +285,31 @@ export class VehicleController {
    * ESC-style yaw trim. The bicycle model gives the yaw rate the steering asks
    * for (v·tanδ/L), capped by what the tires can hold (μg/v). Rotation beyond
    * that, or against it, is damped back; understeer is left alone.
+   *
+   * Drifts: once the car is travelling sideways and the driver countersteers,
+   * the assist backs off to `driftAssist` so the slide can be held and steered
+   * on throttle and opposite lock — until the angle passes `maxDriftAngle`,
+   * where it comes back in full to catch a spin (like a sport-mode ESC).
    */
-  private applyStabilityAssist(handbrake: boolean, speed: number, dt: number): void {
-    const rate = this.cfg.yawStability
+  private applyStabilityAssist(handbrake: boolean, speed: number, lv: RAPIER.Vector, dt: number): void {
+    const cfg = this.cfg
+    let rate = cfg.yawStability
     if (rate <= 0 || handbrake || speed < 3) return
     const yaw = this.body.angvel()
     const yawRate = yaw.x * _up.x + yaw.y * _up.y + yaw.z * _up.z
-    const gripLimit = (this.cfg.tires.grip * 9.81 * 1.15) / speed
+    const gripLimit = (cfg.tires.grip * 9.81 * 1.15) / speed
     const wanted = (this.forwardSpeed * Math.tan(this.steerAngle)) / this.wheelbase
     const target = Math.max(-gripLimit, Math.min(gripLimit, wanted))
     const excess = yawRate - Math.max(Math.min(0, target), Math.min(Math.max(0, target), yawRate))
     if (excess === 0) return
+
+    const sideways = Math.abs(lv.x * _right.x + lv.y * _right.y + lv.z * _right.z)
+    const driftAngle = Math.atan2(sideways, Math.abs(this.forwardSpeed))
+    const countersteering = wanted * yawRate < 0
+    if (countersteering && driftAngle > DRIFT_MIN_ANGLE) {
+      const t = Math.min(1, Math.max(0, (driftAngle - cfg.maxDriftAngle * 0.8) / (cfg.maxDriftAngle * 0.2)))
+      rate *= cfg.driftAssist + (1 - cfg.driftAssist) * t
+    }
     const k = 1 - Math.exp(-rate * dt)
     _impulse.copy(_up).multiplyScalar(-excess * this.yawInertia * k)
     this.body.applyTorqueImpulse(_impulse, true)
@@ -287,6 +325,7 @@ export class VehicleController {
       w.suspension.reset()
       w.slip = 0
       w.slide = 0
+      w.surface = Surface.Asphalt
     }
   }
 }

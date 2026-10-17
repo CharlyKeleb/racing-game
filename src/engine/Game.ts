@@ -16,6 +16,7 @@ import { Vehicle } from '../vehicles/Vehicle'
 import { resolveVehicleConfig, type VehicleConfig } from '../vehicles/VehicleConfig'
 import { Environment } from '../world/Environment'
 import type { RaceTrack } from '../world/RaceTrack'
+import { measureRoadEdges } from '../world/SurfaceMap'
 import { Showroom } from '../world/Showroom'
 import { StreamedTrack } from '../world/StreamedTrack'
 import { Track } from '../world/Track'
@@ -114,6 +115,7 @@ export class Game {
     gameStore.setState({ carName: base.name })
     const config = applyCarBuild(base, build)
     this.vehicle = new Vehicle(config, model, this.physics.world, this.track.spawn)
+    this.vehicle.controller.surfaceAt = (x, z) => this.track.surfaceAt(x, z)
     this.livery = new CarLivery(model)
     this.livery.apply(build)
     scene.add(model.root)
@@ -187,10 +189,11 @@ export class Game {
     })
   }
 
-  /** Direction chevrons + progress tracking + minimap outline for the current track. */
+  /** Roadside corner boards + progress tracking + minimap outline for the current track. */
   private attachGuide(): void {
     this.guide?.dispose()
-    this.guide = new DirectionGuide(this.track.line)
+    const edges = measureRoadEdges(this.track.line, (x, z) => this.track.surfaceAt(x, z))
+    this.guide = new DirectionGuide(this.track.line, edges)
     this.progress = new TrackProgress(this.track.line)
     this.renderer.scene.add(this.guide.group)
     // ~300 points is plenty for a 160 px map.
@@ -481,6 +484,7 @@ export class Game {
     this.physics.world.removeRigidBody(this.vehicle.body)
     const config = applyCarBuild(this.baseConfig, build)
     this.vehicle = new Vehicle(config, model, this.physics.world, this.track.spawn)
+    this.vehicle.controller.surfaceAt = (x, z) => this.track.surfaceAt(x, z)
     telemetryStore.setState({ redlineRpm: config.engine.redlineRpm })
     this.vehicle.render(1)
   }

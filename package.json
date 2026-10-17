@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "typecheck": "tsc -b",
-    "build:track": "node scripts/track/build-track.mjs scripts/track/nurburgring.config.mjs",
+    "build:track": "node scripts/track/build-track.mjs scripts/track/nurburgring.config.mjs && npm run derive:track",
+    "derive:track": "node scripts/track/derive-from-chunks.mjs scripts/track/nurburgring.config.mjs",
     "build:car-lod": "gltf-transform simplify public/models/cars/porsche911/porsche911.glb .cache/p_low.glb --ratio 0.25 --error 0.002 && gltf-transform meshopt .cache/p_low.glb public/models/cars/porsche911/porsche911_low.glb"
   },
   "dependencies": {

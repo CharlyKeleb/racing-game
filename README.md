@@ -45,6 +45,7 @@ placeholder car with the same node names and physics.
 | `npm test` | Vitest (physics, race rules, loop) |
 | `npm run lint` | oxlint |
 | `npm run build:track` | Rebuild the streamed Nürburgring package from the source GLB |
+| `npm run derive:track` | Re-trace the centreline and surface map from the shipped chunks (no source GLB needed) |
 | `npm run build:car-lod` | Rebuild the low-poly Porsche for the Low preset |
 
 ## Docs

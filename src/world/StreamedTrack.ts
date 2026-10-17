@@ -2,8 +2,10 @@ import RAPIER from '@dimforge/rapier3d-compat'
 import * as THREE from 'three'
 import type { AssetManager } from '../engine/AssetManager'
 import type { QualityPreset } from '../stores/gameStore'
+import { Surface } from '../vehicles/Surface'
 import type { SpawnPoint } from '../vehicles/Vehicle'
 import type { RaceTrack, ViewDistance } from './RaceTrack'
+import { decodeSurfaceRle, SurfaceMap, type SurfaceGridInfo } from './SurfaceMap'
 import { NOT_LOADED, planLods, type ChunkInfo, type StreamRadii } from './streaming/ChunkPlanner'
 import type { Checkpoint } from './Track'
 
@@ -20,6 +22,8 @@ export interface TrackManifest {
   checkpoints: { index: number; position: [number, number, number]; tangent: [number, number, number]; radius: number }[]
   line: [number, number, number][]
   lineLength: number
+  /** Surface-type grid (scripts/track/derive-from-chunks.mjs). Absent: everything reads as asphalt. */
+  surface?: SurfaceGridInfo
   chunks: { id: string; min: [number, number, number]; max: [number, number, number]; lods: { url: string; bytes: number; tris: number }[] }[]
 }
 
@@ -99,6 +103,7 @@ export class StreamedTrack implements RaceTrack {
   private inFlight = 0
   private planTimer = 0
   private body: RAPIER.RigidBody | null = null
+  private surfaces: SurfaceMap | null = null
   private backdrop: THREE.Object3D | null = null
   private disposed = false
 
@@ -149,7 +154,7 @@ export class StreamedTrack implements RaceTrack {
     const progress = opts.onProgress ?? (() => {})
 
     progress(0.05)
-    await Promise.all([track.loadMaterials(BUDGET[opts.quality].tier), track.loadCollision()])
+    await Promise.all([track.loadMaterials(BUDGET[opts.quality].tier), track.loadCollision(), track.loadSurfaces()])
     progress(0.35)
     await track.loadBackdrop()
     progress(0.45)
@@ -258,6 +263,17 @@ export class StreamedTrack implements RaceTrack {
       this.world.createCollider(desc, this.body!)
       mesh.geometry.dispose()
     })
+  }
+
+  private async loadSurfaces(): Promise<void> {
+    const info = this.manifest.surface
+    if (!info) return
+    const bytes = await this.assets.loadBinary(this.baseUrl + info.url)
+    if (bytes) this.surfaces = new SurfaceMap(info, decodeSurfaceRle(bytes, info.width * info.height))
+  }
+
+  surfaceAt(x: number, z: number): Surface {
+    return this.surfaces ? this.surfaces.at(x, z) : Surface.Asphalt
   }
 
   private async loadBackdrop(): Promise<void> {

@@ -85,6 +85,10 @@ export default {
   lineSurface: /^(asph\.003|asph_new|curb_b\.|curbs_new)/,
   lineSpacing: 4,
   /** Extra waypoints after gate N, where the shortest road path isn't the circuit. */
-  lineVia: {},
+  lineVia: {
+    // Mercedes Arena: without this the path doubles back down the entry road
+    // instead of running round the loop, and the minimap shows a dead-end spur.
+    1: [[-1369, 2880]],
+  },
   spawnBehind: 14,
 }
