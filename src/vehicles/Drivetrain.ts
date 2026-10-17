@@ -3,6 +3,9 @@ import type { EngineConfig } from './VehicleConfig'
 /** -1 = reverse, 0 = neutral, 1..n = forward gears. */
 export type Gear = number
 
+/** Direction the player asks for at a standstill: -1 reverse, 1 forward, 0 no change. */
+export type GearRequest = -1 | 0 | 1
+
 const RPM_PER_RAD_S = 60 / (2 * Math.PI)
 
 export function torqueAt(rpm: number, curve: [number, number][]): number {
@@ -43,15 +46,17 @@ export class Drivetrain {
 
   /**
    * @param wheelSpeed forward speed of the driven wheels, m/s (signed).
-   * @param throttle 0..1
-   * @param wantsReverse true when the player holds brake at (near) standstill.
+   * @param throttle 0..1, the pedal driving the current direction (brake in reverse).
+   * @param request -1 when the player holds brake at (near) standstill, 1 when
+   *   they hold throttle there. Separate from `throttle` because the pedals swap
+   *   in reverse: the throttle pedal brakes, so it must still be able to ask for 1st.
    * @returns total longitudinal force at the contact patches of driven wheels, N.
    */
-  update(wheelSpeed: number, wheelRadius: number, throttle: number, wantsReverse: boolean, dt: number): number {
+  update(wheelSpeed: number, wheelRadius: number, throttle: number, request: GearRequest, dt: number): number {
     const cfg = this.cfg
 
-    if (wantsReverse && this.gear > 0 && Math.abs(wheelSpeed) < 1) this.gear = -1
-    if (!wantsReverse && this.gear < 0 && throttle > 0 && Math.abs(wheelSpeed) < 1) this.gear = 1
+    if (request < 0 && this.gear > 0 && Math.abs(wheelSpeed) < 1) this.gear = -1
+    if (request > 0 && this.gear < 0 && Math.abs(wheelSpeed) < 1) this.gear = 1
 
     const ratio = this.ratio(this.gear) * cfg.finalDrive
     const wheelRpm = (Math.abs(wheelSpeed) / wheelRadius) * RPM_PER_RAD_S

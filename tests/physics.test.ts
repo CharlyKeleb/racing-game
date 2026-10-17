@@ -15,20 +15,36 @@ describe('torqueAt', () => {
 describe('Drivetrain', () => {
   it('pushes forward in first gear with throttle', () => {
     const d = new Drivetrain(cfg.engine)
-    expect(d.update(0, 0.36, 1, false, 1 / 60)).toBeGreaterThan(0)
+    expect(d.update(0, 0.36, 1, 0, 1 / 60)).toBeGreaterThan(0)
   })
 
   it('engages reverse at standstill and pushes backward', () => {
     const d = new Drivetrain(cfg.engine)
-    d.update(0, 0.36, 1, true, 1 / 60)
+    d.update(0, 0.36, 1, -1, 1 / 60)
     expect(d.gear).toBe(-1)
-    expect(d.update(0, 0.36, 1, true, 1)).toBeLessThan(0)
+    expect(d.update(0, 0.36, 1, -1, 1)).toBeLessThan(0)
+  })
+
+  it('goes back to first from reverse when asked, even with no drive pedal', () => {
+    // In reverse the brake pedal drives, so pressing throttle sends throttle 0 here.
+    const d = new Drivetrain(cfg.engine)
+    d.update(0, 0.36, 1, -1, 1 / 60)
+    d.update(-0.5, 0.36, 0, 1, 1 / 60)
+    expect(d.gear).toBe(1)
+    expect(d.update(0, 0.36, 1, 0, 1)).toBeGreaterThan(0)
+  })
+
+  it('stays in reverse while still rolling backward', () => {
+    const d = new Drivetrain(cfg.engine)
+    d.update(0, 0.36, 1, -1, 1 / 60)
+    d.update(-3, 0.36, 0, 1, 1 / 60)
+    expect(d.gear).toBe(-1)
   })
 
   it('upshifts past the shift point', () => {
     const d = new Drivetrain(cfg.engine)
     // ~25 m/s in first is well past 7700 rpm
-    d.update(25, 0.36, 1, false, 1 / 60)
+    d.update(25, 0.36, 1, 0, 1 / 60)
     expect(d.gear).toBe(2)
   })
 })

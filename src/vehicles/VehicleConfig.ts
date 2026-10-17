@@ -91,6 +91,11 @@ export interface VehicleConfig {
   suspension: SuspensionConfig
   tires: TireConfig
   engine: EngineConfig
+  /**
+   * Share of drive force sent to the front axle when both axles have driven
+   * wheels (AWD), 0..1. Ignored for RWD/FWD cars.
+   */
+  frontDriveShare: number
   /** Total brake force across all wheels, N. */
   brakeForce: number
   handbrakeForce: number
@@ -161,6 +166,7 @@ export const DEFAULT_VEHICLE_CONFIG: VehicleConfig = {
     shiftDownRpm: 3600,
     shiftTimeSec: 0.12,
   },
+  frontDriveShare: 0.4,
   brakeForce: 22000,
   handbrakeForce: 9000,
   maxSteerAngle: 0.55,
@@ -169,7 +175,7 @@ export const DEFAULT_VEHICLE_CONFIG: VehicleConfig = {
   steerFalloffSpeed: 9,
   pedalRate: 6,
   yawStability: 8,
-  dragCoefficient: 0.38,
+  dragCoefficient: 0.46,
   downforceCoefficient: 1.6,
   nitro: {
     durationSec: 4,
