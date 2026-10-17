@@ -202,7 +202,8 @@ export class Vehicle {
       this.roll += this.rollVel * h
       this.model.body.rotation.set(this.pitch, 0, this.roll)
 
-      const glowTarget = this.controller.braking > 0.05 ? 2.4 : 0.3 // brake lights vs running lights
+      // Kept near 1: ACES tone mapping washes brighter emissive out toward white.
+      const glowTarget = this.controller.braking > 0.05 ? 1.3 : 0.15 // brake lights vs running lights
       this.brakeGlow += (glowTarget - this.brakeGlow) * (1 - Math.exp(-25 * h))
       for (const mat of this.taillights) mat.emissiveIntensity = this.brakeGlow
     }
