@@ -86,6 +86,13 @@ export class Game {
   /** The car as shipped, before garage upgrades. */
   private baseConfig!: VehicleConfig
   private carId = ''
+  /** The current track's visuals load (see init); Race waits on it if pressed early. */
+  private trackVisuals: Promise<void> | null = null
+  private trackVisualsDone = false
+  private trackProgress = 0
+  private trackLoadToken = 0
+  private raceQueued = false
+  private raceLoadingTick: ReturnType<typeof setInterval> | null = null
   /** Bumped per car switch, so a slow load can't install over a newer pick. */
   private carSwapToken = 0
   /** Garage car swap in progress: the car drives off ('out') or arrives ('in'), drawn only — physics stays parked. */
@@ -133,25 +140,48 @@ export class Game {
     })
   }
 
+  /**
+   * Boot. The menu only shows the garage and the car, so that's all it waits
+   * for: the car and garage downloads start at once, alongside Rapier and the
+   * track's physics core (manifest, collision, surfaces: ~0.5 MB). The track's
+   * visuals (materials, scenery, chunks) load behind the menu; Race waits for
+   * them only if it's pressed first. Other cars preload after that.
+   */
   async init(carId = gameStore.getState().settings.car): Promise<void> {
-    gameStore.getState().setPhase('loading')
-    await initRapier()
-    if (this.disposed) return
+    const { setPhase } = gameStore.getState()
+    setPhase('loading')
+    performance.mark('boot:start')
+    const settings = gameStore.getState().settings
+    const progress = (p: number) => gameStore.setState({ loadProgress: p })
+    gameStore.setState({ trackName: getTrack(settings.track).name })
+    progress(0.05)
 
+    // Downloads that don't need physics start now, in parallel.
+    const carLoad = this.loadCar(carId)
+    this.showroom = new Showroom(this.renderer.renderer)
+    const garageLoad = this.showroom.load(this.assets, settings.quality)
+
+    await initRapier()
+    performance.measure('boot:rapier', 'boot:start')
+    if (this.disposed) return
     this.physics = new PhysicsWorld()
     const scene = this.renderer.scene
 
     this.environment = new Environment(this.renderer.renderer)
-    this.environment.setTimeOfDay(gameStore.getState().settings.timeOfDay)
+    this.environment.setTimeOfDay(settings.timeOfDay)
     scene.add(this.environment.group)
     this.environment.apply(scene)
 
-    this.track = await this.loadTrack(gameStore.getState().settings.track)
+    this.track = await this.loadTrackCore(settings.track)
     if (this.disposed) return
     scene.add(this.track.group)
+    performance.measure('boot:track', 'boot:start')
+    progress(0.3)
 
-    const { config: base, model } = await this.loadCar(carId)
+    const { config: base, model } = await carLoad
     if (this.disposed) return
+    performance.measure('boot:car', 'boot:start')
+    progress(0.6)
     const entry = getCar(carId)
     this.carId = entry.id
     this.audio.setCarAudio(entry.audioUrl, entry.firingPerRev)
@@ -169,11 +199,12 @@ export class Game {
     scene.add(this.effects.group)
 
     const spawn = this.track.spawn
-    this.showroom = new Showroom(this.renderer.renderer)
     this.showroom.placeAt(spawn.position, spawn.heading)
     scene.add(this.showroom.group)
-    await this.showroom.load(this.assets, gameStore.getState().settings.quality)
+    await garageLoad
     if (this.disposed) return
+    performance.measure('boot:garage', 'boot:start')
+    progress(0.9)
 
     this.camera = new ChaseCamera(this.renderer.camera)
     this.race = this.createRace()
@@ -183,9 +214,26 @@ export class Game {
     telemetryStore.setState({ redlineRpm: config.engine.redlineRpm })
     this.vehicle.render(1)
     this.loop.start()
-    gameStore.getState().setPhase('menu')
-    void this.preloadCars()
+    setPhase('menu')
+    performance.measure('boot:menu', 'boot:start')
     if (import.meta.env.DEV) (window as unknown as { __game: Game }).__game = this
+
+    const bootToken = this.trackLoadToken
+    // Behind the menu: the track's visuals first (Race needs them), then the
+    // sharp garage textures, then the other cars.
+    void this.loadTrackVisuals()
+      .then(async () => {
+        if (this.disposed || this.trackLoadToken !== bootToken) return
+        performance.measure('boot:trackVisuals', 'boot:start')
+        await this.showroom.upgrade(this.assets)
+        performance.measure('boot:garageHigh', 'boot:start')
+        await this.preloadCars()
+      })
+      .catch((err: unknown) => {
+        if (!this.disposed && this.trackLoadToken === bootToken) {
+          gameStore.getState().setError(err instanceof Error ? err.message : String(err))
+        }
+      })
   }
 
   /**
@@ -266,26 +314,53 @@ export class Game {
     })
   }
 
-  /** Procedural tracks build instantly; streamed ones load collision + nearby chunks first. */
+  /** A track ready to race and see (track switching): core, then visuals. */
   private async loadTrack(id: string): Promise<RaceTrack> {
-    const def = getTrack(id)
-    gameStore.setState({ loadProgress: 0, trackName: def.name })
-    let track: RaceTrack
-    if (def.kind === 'procedural') {
-      track = new Track(def, this.physics.world)
-    } else {
-      track = await StreamedTrack.load(def.manifestUrl, {
-        assets: this.assets,
-        renderer: this.renderer.renderer,
-        camera: this.renderer.camera,
-        scene: this.renderer.scene,
-        world: this.physics.world,
-        quality: gameStore.getState().settings.quality,
-        onProgress: (p) => gameStore.setState({ loadProgress: p }),
-      })
+    gameStore.setState({ loadProgress: 0 })
+    const track = await this.loadTrackCore(id)
+    try {
+      await track.loadVisuals?.((p) => gameStore.setState({ loadProgress: p }))
+    } catch (err) {
+      track.dispose()
+      throw err
     }
+    this.trackVisuals = Promise.resolve()
+    this.trackVisualsDone = true
     gameStore.setState({ loadProgress: 1 })
     return track
+  }
+
+  /** What the race logic needs: physics, spawn, checkpoints, surfaces. */
+  private async loadTrackCore(id: string): Promise<RaceTrack> {
+    const def = getTrack(id)
+    this.trackLoadToken++
+    gameStore.setState({ trackName: def.name })
+    this.trackVisuals = null
+    this.trackVisualsDone = false
+    this.trackProgress = 0
+    if (def.kind === 'procedural') return new Track(def, this.physics.world)
+    return StreamedTrack.load(def.manifestUrl, {
+      assets: this.assets,
+      renderer: this.renderer.renderer,
+      camera: this.renderer.camera,
+      scene: this.renderer.scene,
+      world: this.physics.world,
+      quality: gameStore.getState().settings.quality,
+    })
+  }
+
+  /** The current track's visuals, loaded once; resolves straight away for complete tracks. */
+  private loadTrackVisuals(): Promise<void> {
+    const token = this.trackLoadToken
+    const track = this.track
+    this.trackVisuals ??= (track.loadVisuals?.((p) => {
+      if (!this.disposed && this.trackLoadToken === token) this.trackProgress = p
+    }) ?? Promise.resolve()).then(() => {
+      if (this.disposed || this.trackLoadToken !== token) return
+      this.trackVisualsDone = true
+      this.trackProgress = 1
+    })
+    return this.trackVisuals
   }
 
   /** Menu track picker: tear down the current track and stream in the next. */
@@ -293,6 +368,7 @@ export class Game {
     if (getTrack(id).id === this.track.id) return
     const { setPhase } = gameStore.getState()
     setPhase('loading')
+    this.clearRaceLoading()
     this.race.state = 'idle'
     this.track.dispose()
     this.effects.clear()
@@ -357,12 +433,41 @@ export class Game {
 
   startRace(): void {
     const { settings, carSwitching } = gameStore.getState()
-    if (carSwitching) return
+    if (this.disposed || carSwitching || this.raceQueued) return
+    if (!this.trackReady) {
+      // Pressed before the track's visuals finished loading behind the menu:
+      // show the loading screen, then start. Audio unlocks now, while this is
+      // still a user gesture.
+      this.audio.unlock(settings.masterVolume)
+      this.raceQueued = true
+      gameStore.getState().setPhase('loading')
+      const token = this.trackLoadToken
+      gameStore.setState({ loadProgress: this.trackProgress })
+      this.raceLoadingTick = setInterval(() => gameStore.setState({ loadProgress: this.trackProgress }), 100)
+      void this.loadTrackVisuals().then(() => {
+        if (this.disposed || this.trackLoadToken !== token) return
+        this.clearRaceLoading()
+        gameStore.getState().setPhase('menu')
+        this.startRace()
+      }).catch((err: unknown) => {
+        if (!this.disposed && this.trackLoadToken === token) {
+          this.clearRaceLoading()
+          gameStore.getState().setError(err instanceof Error ? err.message : String(err))
+        }
+      })
+      return
+    }
     this.audio.unlock(settings.masterVolume)
     this.audio.playStart()
     this.resetCar()
     this.effects.clear()
     this.race.start(settings.laps)
+  }
+
+  private clearRaceLoading(): void {
+    if (this.raceLoadingTick !== null) clearInterval(this.raceLoadingTick)
+    this.raceLoadingTick = null
+    this.raceQueued = false
   }
 
   openGarage(): void {
@@ -425,6 +530,11 @@ export class Game {
     if (focus === this.showroomFocus) return
     this.showroomFocus = focus
     this.wheelYaw = 0
+  }
+
+  /** True once the current track's visuals are in (always, for complete tracks). */
+  private get trackReady(): boolean {
+    return this.track.loadVisuals === undefined || this.trackVisualsDone
   }
 
   /**
@@ -830,6 +940,7 @@ export class Game {
 
   dispose(): void {
     this.disposed = true
+    this.clearRaceLoading()
     this.loop.stop()
     this.unsubscribe()
     this.input.dispose()

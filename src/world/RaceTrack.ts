@@ -34,6 +34,12 @@ export interface RaceTrack {
   /** Render-time tick: streaming, LOD. `velocity` lets streamers prefetch ahead. */
   update(position: THREE.Vector3, velocity: THREE.Vector3, dt: number): void
   setQuality(quality: QualityPreset): Promise<void> | void
+  /**
+   * Load what the track needs to be raced and seen, beyond the physics the
+   * loader returns with: materials, scenery, the chunks around the grid.
+   * Absent = already complete. Boot calls it behind the menu.
+   */
+  loadVisuals?(onProgress?: (p: number) => void): Promise<void>
   viewDistance(quality: QualityPreset): ViewDistance
   dispose(): void
 }
