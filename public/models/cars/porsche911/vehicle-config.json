@@ -32,12 +32,13 @@
   "frontDriveShare": 0.35,
   "tires": {
     "grip": 1.2,
-    "corneringStiffness": 9,
-    "shape": 1.6,
-    "handbrakeGripScale": 0.45,
+    "corneringStiffness": 10,
+    "shape": 1.75,
+    "handbrakeGripScale": 0.4,
     "rollingResistance": 0.013,
     "tractionControl": true
   },
+  "steerFalloffSpeed": 10,
   "yawStability": 7,
   "driftAssist": 0.22,
   "maxDriftAngle": 0.6,
