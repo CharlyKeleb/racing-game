@@ -58,14 +58,17 @@ const fragmentShader = /* glsl */ `
     float r = length(d) * 2.0;
   #ifdef GRAIN
     // Small hard-edged speck: a grain or clump of sand / gravel.
-    float a = smoothstep(1.0, 0.6, r) * vAlpha;
+    float a = (1.0 - smoothstep(0.6, 1.0, r)) * vAlpha;
     vec3 col = vColor * (0.75 + 0.25 * (1.0 - r));
   #else
     // Soft puff with a lumpy edge so overlapping sprites don't read as discs,
     // lit from above (darker underside) so a cloud has some volume.
-    float ang = atan(d.y, d.x);
+    // atan(0, 0) is undefined in GLSL (NaN on some GPUs), and one NaN pixel
+    // blacks out the whole frame once bloom spreads it — nudge off the centre.
+    float ang = atan(d.y, d.x + 1e-4);
     float lumps = (0.10 * sin(ang * 5.0) + 0.06 * sin(ang * 9.0 + 1.7)) * r;
-    float a = smoothstep(1.0, 0.1, r + lumps) * vAlpha;
+    // smoothstep needs edge0 < edge1; reversed edges are undefined behaviour.
+    float a = (1.0 - smoothstep(0.1, 1.0, r + lumps)) * vAlpha;
     vec3 col = vColor * mix(0.72, 1.04, vUv.y);
   #endif
     if (a < 0.003) discard;
