@@ -46,8 +46,8 @@ export class ChaseCamera {
    * the lower middle of the screen with the horizon just above its roof.
    * Distance is from the car's centre, so ~2.4 m behind the bumper.
    */
-  distance = 4.3
-  height = 1.35
+  distance = 4.7
+  height = 1.4
   /** Extra chase distance at top speed, meters. */
   speedPullBack = 0.5
   /** Aim point: this far ahead of the car's centre and this high, so the camera looks down the road, not at the roof. */

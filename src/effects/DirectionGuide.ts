@@ -50,11 +50,25 @@ export class DirectionGuide {
   private readonly bend: Float32Array
   /** Lateral offset from the centreline for each point's arrow, m. */
   private readonly offset: Float32Array
+  /** Road height under each point's arrow, measured on first use (NaN until then). */
+  private readonly arrowY: Float32Array
+  private readonly groundAt: (x: number, nearY: number, z: number) => number | null
   private time = 0
 
-  /** @param edges distance from each line point to the paved edge on its left / right, m. */
-  constructor(line: THREE.Vector3[], edges: { left: Float32Array; right: Float32Array }) {
+  /**
+   * @param edges distance from each line point to the paved edge on its left / right, m.
+   * @param groundAt road height at an XZ point near a height; the centreline's height
+   *   isn't the road's a few meters to the side (camber, kerbs), and an arrow below
+   *   the surface is invisible.
+   */
+  constructor(
+    line: THREE.Vector3[],
+    edges: { left: Float32Array; right: Float32Array },
+    groundAt: (x: number, nearY: number, z: number) => number | null = () => null,
+  ) {
     this.line = line
+    this.groundAt = groundAt
+    this.arrowY = new Float32Array(line.length).fill(NaN)
     this.bend = signedBend(line)
     this.offset = new Float32Array(line.length)
     for (let i = 0; i < line.length; i++) {
@@ -108,7 +122,8 @@ export class DirectionGuide {
       _side.set(_fwd.z, 0, -_fwd.x)
       if (!left) _side.negate()
       _pos.copy(this.line[i]).addScaledVector(_side, this.offset[i])
-      _pos.y += HOVER
+      if (Number.isNaN(this.arrowY[i])) this.arrowY[i] = this.groundAt(_pos.x, _pos.y, _pos.z) ?? _pos.y
+      _pos.y = this.arrowY[i] + HOVER
 
       // Point mostly down the road, turned in toward the corner.
       const yaw = Math.atan2(_fwd.x, _fwd.z) + (left ? POINT_IN : -POINT_IN)

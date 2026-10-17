@@ -195,7 +195,7 @@ export class Game {
   private attachGuide(): void {
     this.guide?.dispose()
     const edges = measureRoadEdges(this.track.line, (x, z) => this.track.surfaceAt(x, z))
-    this.guide = new DirectionGuide(this.track.line, edges)
+    this.guide = new DirectionGuide(this.track.line, edges, (x, y, z) => this.physics.groundHeight(x, y, z))
     this.progress = new TrackProgress(this.track.line)
     this.renderer.scene.add(this.guide.group)
     const line = this.track.line
