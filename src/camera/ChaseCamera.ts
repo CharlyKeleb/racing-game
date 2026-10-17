@@ -48,16 +48,16 @@ export class ChaseCamera {
    * the lower middle of the screen with the horizon just above its roof.
    * Distance is from the car's centre, so ~2.4 m behind the bumper.
    */
-  distance = 4.2
-  height = 1.3
+  distance = 5.0
+  height = 1.5
   /**
    * Extra chase distance at top speed, meters. Zero: the car stays big on
    * screen at any speed, and the FOV widening sells the speed instead.
    */
   speedPullBack = 0
   /** Aim point: this far ahead of the car's centre and this high, so the camera looks down the road, not at the roof. */
-  lookAhead = 10
-  lookHeight = 0.85
+  lookAhead = 9
+  lookHeight = 0.7
   baseFov = 58
   maxFovBoost = 18
   /**
@@ -67,7 +67,7 @@ export class ChaseCamera {
    */
   surge = 0.05
   maxSurgeBack = 0.6
-  maxSurgeIn = 0.5
+  maxSurgeIn = 0.35
   /** Camera bank into a corner, radians per m/s² of lateral acceleration, and its limit. */
   bank = 0.0022
   maxBank = 0.035
