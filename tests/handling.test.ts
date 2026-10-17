@@ -285,4 +285,20 @@ describe('Porsche 911 handling', () => {
     }
     expect(stop / 60).toBeLessThan(2.8) // ~1.1 g
   })
+
+  it('smokes the tires braking hard from high speed, not from low speed', () => {
+    /** Peak tire slide (m/s) in the first second of full braking from `kmh`. */
+    const brakeSlide = (kmh: number) => {
+      const { ctrl, step } = spawnCar(PORSCHE_911)
+      while (ctrl.forwardSpeed < kmh / 3.6) step(pedals({ throttle: 1 }))
+      let max = 0
+      for (let i = 0; i < 60; i++) {
+        step(pedals({ brake: 1 }))
+        for (const w of ctrl.wheels) max = Math.max(max, w.slide)
+      }
+      return max
+    }
+    expect(brakeSlide(200)).toBeGreaterThan(4) // TireSmoke starts at 2.5 m/s
+    expect(brakeSlide(60)).toBeLessThan(2.5)
+  })
 })

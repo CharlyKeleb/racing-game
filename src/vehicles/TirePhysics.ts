@@ -22,6 +22,14 @@ export function peakSlipAngle(cfg: TireConfig): number {
 
 /** Wheelspin surface speed (m/s) at a fully saturated driven tire. */
 const SPIN_SLIDE = 6
+/**
+ * Braking past the grip limit: ABS holds the tire near peak, but that peak is
+ * at ~10–15% slip, so the patch still scrubs at this share of road speed —
+ * a hard stop from 200 km/h smokes, a gentle or slow one doesn't.
+ */
+const ABS_SLIP = 0.12
+/** Fraction of brake force over the limit that counts as fully at it. */
+const ABS_FULL = 0.12
 
 export interface TireInput {
   /** Contact patch velocity projected on the wheel's forward axis, m/s. */
@@ -58,7 +66,7 @@ export interface TireOutput {
   /**
    * How fast the contact patch is actually sliding over the ground, m/s: past
    * the peak slip angle, locked by the handbrake, or spinning under power.
-   * Zero in ordinary grippy cornering and ABS braking. Drives marks and smoke.
+   * Zero in ordinary grippy cornering and gentle braking. Drives marks and smoke.
    */
   slide: number
 }
@@ -119,11 +127,13 @@ export function computeTireForces(input: TireInput, cfg: TireConfig): TireOutput
   } else {
     slide = speed > LOW_SPEED ? Math.max(0, Math.abs(vLat) - speed * Math.tan(peakSlipAngle(cfg))) : 0
     // Drive force the tire couldn't transmit becomes wheelspin. Braking force it
-    // couldn't transmit doesn't lock the wheel: ABS holds it at the peak.
+    // couldn't transmit doesn't lock the wheel (ABS), but it does run the tire
+    // at its peak slip, which scrubs at a share of road speed.
     const driving = requested * (vLong >= 0 ? 1 : -1) > 0
-    if (driving && Math.abs(unclamped) > 1) {
+    if (Math.abs(unclamped) > 1) {
       const lost = Math.max(0, 1 - Math.abs(longitudinal) / Math.abs(unclamped))
-      slide = Math.max(slide, lost * SPIN_SLIDE)
+      const scrub = driving ? lost * SPIN_SLIDE : Math.min(1, lost / ABS_FULL) * ABS_SLIP * speed
+      slide = Math.max(slide, scrub)
     }
   }
 

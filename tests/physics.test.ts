@@ -104,9 +104,18 @@ describe('tire slide (skid marks / smoke)', () => {
     expect(out.slide).toBeGreaterThan(5)
   })
 
-  it('stays zero under hard (ABS) braking in a straight line', () => {
-    const out = computeTireForces({ ...base, vLong: 30, vLat: 0, longitudinalForce: -20000 }, cfg.tires)
+  it('stays zero braking within the grip limit', () => {
+    const out = computeTireForces({ ...base, vLong: 55, vLat: 0, longitudinalForce: -0.8 * base.load * cfg.tires.grip }, cfg.tires)
     expect(out.slide).toBe(0)
+  })
+
+  it('scrubs (smokes) braking past the limit at high speed, more the faster you go', () => {
+    const hard = { ...base, vLat: 0, longitudinalForce: -20000 }
+    const fast = computeTireForces({ ...hard, vLong: 55 }, cfg.tires) // ~200 km/h
+    const slow = computeTireForces({ ...hard, vLong: 14 }, cfg.tires) // ~50 km/h
+    expect(fast.slide).toBeGreaterThan(6) // well past TireSmoke's 2.5 m/s start
+    expect(slow.slide).toBeLessThan(2.5)
+    expect(fast.slide).toBeLessThan(55) // ABS: scrubbing, not a locked wheel
   })
 
   it('is the full skid speed with the wheel locked by the handbrake', () => {
