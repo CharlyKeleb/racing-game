@@ -94,7 +94,7 @@ export class ChaseCamera {
   }
 
   /**
-   * @param boost nitro intensity, 0..1.
+   * @param boost nitro intensity: 0..1, up to ~1.6 in a perfect boost (capped at 1.3 here).
    * @param motion the car's smoothed acceleration and velocity, for surge, bank and drift framing.
    */
   update(target: THREE.Object3D, speedKmh: number, dt: number, boost = 0, motion?: VehicleMotion): void {
@@ -104,6 +104,7 @@ export class ChaseCamera {
     }
     const speedT = Math.min(speedKmh / 300, 1)
     this.time += dt
+    boost = Math.min(boost, 1.3)
     this.kick += (boost - this.kick) * damp(boost > this.kick ? 10 : 2.5, dt)
     _fwd.set(0, 0, 1).applyQuaternion(target.quaternion)
 

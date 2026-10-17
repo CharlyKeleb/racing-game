@@ -73,7 +73,7 @@ export function Settings({ onClose }: { onClose?: () => void }) {
       </label>
       <ul className="controls">
         <li><kbd>W</kbd><kbd>↑</kbd> throttle · <kbd>S</kbd><kbd>↓</kbd> brake / reverse</li>
-        <li><kbd>A</kbd><kbd>D</kbd> steer · <kbd>Space</kbd> handbrake · <kbd>Shift</kbd> nitro</li>
+        <li><kbd>A</kbd><kbd>D</kbd> steer · <kbd>Space</kbd> handbrake · <kbd>Shift</kbd> nitro (tap again on the cue for a perfect boost)</li>
         <li><kbd>C</kbd> camera · <kbd>R</kbd> reset · <kbd>Esc</kbd> pause · gamepad supported</li>
       </ul>
       {onClose && (

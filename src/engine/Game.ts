@@ -1,6 +1,6 @@
 import RAPIER from '@dimforge/rapier3d-compat'
 import * as THREE from 'three'
-import { AudioManager } from '../audio/AudioManager'
+import { AudioManager, type CarSoundState } from '../audio/AudioManager'
 import { ChaseCamera, type ShowroomFraming } from '../camera/ChaseCamera'
 import { DirectionGuide } from '../effects/DirectionGuide'
 import { DrivingEffects } from '../effects/DrivingEffects'
@@ -62,6 +62,8 @@ export class Game {
   private readonly assets = new AssetManager()
   private readonly input = new InputManager()
   private readonly audio = new AudioManager()
+  /** Reused every frame for the audio update. */
+  private readonly soundState: CarSoundState = { rpm: 0, throttle: 0, gear: 1, slip: 0, nitro: 0, nitroActive: false, nitroPerfect: false }
   private readonly loop: GameLoop
   private physics!: PhysicsWorld
   private track!: RaceTrack
@@ -510,8 +512,17 @@ export class Game {
     this.renderer.adapt(dt)
 
     const ctrl = this.vehicle.controller
-    const slip = Math.max(...ctrl.wheels.map((w) => w.slip))
-    this.audio.update(ctrl.drivetrain.rpm, this.input.state.throttle, slip)
+    const sound = this.soundState
+    let slip = 0
+    for (const w of ctrl.wheels) slip = Math.max(slip, w.slip)
+    sound.rpm = ctrl.drivetrain.rpm
+    sound.throttle = ctrl.throttlePedal
+    sound.gear = ctrl.drivetrain.gear
+    sound.slip = slip
+    sound.nitro = ctrl.nitro.intensity
+    sound.nitroActive = ctrl.nitro.active
+    sound.nitroPerfect = ctrl.nitro.perfect
+    this.audio.update(sound)
     this.renderer.render()
 
     this.fpsFrames++
@@ -551,6 +562,10 @@ export class Game {
       nitro: ctrl.nitro.charge,
       nitroActive: ctrl.nitro.active,
       nitroReady: ctrl.nitro.charge >= this.vehicle.config.nitro.minCharge,
+      nitroCue: ctrl.nitro.windowCue,
+      nitroWindow: ctrl.nitro.windowOpen,
+      nitroPerfect: ctrl.nitro.perfect,
+      nitroMissed: ctrl.nitro.active && ctrl.nitro.missed && ctrl.nitro.burnTime - ctrl.nitro.missedAt < 0.8,
       lap: this.race.lap,
       totalLaps: this.race.totalLaps,
       currentLapMs: t.currentLapMs,

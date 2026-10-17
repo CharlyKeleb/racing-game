@@ -191,17 +191,45 @@ export interface NitroGaugeProps {
   level: number
   active: boolean
   ready: boolean
+  /** Perfect-nitro timing ring, 0..1 (0 hides it). */
+  cue: number
+  /** Perfect window open: tap now. */
+  windowOpen: boolean
+  perfect: boolean
   sweep: boolean
 }
 
-export function NitroGauge({ level, active, ready, sweep }: NitroGaugeProps) {
-  const state = active ? ' gauge--nitro-active' : ready ? ' gauge--nitro-ready' : ''
+/** Timing ring radius and the share of it that marks the perfect window. */
+const CUE_R = 57
+const CUE_LEN = 2 * Math.PI * CUE_R
+
+export function NitroGauge({ level, active, ready, cue, windowOpen, perfect, sweep }: NitroGaugeProps) {
+  const state = perfect
+    ? ' gauge--nitro-active gauge--nitro-perfect'
+    : windowOpen
+      ? ' gauge--nitro-active gauge--nitro-window'
+      : active
+        ? ' gauge--nitro-active'
+        : ready
+          ? ' gauge--nitro-ready'
+          : ''
   return (
     <div className={`gauge gauge--small gauge--n2o${state}${sweep ? ' gauge--sweep' : ''}`} role="img" aria-label={`Nitro ${Math.round(level * 100)}%`}>
       <svg viewBox="0 0 120 120">
         <NitroFace />
         <path className="gauge__n2o-fill" d={arc(SC, S_R - 2, S_START, sAngle(Math.max(level, 0.004)))} />
         <SmallNeedle t={level} />
+        {cue > 0 && (
+          // Fills clockwise from the top as the burn approaches the perfect window.
+          <circle
+            className="gauge__n2o-cue"
+            cx={SC}
+            cy={SC}
+            r={CUE_R}
+            strokeDasharray={`${cue * CUE_LEN} ${CUE_LEN}`}
+            transform={`rotate(-90 ${SC} ${SC})`}
+          />
+        )}
         <circle className="gauge__hub gauge__hub--small" cx={SC} cy={SC} r={7} />
         <text className="gauge__label" x={SC} y={SC + 32} textAnchor="middle">
           N₂O

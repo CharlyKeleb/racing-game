@@ -20,7 +20,7 @@ export function Hud() {
   const sweep = phase === 'countdown'
 
   return (
-    <div className={t.nitroActive ? 'hud hud--nitro' : 'hud'}>
+    <div className={`hud${t.nitroActive ? ' hud--nitro' : ''}${t.nitroPerfect ? ' hud--nitro-perfect' : ''}`}>
       <div className="hud-speedlines" aria-hidden="true" />
       <div className="hud-tl">
         <div className="hud-lap">
@@ -48,6 +48,16 @@ export function Hud() {
 
       {t.wrongWay && <div className="hud-wrongway">Wrong way</div>}
 
+      {t.nitroPerfect ? (
+        <div className="hud-nitro-call hud-nitro-call--perfect">Perfect nitro</div>
+      ) : t.nitroWindow ? (
+        <div className="hud-nitro-call hud-nitro-call--tap">
+          Tap <kbd>Shift</kbd>
+        </div>
+      ) : t.nitroMissed ? (
+        <div className="hud-nitro-call hud-nitro-call--missed">Missed</div>
+      ) : null}
+
       {phase === 'countdown' && t.countdown > 0 && (
         <div className="countdown" key={Math.ceil(t.countdown)}>
           {Math.ceil(t.countdown)}
@@ -57,7 +67,15 @@ export function Hud() {
       <div className="speedo">
         <div className="speedo__side">
           <RpmGauge rpm={t.rpm} redlineRpm={t.redlineRpm} shift={shift} sweep={sweep} />
-          <NitroGauge level={t.nitro} active={t.nitroActive} ready={t.nitroReady} sweep={sweep} />
+          <NitroGauge
+            level={t.nitro}
+            active={t.nitroActive}
+            ready={t.nitroReady}
+            cue={t.nitroCue}
+            windowOpen={t.nitroWindow}
+            perfect={t.nitroPerfect}
+            sweep={sweep}
+          />
         </div>
         <Speedometer speedKmh={t.speedKmh} maxKmh={DIAL_MAX_KMH} gear={gearLabel(t.gear)} shift={shift} nitro={t.nitroActive} sweep={sweep} />
       </div>
