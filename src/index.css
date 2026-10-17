@@ -315,6 +315,8 @@ kbd { font-family: inherit; font-size: 11px; padding: 1px 6px; border: 1px solid
 /* ── Minimap ────────────────────────────────────────────────────────── */
 .hud-tr { position: absolute; top: var(--gutter); right: var(--gutter); display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
 .hud-tr .hud-fps { position: static; }
+/* Minimap bottom-left, opposite the speedometer (NFS-style). */
+.hud-bl { position: absolute; left: var(--gutter); bottom: var(--gutter); }
 .minimap {
   width: clamp(110px, 15vw, 190px); aspect-ratio: 1; padding: 6px;
   background: var(--glass-flat); border: 1px solid var(--line);
@@ -395,6 +397,9 @@ html, body { overscroll-behavior: none; }
 .overlay--touch .speedo .ui-meter { width: 118px; }
 .overlay--touch .speedo .ui-meter__hint { display: none; }
 .overlay--touch .hud-tr { top: max(8px, env(safe-area-inset-top)); right: max(var(--gutter), env(safe-area-inset-right)); }
+/* Bottom-left is the steering thumb's area on touch, so the map stays top-right there. */
+.overlay--touch .hud-bl { left: auto; bottom: auto; top: max(8px, env(safe-area-inset-top)); right: max(var(--gutter), env(safe-area-inset-right)); }
+.overlay--touch .hud-tr { top: calc(max(8px, env(safe-area-inset-top)) + 104px); }
 .overlay--touch .minimap { width: 96px; }
 /* Touch reset/pause sit left of the minimap. */
 .overlay--touch .touch-top { right: calc(max(var(--gutter), env(safe-area-inset-right)) + 108px); top: max(8px, env(safe-area-inset-top)); }

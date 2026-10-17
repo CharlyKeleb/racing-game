@@ -36,10 +36,20 @@ export class ChaseCamera {
   private readonly chasePos = new THREE.Vector3()
   private initialised = false
 
-  distance = 6.5
-  height = 2.1
-  baseFov = 60
-  maxFovBoost = 18
+  /**
+   * Framed like Need for Speed (2015): low and close, the car's rear filling
+   * the lower middle of the screen with the horizon just above its roof.
+   * Distance is from the car's centre, so ~2.4 m behind the bumper.
+   */
+  distance = 4.7
+  height = 1.45
+  /** Extra chase distance at top speed, meters. */
+  speedPullBack = 0.9
+  /** Aim point: this far ahead of the car's centre and this high, so the camera looks down the road, not at the roof. */
+  lookAhead = 9
+  lookHeight = 0.95
+  baseFov = 62
+  maxFovBoost = 16
   /** Extra degrees of FOV at full nitro. */
   nitroFovKick = 14
   /** Extra chase distance at full nitro, meters (the car surges away from the lens). */
@@ -84,11 +94,11 @@ export class ChaseCamera {
       // Flatten forward so pitching over bumps doesn't swing the camera.
       _fwd.y = 0
       _fwd.normalize()
-      const dist = this.distance + speedT * 1.8 + this.kick * this.nitroPullBack
+      const dist = this.distance + speedT * this.speedPullBack + this.kick * this.nitroPullBack
       _desired.copy(target.position).addScaledVector(_fwd, -dist)
-      _desired.y += this.height - this.kick * 0.25
-      _look.copy(target.position).addScaledVector(_fwd, 3)
-      _look.y += 0.8
+      _desired.y += this.height - this.kick * 0.15
+      _look.copy(target.position).addScaledVector(_fwd, this.lookAhead)
+      _look.y += this.lookHeight
 
       if (!this.initialised) {
         this.chasePos.copy(_desired)

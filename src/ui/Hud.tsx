@@ -38,8 +38,10 @@ export function Hud() {
         </div>
       </div>
       <div className="hud-tr">
-        <Minimap />
         <div className="hud-fps mono">{t.fps} FPS</div>
+      </div>
+      <div className="hud-bl">
+        <Minimap />
       </div>
 
       {t.wrongWay && <div className="hud-wrongway">Wrong way</div>}
