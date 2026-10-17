@@ -134,7 +134,9 @@ export class AudioManager {
 
   setVolume(volume: number): void {
     Howler.volume(volume)
-    if (this.master) this.master.gain.value = volume * 0.6
+    // CarSound's make-up gain and limiter set the loudness; 0.9 keeps ~1 dB of
+    // headroom at full volume (redline peaks ≈ −1 dBFS, measured offline).
+    if (this.master) this.master.gain.value = volume * 0.9
   }
 
   update(state: CarSoundState): void {

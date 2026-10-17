@@ -53,7 +53,7 @@ const BUILD_KEY = 'racing-game:build'
 const defaultSettings: Settings = {
   quality: defaultQuality(),
   postfx: !isMobile(),
-  masterVolume: 0.7,
+  masterVolume: 0.9,
   camera: 'chase',
   laps: 3,
   track: 'nurburgring',

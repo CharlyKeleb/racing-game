@@ -11,17 +11,23 @@ export interface CarSoundState extends CarSoundInput {
 const RPM_SCALE = 7500
 /** How far ahead crackle pops are scheduled, seconds (covers a frame hitch). */
 const LOOKAHEAD = 0.12
+/** Make-up gain after the glue compressor (~+4.6 dB). */
+const MAKEUP = 1.7
 
 /**
  * The car's sound as a Web Audio graph on any BaseAudioContext (live or
  * offline for checks). The engine source (the recorded-engine worklet, or a
  * synth fallback) feeds two paths that mix on a compressed bus:
  *
- *   engine ─┬─ intake: low-pass that opens with throttle
- *           └─ exhaust: drive → soft clip → boom (110 Hz) + rasp (2.4 kHz) EQ
- *   + sub rumble (flat-six half order), turbo whistle and whoosh,
+ *   engine ─┬─ intake: the clean recording, low-pass opening with throttle (leads the mix)
+ *           └─ exhaust: drive → gentle soft clip → boom (110 Hz) + rasp (2.4 kHz) EQ
+ *   + sub rumble (flat-six half order), faint turbo whistle and whoosh,
  *     overrun crackles, blow-off, shift "bwap", nitro whoosh and rush, tire squeal
- *   → compressor → out
+ *   → glue compressor → make-up gain → limiter → out
+ *
+ * The recording stays in front ("pure"): the synthetic layers only colour it.
+ * Make-up gain brings the compressed bus up to a game-loud level and the
+ * limiter keeps the peaks clear of clipping.
  *
  * CarSoundModel decides what happens; this class only maps it to nodes.
  */
@@ -56,13 +62,19 @@ export class CarSound {
     this.noise = makeNoise(ctx)
 
     const comp = ctx.createDynamicsCompressor()
-    comp.threshold.value = -16
-    comp.knee.value = 8
-    comp.ratio.value = 4
-    comp.attack.value = 0.004
-    comp.release.value = 0.18
+    comp.threshold.value = -14
+    comp.knee.value = 6
+    comp.ratio.value = 3
+    comp.attack.value = 0.006
+    comp.release.value = 0.2
+    const limiter = ctx.createDynamicsCompressor()
+    limiter.threshold.value = -2
+    limiter.knee.value = 0
+    limiter.ratio.value = 20
+    limiter.attack.value = 0.001
+    limiter.release.value = 0.08
     this.bus = gain(ctx, 1)
-    this.bus.connect(comp).connect(out)
+    this.bus.connect(comp).connect(gain(ctx, MAKEUP)).connect(limiter).connect(out)
 
     this.engineIn = gain(ctx, 0)
 
@@ -76,7 +88,7 @@ export class CarSound {
     // Exhaust: driven into a soft clip for rasp, with the pipes' resonances.
     this.drive = gain(ctx, 1)
     const shaper = ctx.createWaveShaper()
-    shaper.curve = softClip(2.6)
+    shaper.curve = softClip(1.6) // warm, not fuzzy: the recording's own grit does the rest
     shaper.oversample = '2x'
     const boom = biquad(ctx, 'peaking', 110, 1, 7)
     this.raspEq = biquad(ctx, 'peaking', 2400, 1.2, 0)
@@ -144,21 +156,22 @@ export class CarSound {
     const running = t >= this.startAt ? 1 : 0
 
     // Engine level: louder with rpm and load; dips for the upshift cut, swells on a blip.
-    const level = running * ((0.7 + 0.3 * rpmT) * (1 - 0.55 * m.cut) + 0.12 * m.blip)
+    // Wide range from idle to redline: the rise of the revs is the drama.
+    const level = running * ((0.45 + 0.55 * rpmT) * (1 - 0.5 * m.cut) + 0.12 * m.blip)
     set(this.engineIn.gain, level, t, running ? 0.015 : 0.01)
-    set(this.intakeFilter.frequency, 1100 + on * 6000 + rpmT * 3500, t, 0.02)
-    set(this.intakeGain.gain, 0.45 + 0.25 * on, t, 0.025)
-    set(this.drive.gain, 0.5 + 1.6 * on * (0.4 + 0.6 * rpmT), t, 0.02)
-    set(this.raspEq.gain, on * (2 + 4 * rpmT), t, 0.025)
-    set(this.exhaustGain.gain, 0.12 + 0.3 * on + 0.1 * rpmT, t, 0.025)
+    set(this.intakeFilter.frequency, 2500 + on * 7000 + rpmT * 4000, t, 0.02)
+    set(this.intakeGain.gain, 0.7 + 0.35 * on, t, 0.025)
+    set(this.drive.gain, 0.45 + 1.1 * on * (0.4 + 0.6 * rpmT), t, 0.02)
+    set(this.raspEq.gain, on * (1.5 + 3 * rpmT), t, 0.025)
+    set(this.exhaustGain.gain, 0.1 + 0.22 * on + 0.08 * rpmT, t, 0.025)
 
     const halfOrder = Math.max(m.rpm, 600) / 40 // rpm/60 × 1.5
     set(this.sub.frequency, halfOrder, t, 0.03)
     set(this.subGain.gain, running * (0.05 + 0.1 * on) * (1 - 0.5 * rpmT), t, 0.08)
 
     set(this.whistle.frequency, 2600 + 4200 * m.spool, t, 0.08)
-    set(this.whistleGain.gain, 0.02 * m.spool * m.spool, t, 0.06)
-    set(this.whooshGain.gain, 0.05 * m.spool, t, 0.06)
+    set(this.whistleGain.gain, 0.01 * m.spool * m.spool, t, 0.06)
+    set(this.whooshGain.gain, 0.03 * m.spool, t, 0.06)
 
     set(this.nitroRushGain.gain, 0.07 * Math.min(s.nitro, 1.6), t, 0.08)
     set(this.squealGain.gain, Math.min(Math.max(0, s.slip - 0.75) * 4, 1) * 0.2, t, 0.05)
