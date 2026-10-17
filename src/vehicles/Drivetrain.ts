@@ -7,6 +7,8 @@ export type Gear = number
 export type GearRequest = -1 | 0 | 1
 
 const RPM_PER_RAD_S = 60 / (2 * Math.PI)
+/** Brake pedal above this counts as braking for gear selection. */
+const BRAKING = 0.2
 
 export function torqueAt(rpm: number, curve: [number, number][]): number {
   if (rpm <= curve[0][0]) return curve[0][1]
@@ -50,9 +52,11 @@ export class Drivetrain {
    * @param request -1 when the player holds brake at (near) standstill, 1 when
    *   they hold throttle there. Separate from `throttle` because the pedals swap
    *   in reverse: the throttle pedal brakes, so it must still be able to ask for 1st.
+   * @param braking 0..1 brake pedal. Under braking the gearbox drops gears early
+   *   (rev-matched, PDK-style) instead of waiting for the revs to sag.
    * @returns total longitudinal force at the contact patches of driven wheels, N.
    */
-  update(wheelSpeed: number, wheelRadius: number, throttle: number, request: GearRequest, dt: number): number {
+  update(wheelSpeed: number, wheelRadius: number, throttle: number, request: GearRequest, dt: number, braking = 0): number {
     const cfg = this.cfg
 
     if (request < 0 && this.gear > 0 && Math.abs(wheelSpeed) < 1) this.gear = -1
@@ -69,17 +73,34 @@ export class Drivetrain {
       this.shiftTimer -= dt
       return 0
     }
-    this.autoShift()
+    this.autoShift(braking > BRAKING && throttle < 0.1)
 
     const limiter = this.rpm >= cfg.redlineRpm ? 0 : 1
     const engineTorque = torqueAt(this.rpm, cfg.torqueCurve) * throttle * limiter
     return (engineTorque * ratio * cfg.efficiency) / wheelRadius
   }
 
-  private autoShift(): void {
+  private autoShift(braking: boolean): void {
     if (this.gear <= 0) return
-    if (this.rpm > this.cfg.shiftUpRpm && this.gear < this.topGear) this.shift(this.gear + 1)
-    else if (this.rpm < this.cfg.shiftDownRpm && this.gear > 1) this.shift(this.gear - 1)
+    if (this.rpm > this.cfg.shiftUpRpm && this.gear < this.topGear) {
+      this.shift(this.gear + 1)
+      return
+    }
+    if (this.gear <= 1) return
+    if (braking) {
+      // Hard on the brakes: drop a gear as soon as the lower one's revs fit
+      // under the brake-downshift point, one gear per shift time — the quick
+      // "brap-brap-brap" of a dual-clutch box, revs kept high for the exit.
+      const lowerRpm = this.rpm * (this.ratio(this.gear - 1) / this.ratio(this.gear))
+      if (lowerRpm < this.brakeDownshiftRpm) this.shift(this.gear - 1)
+    } else if (this.rpm < this.cfg.shiftDownRpm) {
+      this.shift(this.gear - 1)
+    }
+  }
+
+  /** Rpm a braking downshift may land at: config, else 500 below the upshift point (Sport-mode PDK). */
+  private get brakeDownshiftRpm(): number {
+    return this.cfg.brakeDownshiftRpm ?? this.cfg.shiftUpRpm - 500
   }
 
   shift(gear: Gear): void {

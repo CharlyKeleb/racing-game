@@ -179,7 +179,7 @@ export class VehicleController {
       dt,
     )
 
-    const driveForce = this.drivetrain.update(this.forwardSpeed, this.drivenRadius, driveThrottle, gearRequest, dt)
+    const driveForce = this.drivetrain.update(this.forwardSpeed, this.drivenRadius, driveThrottle, gearRequest, dt, brakeInput)
 
     const massShare = cfg.massKg / this.wheels.length
 

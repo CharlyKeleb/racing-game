@@ -52,12 +52,13 @@ const FOLLOW = 0.03
 /** Upshift: ignition cut length and the glide down to the new gear's revs. */
 const CUT_TIME = 0.07
 const UPSHIFT_GLIDE = 0.035
-/** Downshift: rev-match blip length, overshoot above the new revs, glide up. */
-const BLIP_TIME = 0.24
-const BLIP_OVERSHOOT = 0.07
-const DOWNSHIFT_GLIDE = 0.04
+/** Downshift: rev-match blip length, overshoot above the new revs, glide up — a PDK snaps it. */
+const BLIP_TIME = 0.15
+const BLIP_OVERSHOOT = 0.06
+const DOWNSHIFT_GLIDE = 0.02
 /** A shift's glide lasts this long before normal rev inertia takes over again. */
 const GLIDE_TIME = 0.16
+const DOWNSHIFT_GLIDE_TIME = 0.11
 
 export class CarSoundModel {
   /** Engine rpm as heard (drives the recorded engine's pitch). */
@@ -150,14 +151,14 @@ export class CarSoundModel {
     }
     if (this.shiftDown) {
       this.blipLeft = BLIP_TIME
-      this.glideLeft = GLIDE_TIME
+      this.glideLeft = DOWNSHIFT_GLIDE_TIME
       this.glideTau = DOWNSHIFT_GLIDE
     }
 
     // Envelopes: the cut snaps in and eases out; the blip punches then decays.
     this.cut += ((this.cutLeft > 0 ? 1 : 0) - this.cut) * k(this.cutLeft > 0 ? 0.012 : 0.04)
     const blipOn = this.blipLeft > BLIP_TIME * 0.45
-    this.blip += ((blipOn ? 1 : 0) - this.blip) * k(blipOn ? 0.018 : 0.08)
+    this.blip += ((blipOn ? 1 : 0) - this.blip) * k(blipOn ? 0.008 : 0.05)
 
     // Rev-match overshoot: aim a little above the new gear's revs, settling back.
     const overshoot = this.blipLeft > 0 ? BLIP_OVERSHOOT * (this.blipLeft / BLIP_TIME) : 0

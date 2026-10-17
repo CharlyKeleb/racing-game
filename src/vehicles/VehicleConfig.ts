@@ -55,6 +55,8 @@ export interface EngineConfig {
   efficiency: number
   shiftUpRpm: number
   shiftDownRpm: number
+  /** Optional: highest rpm a downshift under braking may land at (default shiftUpRpm − 500). */
+  brakeDownshiftRpm?: number
   shiftTimeSec: number
 }
 

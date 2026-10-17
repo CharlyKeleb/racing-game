@@ -229,8 +229,8 @@ export class CarSound {
    * answers with a pop as the blip falls away, and a smaller one after.
    */
   private downshiftAt(when: number, rpmT: number): void {
-    this.popAt(when + 0.11, 0.4 + 0.35 * rpmT, true)
-    this.popAt(when + 0.17 + Math.random() * 0.04, 0.2 + 0.2 * rpmT, false)
+    this.popAt(when + 0.06, 0.4 + 0.35 * rpmT, true)
+    this.popAt(when + 0.1 + Math.random() * 0.03, 0.2 + 0.2 * rpmT, false)
   }
 
   /** Nitro kicks in: a rising whoosh. */

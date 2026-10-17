@@ -151,3 +151,43 @@ describe('traction control', () => {
     expect(Math.hypot(tc.longitudinal, tc.lateral)).toBeLessThanOrEqual(input.load * cfg.tires.grip + 1e-6)
   })
 })
+
+describe('Drivetrain: braking downshifts', () => {
+  const brakeRpm = cfg.engine.shiftUpRpm - 500
+  const radius = 0.36
+  const speedFor = (gear: number, rpm: number) => (rpm / ((cfg.engine.gearRatios[gear] * cfg.engine.finalDrive * 60) / (2 * Math.PI))) * radius
+
+  it('drops a gear early under braking, landing below the brake-downshift rpm', () => {
+    const d = new Drivetrain(cfg.engine)
+    d.gear = 4
+    // 4th at 4500 rpm: a coasting box would hold it (above shiftDownRpm)…
+    const v = speedFor(4, 4500)
+    d.update(v, radius, 0, 0, 1 / 60, 0)
+    expect(d.gear).toBe(4)
+    // …but on the brakes it drops to 3rd straight away, revs still in range.
+    d.update(v, radius, 0, 0, 1 / 60, 1)
+    expect(d.gear).toBe(3)
+    d.update(v, radius, 0, 0, 1 / 60, 1)
+    expect(d.rpm).toBeLessThan(brakeRpm + 1)
+  })
+
+  it('never over-revs a braking downshift and waits for the shift time between gears', () => {
+    const d = new Drivetrain(cfg.engine)
+    d.gear = 3
+    const fast = speedFor(3, 7000) // 2nd would be way past the brake-downshift point
+    d.update(fast, radius, 0, 0, 1 / 60, 1)
+    expect(d.gear).toBe(3)
+    const v = speedFor(3, 3000)
+    d.update(v, radius, 0, 0, 1 / 60, 1)
+    expect(d.gear).toBe(2)
+    d.update(v, radius, 0, 0, 1 / 60, 1) // still inside the shift time
+    expect(d.gear).toBe(2)
+  })
+
+  it('braking with the throttle held (left-foot braking) keeps the normal shift points', () => {
+    const d = new Drivetrain(cfg.engine)
+    d.gear = 4
+    d.update(speedFor(4, 4500), radius, 1, 0, 1 / 60, 1)
+    expect(d.gear).toBe(4)
+  })
+})
