@@ -1,13 +1,37 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_DRIFT as cfg, Drift, type DriftInput } from '../src/vehicles/Drift'
+import { DEFAULT_DRIFT, Drift, type DriftConfig, type DriftInput } from '../src/vehicles/Drift'
 
 const DT = 1 / 60
+/** The technique entries (fast turn-in, brake-tap, downshift) are opt-in. */
+const cfg: DriftConfig = { ...DEFAULT_DRIFT, autoEntries: true }
 const cruise: DriftInput = { speed: 30, steer: 0, throttle: 0.5, brake: 0, handbrake: false, slipAngle: 0.02, downshift: false }
-const run = (d: Drift, i: Partial<DriftInput>, seconds: number) => {
-  for (let k = 0; k < Math.round(seconds / DT); k++) d.update({ ...cruise, ...i }, cfg, DT)
+const run = (d: Drift, i: Partial<DriftInput>, seconds: number, c: DriftConfig = cfg) => {
+  for (let k = 0; k < Math.round(seconds / DT); k++) d.update({ ...cruise, ...i }, c, DT)
 }
 
-describe('Drift entries', () => {
+describe('Drift entries by default: handbrake only', () => {
+  it('fast full-lock turn-in on the throttle stays gripped', () => {
+    const d = new Drift()
+    run(d, { speed: 45, steer: 1, throttle: 1 }, 1, DEFAULT_DRIFT)
+    expect(d.active).toBe(false)
+  })
+
+  it('braking, then turning in (with the downshift that comes with it) stays gripped', () => {
+    const d = new Drift()
+    run(d, { brake: 1, throttle: 0 }, 0.3, DEFAULT_DRIFT)
+    d.update({ ...cruise, throttle: 0, downshift: true }, DEFAULT_DRIFT, DT)
+    run(d, { steer: 1, throttle: 0 }, 0.5, DEFAULT_DRIFT)
+    expect(d.active).toBe(false)
+  })
+
+  it('the handbrake starts a drift', () => {
+    const d = new Drift()
+    d.update({ ...cruise, steer: 0.8, handbrake: true }, DEFAULT_DRIFT, DT)
+    expect(d.active).toBe(true)
+  })
+})
+
+describe('Drift entries with autoEntries', () => {
   it('ordinary hard cornering is not a drift', () => {
     const d = new Drift()
     run(d, { steer: 1, throttle: 1, speed: 33 }, 2) // full lock at ~120 km/h

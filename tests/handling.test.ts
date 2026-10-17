@@ -239,15 +239,29 @@ describe('Porsche 911 handling', () => {
     return { max, end: slipAngle(body), ctrl }
   }
 
-  it('drifts on a fast full-lock turn-in, and the assist still catches a spin', () => {
+  it("stays gripped on a fast full-lock turn-in: no drift unless asked for", () => {
     const { max } = slideAfter(160, [], 90, { throttle: 1, steer: 1 })
-    expect(max).toBeGreaterThan(12)
-    expect(max).toBeLessThan(60)
+    expect(max).toBeLessThan(8)
   })
 
-  it('drifts on a brake-tap entry (brake, release, turn in)', () => {
+  it('stays gripped braking then turning in hard (keyboard: full lock)', () => {
     const { max } = slideAfter(110, [[10, { brake: 1 }], [2, {}]], 90, { throttle: 0.8, steer: 1 })
+    expect(max).toBeLessThan(8)
+  })
+
+  it('with autoEntries on, a brake-tap entry drifts and the assist still catches a spin', () => {
+    const cfg = { ...PORSCHE_911, drift: { ...PORSCHE_911.drift, autoEntries: true } }
+    const { ctrl, step, body } = spawnCar(cfg)
+    while (ctrl.forwardSpeed < 110 / 3.6) step(pedals({ throttle: 1 }))
+    for (let i = 0; i < 10; i++) step(pedals({ brake: 1 }))
+    for (let i = 0; i < 2; i++) step(pedals({}))
+    let max = 0
+    for (let i = 0; i < 90; i++) {
+      step(pedals({ throttle: 0.8, steer: 1 }))
+      max = Math.max(max, slipAngle(body))
+    }
     expect(max).toBeGreaterThan(12)
+    expect(max).toBeLessThan(60)
   })
 
   it('stays gripped turning in at the same speed without an entry', () => {

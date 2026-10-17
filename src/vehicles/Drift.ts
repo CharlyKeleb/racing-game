@@ -4,17 +4,26 @@
  * stability assist and steering lock.
  *
  * A planted car shouldn't slide just because you turn, so a drift needs an
- * entry, like the real techniques:
+ * entry. By default that's only the handbrake (Space / the touch Drift
+ * button): it locks the rears (handled in the tire model) and starts the drift.
+ * `autoEntries` adds the real techniques, which fire on their own:
  *  - fast turn-in: hard lock at high speed on the throttle (weight off the rear)
  *  - brake-tap (feint): brake, release, turn in hard — the classic NFS entry
  *  - downshift + turn: engine braking on the rears as you turn in (clutch-kick)
- *  - handbrake: locks the rears (handled in the tire model; joins the drift)
+ * They're off because a keyboard's steering is all-or-nothing, so normal
+ * driving (brake, downshift, turn in at full lock) met them at nearly every
+ * corner and the car kept drifting when nobody asked it to.
  * Once sideways the rears give up grip (more with throttle, so the gas pedal
  * sets the angle), and the drift ends when the driver straightens up, slows
  * right down, or holds the brake.
  */
 
 export interface DriftConfig {
+  /**
+   * Also start drifts from fast turn-in, brake-tap and downshift entries, not
+   * just the handbrake. Off by default: see the class comment.
+   */
+  autoEntries: boolean
   /** No drifts below this forward speed, m/s. */
   minSpeed: number
   /** Fast turn-in entry: speed (m/s) and steering lock needed on the throttle. */
@@ -39,6 +48,7 @@ export interface DriftConfig {
 }
 
 export const DEFAULT_DRIFT: DriftConfig = {
+  autoEntries: false,
   minSpeed: 15,
   fastSpeed: 42,
   entryLock: 0.6,
@@ -92,9 +102,10 @@ export class Drift {
 
     const lock = Math.abs(i.steer)
     if (!this.active && i.speed > cfg.minSpeed) {
-      const fast = i.speed > cfg.fastSpeed && lock >= cfg.fastLock && i.throttle > 0.5
-      const tapped = lock >= cfg.entryLock && this.brakeArm > 0 && !braking
-      const kicked = lock >= cfg.entryLock && this.downshiftArm > 0
+      const auto = cfg.autoEntries
+      const fast = auto && i.speed > cfg.fastSpeed && lock >= cfg.fastLock && i.throttle > 0.5
+      const tapped = auto && lock >= cfg.entryLock && this.brakeArm > 0 && !braking
+      const kicked = auto && lock >= cfg.entryLock && this.downshiftArm > 0
       const yanked = i.handbrake && lock >= 0.3
       if (fast || tapped || kicked || yanked) {
         this.active = true
