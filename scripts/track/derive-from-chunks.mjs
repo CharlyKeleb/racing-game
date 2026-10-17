@@ -32,8 +32,10 @@ const io = new NodeIO().registerExtensions(ALL_EXTENSIONS).registerDependencies(
 // ── Read LOD0 chunks (node names are `<layer>__<material>`) ─────────────────
 /** Same codes as src/world/Surface.ts. */
 const SURFACE = { none: 0, asphalt: 1, kerb: 2, grass: 3, sand: 4, gravel: 5 }
+/** cfg.surfaces: [[materialRegex, 'asphalt' | 'kerb' | 'grass' | 'sand' | 'gravel']], first match wins. */
 const surfaceOf = (mat) =>
-  /^curb/.test(mat) ? SURFACE.kerb
+  cfg.surfaces ? SURFACE[cfg.surfaces.find(([re]) => re.test(mat))?.[1] ?? 'none']
+  : /^curb/.test(mat) ? SURFACE.kerb
   : /^sand/.test(mat) ? SURFACE.sand
   : /^gravel/.test(mat) ? SURFACE.gravel
   : /^(grass|astroturf|travert_grass)/.test(mat) ? SURFACE.grass

@@ -163,6 +163,21 @@ without the source GLB:
 Material layer rules are per source model. Check the `top lod0 materials` line
 in the build log to see what dominates.
 
+Config options for sources that don't follow the Nürburgring's material naming
+(see `scripts/track/singapore.config.mjs`, a game-ripped model whose ~195
+materials are just numbers like `11851Mtl`):
+
+- `gateSurface`: material regex the gates snap to (default `/^asph/`).
+- `alpha`: `[[materialRegex, 'OPAQUE' | 'MASK' | 'BLEND']]` overrides. Without
+  one, a BLEND material whose texture has no transparent pixels ships OPAQUE,
+  because some exporters flag everything BLEND.
+- `surfaces`: `[[materialRegex, 'asphalt' | 'kerb' | 'grass' | 'sand' | 'gravel']]`
+  for the surface map (default: Nürburgring material names).
+
+To find the racing asphalt in such a model, look for a racing-line or rubber
+decal and check which material lies directly under it. On Singapore, a black
+decal (`151Mtl`) traces the whole lap, and `11861Mtl` is under 98% of it.
+
 ## Debugging
 
 In dev, `window.__game.debugStep(60)` advances 60 frames by hand, even when the

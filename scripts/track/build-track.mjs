@@ -105,7 +105,7 @@ function snapToRoad(x, z) {
     const steps = r === 0 ? 1 : Math.ceil((2 * Math.PI * r) / 1.5)
     for (let s = 0; s < steps; s++) {
       const a = (s / steps) * Math.PI * 2
-      const hit = heightAt(x + Math.cos(a) * r, z + Math.sin(a) * r, ['road'], /^asph/)
+      const hit = heightAt(x + Math.cos(a) * r, z + Math.sin(a) * r, ['road'], cfg.gateSurface ?? /^asph/)
       if (hit) return { ...hit, at: [x + Math.cos(a) * r, z + Math.sin(a) * r], moved: r }
     }
   }
@@ -568,6 +568,31 @@ if (terrainPrims.length) {
 }
 
 // ── 8. Material libraries ──────────────────────────────────────────────────
+/**
+ * Some exporters flag every material BLEND. A blended material whose texture
+ * has no transparent pixels is really opaque: render it so (no sorting, early-z).
+ */
+const opaqueCache = new Map()
+async function textureIsOpaque(tex) {
+  if (!tex) return true
+  if (!opaqueCache.has(tex)) {
+    const { channels } = await sharp(Buffer.from(tex.getImage())).stats()
+    opaqueCache.set(tex, channels.length < 4 || channels[3].min >= 250)
+  }
+  return opaqueCache.get(tex)
+}
+
+/** Alpha mode for an output material: cfg.alpha override, else false-BLEND fix, else per layer. */
+async function alphaModeFor(m, layer) {
+  const forced = cfg.alpha?.find(([re]) => re.test(m.getName()))
+  if (forced) return forced[1]
+  const mode = m.getAlphaMode()
+  if (mode !== 'BLEND') return mode
+  if (await textureIsOpaque(m.getBaseColorTexture())) return 'OPAQUE'
+  // Blended cards → alpha test: no sorting, far less overdraw on mobile GPUs.
+  return layer === 'veg' || layer === 'prop' || layer === 'barrier' ? 'MASK' : 'BLEND'
+}
+
 async function writeMaterials(tier, maxSize) {
   const doc = newDoc()
   const texMap = new Map()
@@ -587,10 +612,8 @@ async function writeMaterials(tier, maxSize) {
       .setDoubleSided(m.getDoubleSided() || layer === 'veg')
       .setMetallicFactor(0)
       .setRoughnessFactor(Math.max(0.6, m.getRoughnessFactor()))
-    // Blended cards → alpha test: no sorting, far less overdraw on mobile GPUs.
-    const blend = m.getAlphaMode() === 'BLEND'
-    if (blend && (layer === 'veg' || layer === 'prop' || layer === 'barrier')) out.setAlphaMode('MASK').setAlphaCutoff(0.5)
-    else out.setAlphaMode(m.getAlphaMode()).setAlphaCutoff(m.getAlphaCutoff())
+    const alpha = await alphaModeFor(m, layer)
+    out.setAlphaMode(alpha).setAlphaCutoff(alpha === 'MASK' && m.getAlphaMode() !== 'MASK' ? 0.5 : m.getAlphaCutoff())
     out.setExtras({ layer })
     const base = m.getBaseColorTexture()
     if (base) {

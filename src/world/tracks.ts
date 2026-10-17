@@ -51,7 +51,14 @@ export const NURBURGRING: StreamedTrackDefinition = {
   manifestUrl: '/models/tracks/nurburgring/track.json',
 }
 
-export const TRACKS: TrackDefinition[] = [NURBURGRING, TEST_CIRCUIT]
+export const MARINA_BAY: StreamedTrackDefinition = {
+  kind: 'streamed',
+  id: 'singapore',
+  name: 'Marina Bay',
+  manifestUrl: '/models/tracks/singapore/track.json',
+}
+
+export const TRACKS: TrackDefinition[] = [NURBURGRING, MARINA_BAY, TEST_CIRCUIT]
 
 export function getTrack(id: string): TrackDefinition {
   return TRACKS.find((t) => t.id === id) ?? TRACKS[0]
