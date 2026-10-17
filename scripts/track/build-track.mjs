@@ -465,6 +465,33 @@ const bounds = (pos) => {
 }
 const round = (v) => Math.round(v * 100) / 100
 
+/**
+ * Some exporters flag every material BLEND. A blended material whose texture
+ * has no transparent pixels is really opaque: render it so (no sorting, early-z).
+ */
+const opaqueCache = new Map()
+async function textureIsOpaque(tex) {
+  if (!tex) return true
+  if (!opaqueCache.has(tex)) {
+    const { channels } = await sharp(Buffer.from(tex.getImage())).stats()
+    opaqueCache.set(tex, channels.length < 4 || channels[3].min >= 250)
+  }
+  return opaqueCache.get(tex)
+}
+
+const srcMaterialByName = new Map(src.getRoot().listMaterials().map((m) => [m.getName(), m]))
+
+/**
+ * cfg.mergeSmallProps (tris): in LOD0, prop meshes smaller than this in a chunk
+ * (signs, poles, trims) are merged into one vertex-coloured draw call, like
+ * LOD1. Dense city scenery has ~50 prop materials per chunk, most of them tiny,
+ * and each costs a draw call. Props with any transparency keep their texture.
+ */
+async function mergeAsSmallProp(mat, layer, tris) {
+  if (!cfg.mergeSmallProps || layer !== 'prop' || tris >= cfg.mergeSmallProps) return false
+  return textureIsOpaque(srcMaterialByName.get(mat)?.getBaseColorTexture())
+}
+
 // ── 6. Chunks (LOD0 + LOD1) + per-chunk collision ──────────────────────────
 const manifestChunks = []
 const collisionParts = [] // { name, g }
@@ -481,6 +508,7 @@ for (const cell of [...cells.values()].sort((a, b) => a.i - b.i || a.j - b.j)) {
     const doc = newDoc()
     const stubs = new Map()
     const merged = []
+    const small = []
     let tris = 0
     for (const [mat, grp] of cell.groups) {
       const parts = lod === 0 ? grp.lod0 : grp.lod1
@@ -504,9 +532,18 @@ for (const cell of [...cells.values()].sort((a, b) => a.i - b.i || a.j - b.j)) {
         if (grp.layer !== 'decal') merged.push({ g, color: await averageColor(mat) })
         continue
       }
+      if (lod === 0 && (await mergeAsSmallProp(mat, grp.layer, g.idx.length / 3))) {
+        small.push({ g, color: await averageColor(mat) })
+        continue
+      }
       usedMaterials.add(mat)
       // '__' separator: three's GLTFLoader strips ':' and '.' from node names.
       addMesh(doc, `${grp.layer}__${mat}`, g, mat, stubs)
+      tris += g.idx.length / 3
+    }
+    if (small.length) {
+      const g = mergeColored(small)
+      addMesh(doc, 'prop__small', g, VERTEX_COLOR_MATERIAL, stubs)
       tris += g.idx.length / 3
     }
     if (merged.length) {
@@ -568,20 +605,6 @@ if (terrainPrims.length) {
 }
 
 // ── 8. Material libraries ──────────────────────────────────────────────────
-/**
- * Some exporters flag every material BLEND. A blended material whose texture
- * has no transparent pixels is really opaque: render it so (no sorting, early-z).
- */
-const opaqueCache = new Map()
-async function textureIsOpaque(tex) {
-  if (!tex) return true
-  if (!opaqueCache.has(tex)) {
-    const { channels } = await sharp(Buffer.from(tex.getImage())).stats()
-    opaqueCache.set(tex, channels.length < 4 || channels[3].min >= 250)
-  }
-  return opaqueCache.get(tex)
-}
-
 /** Alpha mode for an output material: cfg.alpha override, else false-BLEND fix, else per layer. */
 async function alphaModeFor(m, layer) {
   const forced = cfg.alpha?.find(([re]) => re.test(m.getName()))

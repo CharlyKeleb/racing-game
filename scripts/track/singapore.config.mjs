@@ -52,6 +52,19 @@ export default {
   textures: { high: 512, low: 256 },
 
   /**
+   * Linear albedo targets (see nurburgring.config.mjs). The circuit asphalt's
+   * texture was made to blend over darker ground, so on its own it reads
+   * near-white; real track tarmac is ~0.04–0.05.
+   */
+  albedo: [
+    [mats(11861, 12031, 1941, 1951), 0.045, [0.97, 1.0, 1.05]],
+    [mats(11851), 0.06, [0.98, 1.0, 1.04]],
+  ],
+
+  /** Dense city: merge each chunk's small prop meshes (< this many tris) into one draw call. */
+  mergeSmallProps: 400,
+
+  /**
    * Every source material is BLEND; the build makes fully opaque textures
    * OPAQUE automatically. These have alpha in the texture but must be solid.
    */
