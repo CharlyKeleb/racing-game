@@ -602,14 +602,14 @@ html, body { overscroll-behavior: none; }
 /* Circuit browser: a dedicated motorsport selection screen. */
 button.menu-track { display: block; border-bottom: 1px solid rgba(255,255,255,.2); padding-bottom: 8px; }
 .menu-track__name { display: block; }
-.track-select { width: min(1120px, calc(100vw - 40px)); max-width: none; height: min(820px, calc(100dvh - 40px)); max-height: none; padding: 0; border: 1px solid #ffffff25; background: #0c1420; color: var(--ink); overflow: auto; box-shadow: 0 30px 100px #000b; }
+.track-select { width: min(1120px, calc(100vw - 40px)); max-width: none; height: min(820px, calc(100dvh - 40px)); max-height: none; padding: 0; border: 1px solid #ffffff25; background: #0c1420; color: var(--ink); overflow: hidden; box-shadow: 0 30px 100px #000b; }
 .track-select[open] { display: flex; flex-direction: column; }
 .track-select::backdrop { background: #03070cce; backdrop-filter: blur(10px); }
-.track-select__header { display:flex; justify-content:space-between; align-items:center; gap:20px; padding:30px 34px 24px; border-bottom:1px solid #ffffff15; }
+.track-select__header { flex-shrink:0; display:flex; justify-content:space-between; align-items:center; gap:20px; padding:30px 34px 24px; border-bottom:1px solid #ffffff15; }
 .track-select h1 { margin:8px 0 0; font:italic 900 clamp(26px,3.5vw,44px)/1 var(--font-display); text-transform:uppercase; }
 .track-select h1 > span { color:var(--accent); }
-.track-select__body { display:grid; grid-template-columns: 330px minmax(0,1fr); flex:1; min-height:0; }
-.track-select__list { padding:28px 20px; background:#080f19; border-right:1px solid #ffffff15; }
+.track-select__body { display:grid; grid-template-columns: 330px minmax(0,1fr); flex:1; min-height:0; overflow:hidden; }
+.track-select__list { min-height:0; overflow-y:auto; overscroll-behavior:contain; scrollbar-gutter:stable; scrollbar-width:thin; scrollbar-color:var(--accent-2) #080f19; padding:28px 20px; background:#080f19; border-right:1px solid #ffffff15; }
 .track-select__list > .eyebrow { display:block; margin:0 12px 20px; }
 .track-option { display:flex; align-items:center; gap:12px; width:100%; padding:24px 14px; text-align:left; border:1px solid #ffffff15; border-left:3px solid transparent; color:var(--muted); background:#111c2a; margin-bottom:12px; cursor:pointer; transition:background .15s,border-color .15s; }
 .track-option:hover { background:#1b2a3e; }
@@ -623,7 +623,7 @@ button.menu-track { display: block; border-bottom: 1px solid rgba(255,255,255,.2
 .track-option i { color:var(--accent-2); margin:0 5px; }
 .track-option__arrow { font-size:24px; }
 .track-select__hint { padding:12px; color:var(--dim); font-size:12px; line-height:1.7; }
-.track-select__detail { display:flex; flex-direction:column; min-width:0; }
+.track-select__detail { display:flex; flex-direction:column; min-width:0; min-height:0; overflow-y:auto; overscroll-behavior:contain; }
 .track-select__map { flex:1; min-height:210px; position:relative; display:grid; place-items:center; overflow:hidden; background:radial-gradient(ellipse at center,#173b4b75,transparent 70%),linear-gradient(#ffffff04 1px,transparent 1px),linear-gradient(90deg,#ffffff04 1px,transparent 1px); background-size:auto,32px 32px,32px 32px; }
 .track-select__map > svg { position:relative; width:90%; height:100%; max-height:340px; min-height:200px; }
 .track-select__watermark { position:absolute; right:20px; bottom:-30px; font:italic 900 260px/1 var(--font-display); color:#ffffff04; pointer-events:none; }
@@ -642,19 +642,20 @@ button.menu-track { display: block; border-bottom: 1px solid rgba(255,255,255,.2
 .track-select__stats dd { margin:5px 0 0; font:italic 800 28px var(--font-display); }
 .track-select__stats small { font-size:13px; margin-left:5px; color:var(--muted); }
 .track-select__stats dd.track-select__character { font-size:16px; padding-top:8px; }
-.track-select__footer { display:flex; justify-content:space-between; align-items:center; gap:16px; padding:20px 34px; border-top:1px solid #ffffff15; background:#080f19; }
+.track-select__footer { flex-shrink:0; display:flex; justify-content:space-between; align-items:center; gap:16px; padding:20px 34px; border-top:1px solid #ffffff15; background:#080f19; }
 .track-select__footer > span { color:var(--muted); font:600 12px var(--font-display); text-transform:uppercase; }
 .track-select__footer i { color:var(--accent); padding:0 10px; }
 @media(max-width:720px) {
   .track-select { width:100%; height:100dvh; border:0; }
   .track-select__header { padding:22px 18px; }
-  .track-select__body { display:flex; flex-direction:column; min-height:auto; }
-  .track-select__list { padding:16px; display:grid; grid-template-columns:1fr 1fr; gap:8px; border-right:0; }
+  .track-select__body { display:flex; flex-direction:column; min-height:0; overflow-y:auto; }
+  .track-select__list { flex-shrink:0; max-height:min(40dvh,320px); grid-auto-rows:max-content; padding:16px; display:grid; grid-template-columns:1fr 1fr; gap:8px; border-right:0; }
   .track-select__list > .eyebrow { grid-column:1/-1; margin:0 0 4px; }
   .track-option { padding:14px 10px; gap:8px; margin:0; }
   .track-option__number,.track-option__arrow,.track-select__hint { display:none; }
   .track-option b { font-size:18px; }
   .track-option small { font-size:9px; }
+  .track-select__detail { flex:none; overflow:visible; }
   .track-select__map { min-height:230px; }
   .track-select__map > svg { max-height:260px; }
   .track-select__info { padding:20px; }
@@ -915,3 +916,5 @@ button.menu-track:hover,button.menu-track:focus-visible { border-color:var(--acc
 .drift-event__sector{display:flex;align-items:center;gap:8px;font-size:9px;letter-spacing:.1em;color:#94acb8}.drift-event__sector b{font-size:19px;color:#effcff;font-variant-numeric:tabular-nums}
 
 .drift-setup-summary{display:grid;gap:6px;padding:14px 16px;background:#19c3ff08;border-left:2px solid var(--accent-2);margin:4px 0 22px}.drift-setup-summary strong{font-family:var(--font-display);font-size:22px;font-weight:900;font-style:normal;text-transform:uppercase;letter-spacing:.03em}.drift-setup-summary span{font-size:11px;color:var(--accent)}.drift-setup-summary small{font-size:12px;line-height:1.5;color:var(--muted)}
+
+.track-select__list:focus-visible { outline:2px solid var(--accent-2); outline-offset:-3px; }

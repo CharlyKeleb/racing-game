@@ -47,7 +47,7 @@ export function TrackSelection({ onClose }: { onClose(): void }) {
       <Button size="sm" variant="ghost" onClick={()=>dialog.current?.close()}>Back</Button>
     </header>
     <div className="track-select__body">
-      <nav className="track-select__list" aria-label="Available circuits">
+      <nav className="track-select__list" aria-label="Available circuits" tabIndex={0}>
         <span className="eyebrow">{String(TRACKS.length).padStart(2,'0')} circuits available</span>
         {TRACKS.map((t,i)=><button key={t.id} className={`track-option ${selected===t.id?'is-selected':''}`} onClick={()=>setSelected(t.id)} aria-pressed={selected===t.id}>
           <span className="track-option__number">0{i+1}</span>
