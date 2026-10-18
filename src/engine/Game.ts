@@ -1042,7 +1042,6 @@ export class Game {
       this.audio.playStartLight(true)
     }
     this.environment.follow(this.vehicle.position)
-    this.showroom.update(dt)
     const v = this.vehicle.body.linvel()
     this.track.update(this.vehicle.position, _velocity.set(v.x, v.y, v.z), dt)
     this.renderer.adapt(dt)
