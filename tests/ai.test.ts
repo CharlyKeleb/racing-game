@@ -110,8 +110,10 @@ it('drives a complete checkpoint-validated procedural lap using real vehicle phy
   } finally { opponent.dispose(); track.dispose(); physics.dispose() }
 }, 30000)
 
-it.each(['bmw', 'porsche911', 'koenigsegg', 'mixed', 'mixed relaxed', 'mixed intense'])('races a three-car %s field over Nürburgring collision for two laps', async (scenario) => {
-  const [car, preset] = scenario.split(' ')
+it.each(['bmw', 'porsche911', 'koenigsegg', 'mixed', 'mixed relaxed', 'mixed intense', 'drift-park', 'drift-park relaxed', 'drift-park intense'])('races a three-car %s field over track collision for two laps', async (scenario) => {
+  const [field, preset] = scenario.split(' ')
+  const driftPark = field === 'drift-park'
+  const car = driftPark ? 'mixed' : field
   const difficulty = (preset ?? 'challenging') as import('../src/racing/AiProfiles').AiDifficulty
   const { readFile } = await import('node:fs/promises')
   const { GLTFLoader } = await import('three/examples/jsm/loaders/GLTFLoader.js')
@@ -129,7 +131,7 @@ it.each(['bmw', 'porsche911', 'koenigsegg', 'mixed', 'mixed relaxed', 'mixed int
       return loader.parseAsync(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength), '')
     },
   }
-  const track = await StreamedTrack.load('/models/tracks/nurburgring/track.json', { assets: assets as unknown as import('../src/engine/AssetManager').AssetManager, world: physics.world, renderer: {} as THREE.WebGLRenderer, camera: new THREE.PerspectiveCamera(), scene: new THREE.Scene(), quality: 'low' })
+  const track = await StreamedTrack.load(`/models/tracks/${driftPark ? 'drift-park' : 'nurburgring'}/track.json`, { assets: assets as unknown as import('../src/engine/AssetManager').AssetManager, world: physics.world, renderer: {} as THREE.WebGLRenderer, camera: new THREE.PerspectiveCamera(), scene: new THREE.Scene(), quality: 'low' })
   const config = resolveVehicleConfig(JSON.parse(await readFile(`public/models/cars/${car === 'mixed' ? 'bmw' : car}/vehicle-config.json`, 'utf8')))
   const configs = car === 'mixed' ? await Promise.all(['bmw', 'porsche911', 'koenigsegg'].map(async id => resolveVehicleConfig(JSON.parse(await readFile(`public/models/cars/${id}/vehicle-config.json`, 'utf8'))))) : [config, config, config]
   const grid = startingGrid(track.line,track.spawn.position,4)
@@ -171,8 +173,10 @@ it.each(['bmw', 'porsche911', 'koenigsegg', 'mixed', 'mixed relaxed', 'mixed int
     expect(opponents.map(o=>o.race.timer.laps.length)).toEqual([2,2,2])
     expect(respawns.reduce((sum,spy)=>sum+spy.mock.calls.length,0)).toBe(0)
     expect(recoveries, JSON.stringify({incidents, boosts, drifts})).toBe(0)
-    expect(boosts.reduce((sum,n)=>sum+n,0), JSON.stringify({boosts,drifts})).toBeGreaterThan(0)
-    expect(drifts[2], JSON.stringify({boosts,drifts})).toBeGreaterThan(0)
+    if (!driftPark) {
+      expect(boosts.reduce((sum,n)=>sum+n,0), JSON.stringify({boosts,drifts})).toBeGreaterThan(0)
+      expect(drifts[2], JSON.stringify({boosts,drifts})).toBeGreaterThan(0)
+    }
   } finally { for (const o of opponents) o.dispose(); physics.world.removeRigidBody(blocker.body); track.dispose(); physics.dispose() }
 }, 30000)
 
@@ -188,4 +192,14 @@ it('updates sub-waypoint overtakes and orders cars behind the start line', () =>
   a.z = -9; b.z = -8
   expect(standings.snapshot([a,b])[0].id).toBe(1)
   expect(standings.progress({ ...a, x:10, z:8 })).toBeLessThan(1)
+})
+
+it('Drift Park route never doubles back between adjacent waypoints', async () => {
+  const { readFile } = await import('node:fs/promises')
+  const { line } = JSON.parse(await readFile('public/models/tracks/drift-park/track.json', 'utf8')) as { line: [number, number, number][] }
+  for (let i = 0; i < line.length; i++) {
+    const a = line[(i - 1 + line.length) % line.length], b = line[i], c = line[(i + 1) % line.length]
+    const dot = (b[0] - a[0]) * (c[0] - b[0]) + (b[2] - a[2]) * (c[2] - b[2])
+    expect(dot, `route reverses at waypoint ${i}`).toBeGreaterThan(0)
+  }
 })
