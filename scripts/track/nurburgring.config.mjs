@@ -31,12 +31,17 @@ export default {
     [/^top2$/, 'terrain'],
     [/^(tree|pines)/, 'veg'],
     [/^(lines|lines_yellow|redline|sandbrd|grassbrd|nurb_decal|box_decal|logos_wall)/, 'decal'],
-    [/^(asph|curb|pits|conc_|pavement|tiles|travert|astroturf)/, 'road'],
+    // grille: the drain grates along the road edge. As a prop it had no
+    // collision, a crack in the floor that wheels dropped into.
+    [/^(asph|curb|pits|conc_|pavement|tiles|travert|astroturf|grille)/, 'road'],
     [/^(grass\.|grassblock|sand\.|gravel)/, 'ground'],
     [/^(tyrewall|galvanized|grail|walls_new|wall_|concrete|rockwall|sound_barriers|metal_wall)/, 'barrier'],
     [/^(interiors|display_ACE|medical|tent_bath|box_door|ponyva)/, 'drop'],
     [/.*/, 'prop'],
   ],
+
+  /** Decal-layer materials that also get floor collision: grass borders laid where there's no grass mesh under them. */
+  collide: [[/^grassbrd/, 'ground']],
 
   /** Absolute simplification error (m) per layer and LOD. null = keep as-is. */
   lod: {

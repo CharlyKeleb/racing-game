@@ -7375,13 +7375,13 @@
    "lods": [
     {
      "url": "chunks/-5_5_lod0.glb",
-     "bytes": 221920,
-     "tris": 10034
+     "bytes": 222740,
+     "tris": 10097
     },
     {
      "url": "chunks/-5_5_lod1.glb",
-     "bytes": 77180,
-     "tris": 5139
+     "bytes": 77276,
+     "tris": 5149
     }
    ]
   },
@@ -7591,13 +7591,13 @@
    "lods": [
     {
      "url": "chunks/-4_0_lod0.glb",
-     "bytes": 132016,
-     "tris": 7047
+     "bytes": 134320,
+     "tris": 7228
     },
     {
      "url": "chunks/-4_0_lod1.glb",
-     "bytes": 25232,
-     "tris": 1618
+     "bytes": 25288,
+     "tris": 1623
     }
    ]
   },
@@ -7618,13 +7618,13 @@
    "lods": [
     {
      "url": "chunks/-4_1_lod0.glb",
-     "bytes": 126496,
-     "tris": 6729
+     "bytes": 127632,
+     "tris": 6808
     },
     {
      "url": "chunks/-4_1_lod1.glb",
-     "bytes": 25080,
-     "tris": 1609
+     "bytes": 25212,
+     "tris": 1614
     }
    ]
   },
@@ -7645,8 +7645,8 @@
    "lods": [
     {
      "url": "chunks/-4_2_lod0.glb",
-     "bytes": 154980,
-     "tris": 7401
+     "bytes": 155048,
+     "tris": 7407
     },
     {
      "url": "chunks/-4_2_lod1.glb",
@@ -7672,13 +7672,13 @@
    "lods": [
     {
      "url": "chunks/-4_3_lod0.glb",
-     "bytes": 143208,
-     "tris": 7428
+     "bytes": 145180,
+     "tris": 7607
     },
     {
      "url": "chunks/-4_3_lod1.glb",
-     "bytes": 27080,
-     "tris": 1776
+     "bytes": 27204,
+     "tris": 1792
     }
    ]
   },
@@ -7699,13 +7699,13 @@
    "lods": [
     {
      "url": "chunks/-4_4_lod0.glb",
-     "bytes": 269760,
-     "tris": 13956
+     "bytes": 272920,
+     "tris": 14236
     },
     {
      "url": "chunks/-4_4_lod1.glb",
-     "bytes": 75848,
-     "tris": 5062
+     "bytes": 76124,
+     "tris": 5097
     }
    ]
   },
@@ -7726,13 +7726,13 @@
    "lods": [
     {
      "url": "chunks/-4_5_lod0.glb",
-     "bytes": 387264,
-     "tris": 17341
+     "bytes": 391540,
+     "tris": 17711
     },
     {
      "url": "chunks/-4_5_lod1.glb",
-     "bytes": 128868,
-     "tris": 8628
+     "bytes": 129248,
+     "tris": 8649
     }
    ]
   },
@@ -7915,13 +7915,13 @@
    "lods": [
     {
      "url": "chunks/-3_-1_lod0.glb",
-     "bytes": 179756,
-     "tris": 9721
+     "bytes": 181780,
+     "tris": 9884
     },
     {
      "url": "chunks/-3_-1_lod1.glb",
-     "bytes": 28652,
-     "tris": 1883
+     "bytes": 28792,
+     "tris": 1898
     }
    ]
   },
@@ -7942,13 +7942,13 @@
    "lods": [
     {
      "url": "chunks/-3_0_lod0.glb",
-     "bytes": 239432,
-     "tris": 15472
+     "bytes": 240924,
+     "tris": 15593
     },
     {
      "url": "chunks/-3_0_lod1.glb",
-     "bytes": 28764,
-     "tris": 2903
+     "bytes": 28888,
+     "tris": 2923
     }
    ]
   },
@@ -7969,13 +7969,13 @@
    "lods": [
     {
      "url": "chunks/-3_1_lod0.glb",
-     "bytes": 380452,
-     "tris": 22624
+     "bytes": 384192,
+     "tris": 22941
     },
     {
      "url": "chunks/-3_1_lod1.glb",
-     "bytes": 109296,
-     "tris": 8428
+     "bytes": 109580,
+     "tris": 8454
     }
    ]
   },
@@ -7996,13 +7996,13 @@
    "lods": [
     {
      "url": "chunks/-3_2_lod0.glb",
-     "bytes": 604456,
-     "tris": 29231
+     "bytes": 609328,
+     "tris": 29695
     },
     {
      "url": "chunks/-3_2_lod1.glb",
-     "bytes": 158680,
-     "tris": 11106
+     "bytes": 158864,
+     "tris": 11135
     }
    ]
   },
@@ -8023,8 +8023,8 @@
    "lods": [
     {
      "url": "chunks/-3_3_lod0.glb",
-     "bytes": 325416,
-     "tris": 15878
+     "bytes": 324984,
+     "tris": 15888
     },
     {
      "url": "chunks/-3_3_lod1.glb",
@@ -8050,13 +8050,13 @@
    "lods": [
     {
      "url": "chunks/-3_4_lod0.glb",
-     "bytes": 350704,
-     "tris": 16423
+     "bytes": 352680,
+     "tris": 16559
     },
     {
      "url": "chunks/-3_4_lod1.glb",
-     "bytes": 125428,
-     "tris": 8260
+     "bytes": 125548,
+     "tris": 8276
     }
    ]
   },
@@ -8212,13 +8212,13 @@
    "lods": [
     {
      "url": "chunks/-2_-1_lod0.glb",
-     "bytes": 143316,
-     "tris": 6680
+     "bytes": 143772,
+     "tris": 6720
     },
     {
      "url": "chunks/-2_-1_lod1.glb",
-     "bytes": 15256,
-     "tris": 997
+     "bytes": 15272,
+     "tris": 998
     }
    ]
   },
@@ -8239,13 +8239,13 @@
    "lods": [
     {
      "url": "chunks/-2_0_lod0.glb",
-     "bytes": 250048,
-     "tris": 13108
+     "bytes": 251028,
+     "tris": 13199
     },
     {
      "url": "chunks/-2_0_lod1.glb",
-     "bytes": 70768,
-     "tris": 5371
+     "bytes": 70892,
+     "tris": 5382
     }
    ]
   },
@@ -8266,13 +8266,13 @@
    "lods": [
     {
      "url": "chunks/-2_1_lod0.glb",
-     "bytes": 714592,
-     "tris": 36657
+     "bytes": 715276,
+     "tris": 36707
     },
     {
      "url": "chunks/-2_1_lod1.glb",
-     "bytes": 166380,
-     "tris": 12458
+     "bytes": 166404,
+     "tris": 12466
     }
    ]
   },
@@ -8347,13 +8347,13 @@
    "lods": [
     {
      "url": "chunks/-2_4_lod0.glb",
-     "bytes": 98944,
-     "tris": 3421
+     "bytes": 99132,
+     "tris": 3436
     },
     {
      "url": "chunks/-2_4_lod1.glb",
-     "bytes": 32056,
-     "tris": 1838
+     "bytes": 32060,
+     "tris": 1840
     }
    ]
   },
@@ -8482,8 +8482,8 @@
    "lods": [
     {
      "url": "chunks/-1_-2_lod0.glb",
-     "bytes": 126088,
-     "tris": 5959
+     "bytes": 126072,
+     "tris": 5973
     },
     {
      "url": "chunks/-1_-2_lod1.glb",
@@ -8509,13 +8509,13 @@
    "lods": [
     {
      "url": "chunks/-1_-1_lod0.glb",
-     "bytes": 360700,
-     "tris": 14368
+     "bytes": 360836,
+     "tris": 14382
     },
     {
      "url": "chunks/-1_-1_lod1.glb",
      "bytes": 26004,
-     "tris": 1764
+     "tris": 1765
     }
    ]
   },
@@ -8536,13 +8536,13 @@
    "lods": [
     {
      "url": "chunks/-1_0_lod0.glb",
-     "bytes": 938184,
-     "tris": 45335
+     "bytes": 942140,
+     "tris": 45692
     },
     {
      "url": "chunks/-1_0_lod1.glb",
-     "bytes": 72096,
-     "tris": 5909
+     "bytes": 72152,
+     "tris": 5911
     }
    ]
   },
@@ -8563,13 +8563,13 @@
    "lods": [
     {
      "url": "chunks/-1_1_lod0.glb",
-     "bytes": 114808,
-     "tris": 4424
+     "bytes": 113524,
+     "tris": 4430
     },
     {
      "url": "chunks/-1_1_lod1.glb",
-     "bytes": 20552,
-     "tris": 1413
+     "bytes": 20596,
+     "tris": 1415
     }
    ]
   },
@@ -8720,13 +8720,13 @@
    "lods": [
     {
      "url": "chunks/0_-2_lod0.glb",
-     "bytes": 201788,
-     "tris": 11184
+     "bytes": 203456,
+     "tris": 11314
     },
     {
      "url": "chunks/0_-2_lod1.glb",
-     "bytes": 28292,
-     "tris": 2049
+     "bytes": 28500,
+     "tris": 2072
     }
    ]
   },
@@ -8747,13 +8747,13 @@
    "lods": [
     {
      "url": "chunks/0_-1_lod0.glb",
-     "bytes": 894996,
-     "tris": 43365
+     "bytes": 898740,
+     "tris": 43714
     },
     {
      "url": "chunks/0_-1_lod1.glb",
-     "bytes": 126760,
-     "tris": 9901
+     "bytes": 127016,
+     "tris": 9910
     }
    ]
   },
@@ -8774,8 +8774,8 @@
    "lods": [
     {
      "url": "chunks/0_0_lod0.glb",
-     "bytes": 131620,
-     "tris": 4723
+     "bytes": 128024,
+     "tris": 4730
     },
     {
      "url": "chunks/0_0_lod1.glb",
@@ -8909,13 +8909,13 @@
    "lods": [
     {
      "url": "chunks/1_-2_lod0.glb",
-     "bytes": 250788,
-     "tris": 14378
+     "bytes": 254052,
+     "tris": 14643
     },
     {
      "url": "chunks/1_-2_lod1.glb",
-     "bytes": 37096,
-     "tris": 3178
+     "bytes": 37228,
+     "tris": 3193
     }
    ]
   },
@@ -8936,8 +8936,8 @@
    "lods": [
     {
      "url": "chunks/1_-1_lod0.glb",
-     "bytes": 180076,
-     "tris": 8702
+     "bytes": 180088,
+     "tris": 8703
     },
     {
      "url": "chunks/1_-1_lod1.glb",
@@ -9213,13 +9213,13 @@
   }
  ],
  "stats": {
-  "lod0Tris": 436901,
-  "lod1Tris": 134253,
-  "collisionTris": 70324,
+  "lod0Tris": 440609,
+  "lod1Tris": 134525,
+  "collisionTris": 92143,
   "bytes": {
-   "lod0": 9079472,
-   "lod1": 2158236,
-   "collision": 391112,
+   "lod0": 9117072,
+   "lod1": 2161016,
+   "collision": 508388,
    "backdrop": 106012,
    "materials": {
     "high": 2443900,

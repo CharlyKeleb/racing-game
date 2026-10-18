@@ -86,3 +86,21 @@ describe('safety walls', () => {
     for (const r of radiusOf(walls)) expect(r).toBeGreaterThan(145)
   })
 })
+
+describe('safety walls before the floor is there', () => {
+  it('builds nothing when even the road under the line is missing', () => {
+    const line = Array.from({ length: 50 }, (_, i) => ({ x: 100 * Math.cos(i / 8), y: 0, z: 100 * Math.sin(i / 8) }))
+    expect(planSafetyWalls(line, () => null).segments).toBe(0)
+  })
+})
+
+describe('safety walls at a drop', () => {
+  it('treat a sudden drop to lower ground as the edge', () => {
+    const n = Math.round((2 * Math.PI * 100) / 4)
+    const line = Array.from({ length: n }, (_, i) => ({ x: 100 * Math.cos((i / n) * 2 * Math.PI), y: 0, z: 100 * Math.sin((i / n) * 2 * Math.PI) }))
+    // Quay edge 9 m outside the line, then the harbour floor 8 m down.
+    const walls = planSafetyWalls(line, (x, _y, z) => (Math.hypot(x, z) <= 109 ? 0 : -8))
+    expect(walls.segments).toBe(n)
+    for (let i = 0; i < walls.vertices.length; i += 3) expect(Math.hypot(walls.vertices[i], walls.vertices[i + 2])).toBeLessThan(111)
+  })
+})
