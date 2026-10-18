@@ -16,7 +16,8 @@ export interface TrackManifest {
   name: string
   chunkSize: number
   materials: { high: string; low: string }
-  backdrop: string
+  /** Terrain backdrop GLB; null for tracks without a terrain layer (a city block). */
+  backdrop: string | null
   collision: string
   spawn: { position: [number, number, number]; heading: number }
   checkpoints: { index: number; position: [number, number, number]; tangent: [number, number, number]; radius: number }[]
@@ -298,6 +299,7 @@ export class StreamedTrack implements RaceTrack {
   }
 
   private async loadBackdrop(): Promise<void> {
+    if (!this.manifest.backdrop) return
     const gltf = await this.assets.loadGltf(this.baseUrl + this.manifest.backdrop)
     if (this.disposed) {
       disposeObject(gltf.scene)

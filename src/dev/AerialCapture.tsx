@@ -55,7 +55,7 @@ export function AerialCapture({ id }: { id: string }) {
           bounds = new THREE.Box3().setFromPoints(route)
         } finally { physics.dispose() }
       } else {
-        const manifest = await assets.loadJson<{ materials: {low:string}; backdrop:string; line:[number,number,number][]; chunks:{lods:{url:string}[]}[] }>(def.manifestUrl)
+        const manifest = await assets.loadJson<{ materials: {low:string}; backdrop:string|null; line:[number,number,number][]; chunks:{lods:{url:string}[]}[] }>(def.manifestUrl)
         if (!manifest) throw new Error('Preview unavailable')
         if (cancelled) return
         const base = def.manifestUrl.slice(0, def.manifestUrl.lastIndexOf('/')+1)
@@ -65,7 +65,7 @@ export function AerialCapture({ id }: { id: string }) {
         const byName = new Map(materials.map(m=>[m.name,m]))
         const vertex = new THREE.MeshStandardMaterial({vertexColors:true,roughness:1})
         resources.add(vertex)
-        const urls = [manifest.backdrop,...manifest.chunks.map(c=>c.lods[0].url)]
+        const urls = [...(manifest.backdrop ? [manifest.backdrop] : []),...manifest.chunks.map(c=>c.lods[0].url)]
         const worker = async () => {
           while (!cancelled && urls.length) {
             const gltf = await assets.loadGltf(base+urls.shift()!)
@@ -134,7 +134,7 @@ export function AerialCapture({ id }: { id: string }) {
         setFailedId(null)
         setFrames(prev=>({previous:prev.current,current:{id,url}}))
       }
-    }).catch(()=>{ if(!cancelled)setFailedId(id) }).finally(dispose)
+    }).catch((err:unknown)=>{ console.error('[AerialCapture]',id,err); if(!cancelled)setFailedId(id) }).finally(dispose)
     return ()=>{cancelled=true}
   },[id])
   return <><div className={`track-aerial ${loading?'is-loading':''}`} aria-busy={loading && !error}>
