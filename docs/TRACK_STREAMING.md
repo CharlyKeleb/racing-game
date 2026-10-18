@@ -173,6 +173,20 @@ materials are just numbers like `11851Mtl`):
   because some exporters flag everything BLEND.
 - `surfaces`: `[[materialRegex, 'asphalt' | 'kerb' | 'grass' | 'sand' | 'gravel']]`
   for the surface map (default: Nürburgring material names).
+- `collide`: `[[materialRegex, 'road' | 'ground' | 'barrier']]`. Materials in a
+  visual-only layer that still need collision, such as ground logos painted
+  onto run-off with nothing under them, or pavement that is also the city's
+  building walls (it stays a cheap prop).
+- `cropTo`: material regex for the scenery crop box (default: every `road`
+  material). Use it when pavements or freeways run far past the circuit.
+- With no `terrain` layer (a city block) the manifest's `backdrop` is `null`
+  and no backdrop file is written.
+
+Collision is checked by `tests/trackEdges.test.ts`, which throws a car off
+the road 60 times per track. Missing floor near the road edge is almost
+always a kerb, edge line or gutter material that fell through to `prop`.
+Run a gap scan against the source and add those materials to `road`, or to
+`collide`.
 
 To find the racing asphalt in such a model, look for a racing-line or rubber
 decal and check which material lies directly under it. On Singapore, a black

@@ -1,11 +1,13 @@
 // Extracts the track's centreline from the road mesh, offline.
 //
 // 1. Rasterise the racing-surface triangles top-down (1 cell = `res` m), keeping
-//    the highest surface height per cell.
+//    the highest and lowest surface height per cell (a bridge over the route).
 // 2. Distance transform: how far each road cell is from the nearest edge.
 // 3. Dijkstra between consecutive waypoints (gates + optional via points) with a
 //    cost that explodes near the edges, so the path hugs the middle of the road.
-// 4. Smooth and resample to even spacing; heights come from the raster.
+// 4. Smooth and resample to even spacing; heights come from the raster, each
+//    point taking whichever level carries on from the one before, so the line
+//    stays on the street under a flyover instead of jumping up onto it.
 //
 // The result drives the minimap and the in-world direction chevrons.
 
@@ -25,6 +27,7 @@ export function traceCenterline(prims, surface, waypoints, { res = 1, spacing = 
   const W = Math.ceil((x1 - x0) / res), H = Math.ceil((z1 - z0) / res)
   const road = new Uint8Array(W * H)
   const height = new Float32Array(W * H).fill(-Infinity)
+  const low = new Float32Array(W * H).fill(Infinity)
 
   // 1. Rasterise
   for (const p of tris) {
@@ -48,6 +51,7 @@ export function traceCenterline(prims, surface, waypoints, { res = 1, spacing = 
         const o = z * W + x
         road[o] = 1
         if (y > height[o]) height[o] = y
+        if (y < low[o]) low[o] = y
       }
     }
   }
@@ -185,14 +189,16 @@ export function traceCenterline(prims, surface, waypoints, { res = 1, spacing = 
     carry = t - seg
     total += seg
   }
-  const heightAt = (x, z) => {
+  const heightAt = (x, z, prev) => {
     const cx = Math.floor((x - x0) / res), cz = Math.floor((z - z0) / res)
     // nearest cell with a height (smoothing can drift a cell off the raster)
     for (let r = 0; r < 6; r++) for (let dz = -r; dz <= r; dz++) for (let dx = -r; dx <= r; dx++) {
       const o = (cz + dz) * W + (cx + dx)
-      if (height[o] > -Infinity) return height[o]
+      if (height[o] > -Infinity) return prev === undefined || Math.abs(height[o] - prev) <= Math.abs(low[o] - prev) ? height[o] : low[o]
     }
-    return 0
+    return prev ?? 0
   }
-  return { points: out.map(([x, z]) => [x, heightAt(x, z), z]), length: total, debug: { x0, z0, W, H } }
+  let prev
+  const points = out.map(([x, z]) => [x, (prev = heightAt(x, z, prev)), z])
+  return { points, length: total, debug: { x0, z0, W, H } }
 }

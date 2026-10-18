@@ -7,7 +7,7 @@
 //   track.json            manifest: chunks, bounds, spawn, checkpoints
 //   materials_high.glb    every material + WebP textures (≤1024)  ┐ loaded once,
 //   materials_low.glb     same, textures ≤256 for low-end mobile  ┘ shared by all chunks
-//   backdrop.glb          simplified 18 km terrain (always loaded)
+//   backdrop.glb          simplified terrain (always loaded; only when the config has a terrain layer)
 //   collision.glb         simplified drivable + barrier + terrain mesh (positions only)
 //   chunks/<i>_<j>_lod0.glb / _lod1.glb   geometry-only grid cells, meshopt-compressed
 //
@@ -780,7 +780,8 @@ const manifest = {
   chunkSize: S,
   sourceOrigin: origin.map(round),
   materials: { high: 'materials_high.glb', low: 'materials_low.glb' },
-  backdrop: 'backdrop.glb',
+  // No terrain layer (a city block): no backdrop file, so none in the manifest either.
+  backdrop: backdropBytes ? 'backdrop.glb' : null,
   collision: 'collision.glb',
   spawn: { position: [round(spawnXZ[0]), round((spawnGround?.y ?? 0) + 0.6), round(spawnXZ[1])], heading: round(Math.atan2(t[0], t[2])) },
   checkpoints,

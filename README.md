@@ -62,3 +62,33 @@ placeholder car with the same node names and physics.
   hand this to Claude to turn the McLaren `.blend` into a game-ready GLB
 
 Track selection images: see [Adding and updating race previews](docs/TRACK_PREVIEWS.md).
+
+## Drift Challenge
+
+Select **Drift Challenge** in the main menu to load **Drift Park**, built from
+`~/Downloads/drift_race_track_free.glb`. Choose Flow State (one lap), Speed Session (one lap with a 65 km/h scoring
+minimum), or Marathon (two laps). Each has no time limit
+and no opponents. Follow the route and pass every gate before crossing the
+finish line. Flow State’s bronze, silver and gold targets are 2,000, 5,000 and 9,000 points;
+personal bests are saved separately for each track and event. Drift setup retains
+the event selector and time-of-day controls.
+
+Build speed, turn and tap **Space** (or the touch Drift button) to start a slide.
+Link slides within 2.5 seconds to keep the chain alive; sustained slides build
+up to 5×. Straighten up to bank. Wall impacts, spins, sustained off-track driving
+and resets lose the active chain. Cyan clipping zones boost scoring by 1.75×;
+clean transitions add 250 base points. Forward slides on asphalt or kerbs need
+the event’s minimum speed, three grounded wheels and 12° of angle to score. Crossing the
+finish banks the final chain. Results show medals, best chain, longest drift,
+clean transitions and broken chains.
+
+The park uses the existing streamed-track loader, with two geometry/texture
+quality tiers, road and guardrail collision, a surface map and a captured aerial.
+Rebuild it from the source download with:
+
+```bash
+node scripts/track/build-track.mjs scripts/track/drift-park.config.mjs
+node scripts/track/derive-from-chunks.mjs scripts/track/drift-park.config.mjs
+```
+
+Set `DRIFT_TRACK_SOURCE` to use a different path to the same GLB.

@@ -1,8 +1,11 @@
+import { driftEvent } from '../racing/driftEvents'
 import { useGameInstance } from './GameContext'
 import { useGame, useTelemetry } from './hooks'
 import { Button } from './kit'
 
 export function RaceIntro() {
+  const drift = useGame(s => s.settings.mode === 'drift')
+  const event=driftEvent(useGame(s=>s.settings.driftEvent))
   const game = useGameInstance()
   const track = useGame(s=>s.trackName)
   const car = useGame(s=>s.carName)
@@ -13,9 +16,9 @@ export function RaceIntro() {
   return <section className="race-intro" aria-label="Race introduction">
     <div className="race-intro__bar race-intro__bar--top" />
     <div className="race-intro__copy" key={shot}>
-      <span className="eyebrow">Quick Race / {laps} {laps === 1 ? 'lap' : 'laps'} / {field.length} {field.length === 1 ? 'driver' : 'drivers'}</span>
-      <h1>{shot === 0 ? track : shot === 1 ? car : 'Take your position'}<i>.</i></h1>
-      <p>{shot === 0 ? 'Meet the grid.' : shot === 1 ? 'Your car. Your race.' : 'Eyes forward. The field is ahead.'}</p>
+      <span className="eyebrow">{drift ? `${event.name} / ${event.laps} scored ${event.laps===1?'lap':'laps'} / Gold ${event.targets[2].toLocaleString()}` : <>Quick Race / {laps} {laps === 1 ? 'lap' : 'laps'} / {field.length} {field.length === 1 ? 'driver' : 'drivers'}</>}</span>
+      <h1>{shot === 0 ? track : shot === 1 ? car : (drift ? 'Make it sideways' : 'Take your position')}<i>.</i></h1>
+      <p>{drift ? 'Chase the gold. Clip the zones. Keep the chain alive.' : shot === 0 ? 'Meet the grid.' : shot === 1 ? 'Your car. Your race.' : 'Eyes forward. The field is ahead.'}</p>
     </div>
     <ol className="race-intro__grid" aria-label="Starting grid">{field.map(s=><li key={s.id} className={s.player ? 'is-player' : ''}><b>P{s.position}</b><span>{s.name.split(' · ')[0]}</span></li>)}</ol>
     <Button className="race-intro__skip" variant="ghost" onClick={()=>game?.skipRaceIntro()}>Skip intro <kbd>Enter</kbd></Button>

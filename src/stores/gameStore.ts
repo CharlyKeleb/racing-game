@@ -1,3 +1,4 @@
+import { driftEvent, type DriftEventId } from '../racing/driftEvents'
 import { createStore } from 'zustand/vanilla'
 import { defaultQuality, isMobile } from '../engine/device'
 import { DEFAULT_BUILD, sanitizeBuild, type CarBuild } from '../vehicles/CarBuild'
@@ -15,6 +16,8 @@ export type QualityPreset = 'low' | 'medium' | 'high'
 export type CameraMode = 'chase' | 'cockpit'
 
 export interface Settings {
+  mode: 'quick' | 'drift'
+  driftEvent: DriftEventId
   quality: QualityPreset
   postfx: boolean
   masterVolume: number
@@ -64,6 +67,8 @@ const LEGACY_BUILD_KEY = 'racing-game:build'
 // First run: pick quality from the device. Phones start on Low with post FX
 // off; the renderer's dynamic resolution then holds 60 fps from there.
 const defaultSettings: Settings = {
+  mode: 'quick',
+  driftEvent: 'flow',
   quality: defaultQuality(),
   postfx: !isMobile(),
   masterVolume: 0.9,
@@ -81,6 +86,8 @@ function loadSettings(): Settings {
     const raw = localStorage.getItem(SETTINGS_KEY)
     if (!raw) return defaultSettings
     const merged: Settings = { ...defaultSettings, ...JSON.parse(raw) }
+    merged.driftEvent=driftEvent(merged.driftEvent).id
+    if (merged.mode !== 'drift') merged.mode = 'quick'
     if (!isAiDifficulty(merged.difficulty)) merged.difficulty = 'challenging'
     merged.opponents = [0, 1, 3].includes(merged.opponents) ? merged.opponents : 3
     if (!isTimeOfDay(merged.timeOfDay)) merged.timeOfDay = defaultSettings.timeOfDay

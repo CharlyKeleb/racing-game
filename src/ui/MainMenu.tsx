@@ -1,8 +1,9 @@
+import { driftEvent } from '../racing/driftEvents'
 import { GiCheckeredFlag, GiStopwatch, GiRaceCar, GiRoad, GiHomeGarage, GiGears } from 'react-icons/gi'
 import { useEffect, useState } from 'react'
 import { buildStats, carClass, performanceRank } from '../vehicles/CarBuild'
 import { getCar } from '../vehicles/carRegistry'
-import { CURRENT_MODE, GAME_MODES } from '../racing/gameModes'
+import { GAME_MODES } from '../racing/gameModes'
 import { useGameInstance } from './GameContext'
 import { useGame } from './hooks'
 import { CarPicker } from './CarPicker'
@@ -57,13 +58,13 @@ export function MainMenu() {
           <ModeSelect />
           <TrackPicker />
           <Button size="sm" variant="ghost" onClick={() => setShowRaceSetup(true)}>
-            Race setup · {settings.laps} {settings.laps === 1 ? 'lap' : 'laps'} · {TIME_PRESETS[settings.timeOfDay].label}
+            {settings.mode === 'drift' ? `Drift setup · ${driftEvent(settings.driftEvent).name}` : `Race setup · ${settings.laps} ${settings.laps === 1 ? 'lap' : 'laps'}`} · {TIME_PRESETS[settings.timeOfDay].label}
           </Button>
           <Button size="md" className="menu-icon-action" disabled={switching} onClick={() => game?.openGarage()}>
             <GiHomeGarage aria-hidden="true"/> Garage
           </Button>
           <Button size="lg" variant="primary" className="menu-icon-action" disabled={switching} onClick={() => game?.startRace()} autoFocus>
-            <GiCheckeredFlag aria-hidden="true"/> Race
+            <GiCheckeredFlag aria-hidden="true"/> {settings.mode === 'drift' ? 'Start drifting' : 'Race'}
           </Button>
         </div>
       </div>
@@ -132,6 +133,9 @@ function CarSpecsStrip({ carId }: { carId: string }) {
 const modeIcons = { quick: GiCheckeredFlag, timeTrial: GiStopwatch, drift: GiRaceCar, freeRoam: GiRoad }
 
 function ModeSelect() {
+  const mode = useGame(s => s.settings.mode)
+  const update = useGame(s => s.updateSettings)
+  const switching = useGame(s => s.trackSwitching)
   return (
     <div className="mode-select">
       <div className="mode-select__grid" role="radiogroup" aria-label="Game mode">
@@ -140,12 +144,13 @@ function ModeSelect() {
           return <button
             key={m.id}
             role="radio"
-            aria-checked={m.id === CURRENT_MODE}
-            disabled={!m.available}
-            className={m.id === CURRENT_MODE ? 'on' : ''}
+            aria-checked={m.id === mode}
+            disabled={!m.available || switching}
+            onClick={() => { if (m.id === 'quick' || m.id === 'drift') update({mode: m.id, ...(m.id === 'drift' ? {track: 'drift-park'} : {})}) }}
+            className={m.id === mode ? 'on' : ''}
             title={m.available ? m.blurb : `${m.blurb}: coming soon`}
           >
-            <span className="mode-select__content"><Icon className="mode-select__icon" aria-hidden="true" focusable="false"/><span className="mode-select__text">{m.name}{m.id === CURRENT_MODE && <small className="mode-select__description">{m.blurb}</small>}</span></span>
+            <span className="mode-select__content"><Icon className="mode-select__icon" aria-hidden="true" focusable="false"/><span className="mode-select__text">{m.name}{m.id === mode && <small className="mode-select__description">{m.blurb}</small>}</span></span>
             {!m.available && <i>Soon</i>}
           </button>
         })}
