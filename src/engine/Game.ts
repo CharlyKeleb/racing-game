@@ -1,3 +1,6 @@
+import { driftEvent, readDriftRecord, saveDriftRecord } from '../racing/driftEvents'
+import { DriftZones } from '../effects/DriftZones'
+import { DriftChallenge } from '../racing/DriftChallenge'
 import RAPIER from '@dimforge/rapier3d-compat'
 import * as THREE from 'three'
 import { AudioManager, type CarSoundState } from '../audio/AudioManager'
@@ -94,6 +97,12 @@ export class Game {
   private environment!: Environment
   private vehicle!: Vehicle
   private camera!: ChaseCamera
+  private driftZones?: DriftZones
+  private driftPersonalBest = 0
+  private driftNewBest = false
+  private driftLastX = 0
+  private driftLastZ = 0
+  private readonly driftChallenge = new DriftChallenge()
   private race!: RaceManager
   private opponents: Opponent[] = []
   private readonly opponentFlames = new Map<number, NitroFlames>()
@@ -333,6 +342,7 @@ export class Game {
         }
         // The intro's last shot is framed like the grid chase camera, so start it fresh there.
         if (state === 'countdown') this.camera.snap()
+        if (state === 'finished' && gameStore.getState().settings.mode === 'drift') this.finishDriftRun()
         gameStore.getState().setPhase(phase[state])
       },
       onLap: () => this.publishTelemetry(),
@@ -342,6 +352,10 @@ export class Game {
   /** Roadside corner boards + progress tracking + minimap outline for the current track. */
   private attachGuide(): void {
     this.guide?.dispose()
+    this.driftZones?.dispose()
+    this.driftZones = new DriftZones(this.track.line,this.track.checkpoints)
+    this.driftZones.group.visible = false
+    this.renderer.scene.add(this.driftZones.group)
     // Built at the next race start: colliders only answer ray queries after a
     // physics step, and at boot/track load none has run yet.
     this.removeSafetyWalls()
@@ -562,6 +576,11 @@ export class Game {
     if (!this.safetyWalls) this.buildSafetyWalls()
     const token = this.opponentToken
     const { settings } = gameStore.getState()
+    const opponentCount = settings.mode === 'drift' ? 0 : settings.opponents
+    this.driftChallenge.reset(driftEvent(settings.driftEvent))
+    this.driftNewBest = false
+    this.driftPersonalBest = readDriftRecord(settings.track,settings.driftEvent).score
+    this.vehicle.controller.setDriftMode(settings.mode === 'drift')
     this.raceQueued = true
     this.raceTransition = true
     this.race.state = 'idle'
@@ -569,7 +588,7 @@ export class Game {
     gameStore.getState().setPhase('loading')
     try {
       const choices = selectableCars().filter(car => car.id !== this.carId)
-      const rivals = Array.from({ length: settings.opponents }, (_, i) => choices[i % choices.length])
+      const rivals = Array.from({ length: opponentCount }, (_, i) => choices[i % choices.length])
       const loaded = await Promise.all(rivals.map(async car => {
         const [scene, json] = await Promise.all([
           this.assets.loadModel(car.modelUrlLow ?? car.modelUrl),
@@ -584,16 +603,17 @@ export class Game {
       this.playerEntry.lap = 0
       this.playerEntry.checkpoint = 0
       this.playerEntry.index = 0
-      const grid = startingGrid(this.track.line,this.track.spawn.position,settings.opponents+1,this.roadEdges)
+      const grid = startingGrid(this.track.line,this.track.spawn.position,opponentCount+1,this.roadEdges)
       const playerSlot = grid[grid.length-1]
       const position = new THREE.Vector3(playerSlot.x,playerSlot.y+0.6,playerSlot.z)
       const road = this.physics.groundHeight(position.x,position.y,position.z,c=>this.track.isRoadCollider(c))
       if (road !== null) position.y = road+0.6
       this.vehicle.respawn({position,heading:playerSlot.heading})
+      this.driftLastX=position.x;this.driftLastZ=position.z
       this.progress.reset(); this.progress.update(position.x,position.z)
       this.camera.snap()
       this.playerEntry.x = position.x; this.playerEntry.z = position.z
-      for (let id = 1; id <= settings.opponents; id++) {
+      for (let id = 1; id <= opponentCount; id++) {
         const slot = grid[id-1]
         const position = new THREE.Vector3(slot.x,slot.y+0.6,slot.z)
         const ground = this.physics.groundHeight(position.x,position.y,position.z,c=>this.track.isRoadCollider(c))
@@ -620,7 +640,7 @@ export class Game {
       this.audio.setOpponentCars(rivals)
       this.audio.playStart()
       this.prepareRaceIntro()
-      this.race.start(settings.laps,RACE_INTRO_SECONDS)
+      this.race.start(settings.mode === 'drift' ? driftEvent(settings.driftEvent).laps : settings.laps,RACE_INTRO_SECONDS)
       this.publishTelemetry()
     } catch (err) {
       this.clearOpponents()
@@ -874,12 +894,14 @@ export class Game {
    * validated, so a reset never skips a gate.
    */
   resetToCheckpoint(): void {
+    this.driftChallenge.bust()
     this.playerEntry.checkpoint = this.race.lastCheckpoint
     this.playerEntry.index = this.progress.index
     const spawn = this.recoverySpawn(this.playerEntry)
     this.vehicle.respawn(spawn)
     this.camera.snap()
     this.recovery.reset()
+    this.driftLastX=spawn.position.x; this.driftLastZ=spawn.position.z
     this.progress.reset()
     this.progress.update(spawn.position.x, spawn.position.z)
   }
@@ -959,10 +981,44 @@ export class Game {
         upY: 1 - 2 * (rotation.x * rotation.x + rotation.z * rotation.z),
         speed: Math.abs(this.vehicle.controller.forwardSpeed),
         pedal: Math.max(input.throttle, input.brake),
-        offLine: Math.hypot(body.x - centre.x, body.z - centre.z),
+        offLine: gameStore.getState().settings.mode === 'drift' ? 0 : Math.hypot(body.x - centre.x, body.z - centre.z),
       })
       if (reason) this.resetToCheckpoint()
     }
+    if (racing && gameStore.getState().settings.mode === 'drift') {
+      const ctrl = this.vehicle.controller
+      const velocity = this.vehicle.body.linvel()
+      const q = this.vehicle.body.rotation()
+      _forward.set(2*(q.x*q.z+q.w*q.y),2*(q.y*q.z-q.w*q.x),1-2*(q.x*q.x+q.y*q.y))
+      const forward = velocity.x*_forward.x+velocity.z*_forward.z
+      const sideways = velocity.x*_forward.z-velocity.z*_forward.x
+      const surface = this.track.surfaceAt(body.x,body.z)
+      let impact = false
+      const collider = this.vehicle.body.collider(0)
+      this.physics.world.contactPairsWith(collider,other=>{
+        this.physics.world.contactPair(collider,other,manifold=>{
+          if (Math.abs(manifold.normal().y)>.65) return
+          let impulse=0
+          for(let i=0;i<manifold.numContacts();i++)impulse+=manifold.contactImpulse(i)
+          if(impulse/this.vehicle.config.massKg>1.6)impact=true
+        })
+      })
+      const beforeBanks=this.driftChallenge.banks, beforeTransitions=this.driftChallenge.transitions, beforeBusts=this.driftChallenge.busts
+      this.driftChallenge.sample(dt,{
+        speed:Math.max(0,forward)*3.6,
+        angle:Math.atan2(Math.abs(sideways),forward)*180/Math.PI,
+        direction:Math.sign(sideways),
+        distance:Math.hypot(body.x-this.driftLastX,body.z-this.driftLastZ),
+        grounded:ctrl.wheels.filter(w=>w.grounded).length>=3,
+        paved:surface===Surface.Asphalt || surface===Surface.Kerb,
+        active:ctrl.drift.active,
+        zone:!!this.driftZones?.at(body.x,body.z), impact,
+      })
+      if(this.driftChallenge.busts>beforeBusts)this.audio.playDriftCue('bust')
+      else if(this.driftChallenge.banks>beforeBanks)this.audio.playDriftCue('bank')
+      else if(this.driftChallenge.transitions>beforeTransitions)this.audio.playDriftCue('link')
+    }
+    this.driftLastX=body.x; this.driftLastZ=body.z
     const position = this.vehicle.body.translation()
     this.racePosition.set(position.x, position.y, position.z)
     this.race.update(dt, this.racePosition)
@@ -1029,6 +1085,7 @@ export class Game {
       // Creep in on the car as the lights build, then settle into the race camera after the start.
       const lightsT = Math.min(1, (COUNTDOWN_SEC - this.race.countdown) / COUNTDOWN_SEC)
       const gridFraming = phase === 'countdown' ? 1 - 0.5 * lightsT * lightsT * (3 - 2 * lightsT) : this.camera.mode === 'chase' ? 0.5 * Math.max(0,1-this.race.timer.totalMs/1200) : 0
+      this.camera.driftFraming = gameStore.getState().settings.mode === 'drift' ? .82 : .55
       this.camera.update(this.vehicle.model.root, this.vehicle.speedKmh, dt, this.vehicle.controller.nitro.intensity, this.vehicle.motion,gridFraming)
       this.effects.update(this.vehicle, dt)
       this.updateGuide(dt)
@@ -1041,6 +1098,7 @@ export class Game {
       this.lightsShown = 0
       this.audio.playStartLight(true)
     }
+    this.driftZones?.update(this.vehicle.position.x,this.vehicle.position.z,gameStore.getState().settings.mode === 'drift' && ['racing','countdown','intro','paused'].includes(phase),(this.race.lastCheckpoint+1)%this.track.checkpoints.length)
     this.environment.follow(this.vehicle.position)
     this.showroom.update(dt)
     const v = this.vehicle.body.linvel()
@@ -1181,7 +1239,15 @@ export class Game {
     const t = this.progress.tangent()
     _forward.set(0, 0, 1).applyQuaternion(this.vehicle.quaternion)
     const against = _forward.x * t.x + _forward.z * t.z < -0.4 && this.vehicle.speedKmh > 12
-    this.wrongWayTime = against && gameStore.getState().phase === 'racing' ? this.wrongWayTime + dt : 0
+    this.wrongWayTime = against && !this.vehicle.controller.drift.active && gameStore.getState().phase === 'racing' ? this.wrongWayTime + dt : 0
+  }
+
+  private finishDriftRun(): void {
+    this.driftChallenge.bank()
+    const {track,driftEvent:event}=gameStore.getState().settings
+    const previous=readDriftRecord(track,event)
+    this.driftNewBest=this.driftChallenge.total>previous.score
+    saveDriftRecord(track,{score:Math.max(previous.score,this.driftChallenge.total),chain:Math.max(previous.chain,this.driftChallenge.bestChain)},event)
   }
 
   private publishTelemetry(): void {
@@ -1202,6 +1268,25 @@ export class Game {
       drafting: ctrl.drafting,
       nitroActive: ctrl.nitro.active,
       nitroReady: ctrl.nitro.charge >= this.vehicle.config.nitro.minCharge,
+      driftAngle: this.driftChallenge.angle,
+      driftScoring: this.driftChallenge.scoring,
+      driftZone: this.driftChallenge.zone,
+      driftLink: this.driftChallenge.linkRemaining,
+      driftComboProgress: this.driftChallenge.comboProgress,
+      driftMessage: this.driftChallenge.messageTime>0 ? this.driftChallenge.message : '',
+      driftBestChain: this.driftChallenge.bestChain,
+      driftLongest: this.driftChallenge.longestDrift,
+      driftTransitions: this.driftChallenge.transitions,
+      driftZoneSeconds: this.driftChallenge.zoneSeconds,
+      driftPeakCombo: this.driftChallenge.peakMultiplier,
+      driftBusts: this.driftChallenge.busts,
+      driftPersonalBest: this.driftPersonalBest,
+      driftNewBest: this.driftNewBest,
+      driftTotal: this.driftChallenge.total,
+      driftChain: Math.round(this.driftChallenge.chain),
+      driftCombo: this.driftChallenge.multiplier,
+      driftGate: this.race.state === 'finished' ? this.track.checkpoints.length : this.race.lastCheckpoint,
+      driftGateCount: this.track.checkpoints.length,
       driftActive: ctrl.drift.active,
       driftScore: Math.round(ctrl.drift.score),
       driftBanked: ctrl.drift.sinceEnd < 1.6 ? ctrl.drift.lastScore : 0,
@@ -1344,6 +1429,7 @@ export class Game {
     this.livery?.dispose()
     this.effects?.dispose()
     this.guide?.dispose()
+    this.driftZones?.dispose()
     this.showroom?.dispose()
     this.track?.dispose()
     this.headlights?.dispose()

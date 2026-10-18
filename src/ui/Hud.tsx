@@ -1,3 +1,4 @@
+import { DriftEventHud, DriftComboHud } from './DriftHud'
 import { formatTime } from '../racing/LapTimer'
 import { useGame, useTelemetry } from './hooks'
 import { Minimap } from './Minimap'
@@ -15,6 +16,7 @@ function gearLabel(gear: number): string {
 
 export function Hud() {
   const t = useTelemetry((s) => s)
+  const drift = useGame(s => s.settings.mode === 'drift')
   const phase = useGame((s) => s.phase)
   // Shift light just under the redline; needles sweep once on the start countdown.
   const shift = t.gear > 0 && t.rpm >= t.redlineRpm * 0.94
@@ -27,7 +29,7 @@ export function Hud() {
       <div className="hud-speedlines" aria-hidden="true" />
       <div className="hud-tl">
         {t.standings.length > 1 && <div className="hud-lap" aria-label="Race position"><span className="eyebrow">Position</span><b>{t.standings.find(s => s.player)?.position ?? 1}</b><span className="hud-lap__total">/{t.standings.length}</span></div>}
-        <div className="hud-lap">
+        {drift ? <DriftEventHud /> : <><div className="hud-lap">
           <span className="eyebrow">Lap</span>
           <b>{Math.max(t.lap, 1)}</b>
           <span className="hud-lap__total">/{t.totalLaps}</span>
@@ -42,6 +44,7 @@ export function Hud() {
             <span className="mono">{formatTime(t.bestLapMs)}</span>
           </div>
         </div>
+        </>}
       </div>
       <div className="hud-tr">
         <div className="hud-fps mono">{t.fps} FPS</div>
@@ -55,7 +58,7 @@ export function Hud() {
       {t.drafting > 0.15 && phase === 'racing' && <div className="hud-drafting"><span>Slipstream</span><b>Building nitro</b></div>}
       {t.wrongWay && <div className="hud-wrongway">Wrong way</div>}
 
-      {t.driftActive ? (
+      {drift ? <DriftComboHud /> : t.driftActive ? (
         <div className="hud-drift">
           <span className="hud-drift__label">Drift</span>
           <b className="hud-drift__score">{t.driftScore.toLocaleString()}</b>

@@ -1,7 +1,7 @@
 import RAPIER from '@dimforge/rapier3d-compat'
 import * as THREE from 'three'
 import type { InputState } from '../input/InputManager'
-import { Drift, type DriftGuide } from './Drift'
+import { Drift, type DriftConfig, type DriftGuide } from './Drift'
 import { Drivetrain, type GearRequest } from './Drivetrain'
 import { Nitro } from './Nitro'
 import { Surface, surfaceProps } from './Surface'
@@ -66,6 +66,10 @@ export class VehicleController {
   drafting = 0
   readonly nitro: Nitro
   readonly drift = new Drift()
+  private eventDrift: DriftConfig | null = null
+  setDriftMode(enabled: boolean): void {
+    this.eventDrift = enabled ? {...this.cfg.drift, minSpeed:9, entryLock:.4, baseAngle:.46, holdAngle:.78, minAngle:.18, exitTime:.55, counterExitTime:.9, scrub:.025, pathG:.5} : null
+  }
   private readonly driftGuide: DriftGuide = { angle: 0, pathRate: 0 }
   steerAngle = 0
   /** Signed forward speed of the chassis, m/s. */
@@ -131,6 +135,7 @@ export class VehicleController {
   /** Apply all forces for one fixed tick. Call before PhysicsWorld.step(). */
   update(input: InputState, dt: number): void {
     const cfg = this.cfg
+    const driftCfg = this.eventDrift ?? cfg.drift
     const body = this.body
     const r = body.rotation()
     const t = body.translation()
@@ -214,15 +219,15 @@ export class VehicleController {
         slipAngle: Math.atan2(sideways, Math.max(speed, 0.1)),
         downshift,
       },
-      cfg.drift,
+      driftCfg,
       dt,
     )
     if (this.drift.entry !== 0 && !input.handbrake) {
       // Swing the tail out toward the turn: +steer (right) yaws clockwise from above (−Y).
-      _impulse.copy(_up).multiplyScalar(-this.drift.entry * cfg.drift.kick * this.yawInertia)
+      _impulse.copy(_up).multiplyScalar(-this.drift.entry * driftCfg.kick * this.yawInertia)
       body.applyTorqueImpulse(_impulse, true)
     }
-    const rearGrip = this.drift.rearGripScale(driveThrottle, cfg.drift)
+    const rearGrip = this.drift.rearGripScale(driveThrottle, driftCfg)
     const combinedRear = this.drift.amount > 0.3
 
     const massShare = cfg.massKg / this.wheels.length
@@ -286,7 +291,7 @@ export class VehicleController {
           surfaceGrip: ground.grip,
           surfaceDrag: ground.drag,
           // In a drift the guidance carves the path, so the tires' sideways grip steps back.
-          lateralGripScale: (this.isRear[i] ? rearGrip : 1) * (1 - cfg.drift.lateralRelief * this.drift.amount),
+          lateralGripScale: (this.isRear[i] ? rearGrip : 1) * (1 - driftCfg.lateralRelief * this.drift.amount),
           combined: this.isRear[i] && combinedRear,
         },
         cfg.tires,
@@ -389,7 +394,7 @@ export class VehicleController {
   private applyDriftGuidance(steer: number, groundedCount: number, dt: number): void {
     const amount = this.drift.amount
     if (amount < 0.01 || groundedCount < 2) return
-    const cfgD = this.cfg.drift
+    const cfgD = this.eventDrift ?? this.cfg.drift
     const body = this.body
     const lv = body.linvel()
     _vh.set(lv.x, lv.y, lv.z)
