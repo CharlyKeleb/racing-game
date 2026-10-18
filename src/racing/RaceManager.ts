@@ -23,7 +23,7 @@ export function startLightsLit(countdown: number): number {
   return Math.max(0, Math.min(START_LIGHTS, Math.floor((elapsed - FIRST_LIGHT_SEC) / LIGHT_INTERVAL_SEC) + 1))
 }
 
-/** Race rules: countdown → N laps → finished. Knows nothing about rendering. */
+/** Race rules: countdown → N laps or a timed session → finished. Knows nothing about rendering. */
 export class RaceManager {
   state: RaceState = 'idle'
   /** 1-based current lap while racing. */
@@ -31,6 +31,7 @@ export class RaceManager {
   countdown = 0
   introRemaining = 0
   introDuration = 0
+  durationSec: number | null = null
   totalLaps: number
   readonly timer = new LapTimer()
   private readonly checkpoints: CheckpointManager
@@ -52,8 +53,9 @@ export class RaceManager {
     return this.state === 'racing' || this.state === 'finished'
   }
 
-  start(totalLaps: number, introSeconds = 0): void {
+  start(totalLaps: number, introSeconds = 0, durationSec: number | null = null): void {
     this.totalLaps = totalLaps
+    this.durationSec = durationSec
     this.timer.reset()
     this.checkpoints.reset()
     this.lap = 0
@@ -86,11 +88,16 @@ export class RaceManager {
     }
     if (this.state !== 'racing') return
 
-    this.timer.tick(dt)
+    this.timer.tick(this.durationSec === null ? dt : Math.min(dt, Math.max(0, this.durationSec - this.timer.totalMs / 1000)))
+    if (this.durationSec !== null && this.timer.totalMs >= this.durationSec * 1000) {
+      this.timer.running = false
+      this.setState('finished')
+      return
+    }
     if (this.checkpoints.update(carPosition) === 'lap') {
       const best = this.timer.completeLap()
       this.events.onLap(this.lap, this.timer.lastLapMs!, best)
-      if (this.lap >= this.totalLaps) {
+      if (this.durationSec === null && this.lap >= this.totalLaps) {
         this.timer.running = false
         this.setState('finished')
       } else {

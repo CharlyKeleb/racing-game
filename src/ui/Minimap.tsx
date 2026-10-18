@@ -17,6 +17,7 @@ const ROUTE_POINTS = 120
  * change at telemetry rate (20 Hz).
  */
 export function Minimap() {
+  const drift = useGame(s => s.settings.mode === 'drift')
   const opponents = useTelemetry((s) => s.opponents)
   const data = useGame((s) => s.minimap)
   const carX = useTelemetry((s) => s.carX)
@@ -70,7 +71,7 @@ export function Minimap() {
           <path d="M0,-3.6 L2.6,2.6 L0,1.2 L-2.6,2.6 Z" />
         </g>
       </svg>
-      <div className="minimap__dist mono">{(distanceLeft / 1000).toFixed(2)} km</div>
+      <div className="minimap__dist mono">{drift ? 'DRIFT / OPEN SESSION' : `${(distanceLeft / 1000).toFixed(2)} km`}</div>
     </div>
   )
 }

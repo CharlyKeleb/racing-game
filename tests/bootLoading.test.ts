@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { DriftChallenge } from '../src/racing/DriftChallenge'
 import { Game } from '../src/engine/Game'
 import { gameStore } from '../src/stores/gameStore'
 
@@ -13,6 +14,7 @@ function loadingGame(loadVisuals: () => Promise<void>) {
     vehicle: { respawn: vi.fn() },
     camera: { snap: vi.fn() },
     progress: { reset: vi.fn(), update: vi.fn() },
+    driftChallenge: new DriftChallenge(),
     opponents: [],
     opponentFlames: new Map(),
     playerPose: {},

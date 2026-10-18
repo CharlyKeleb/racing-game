@@ -62,3 +62,24 @@ placeholder car with the same node names and physics.
   hand this to Claude to turn the McLaren `.blend` into a game-ready GLB
 
 Track selection images: see [Adding and updating race previews](docs/TRACK_PREVIEWS.md).
+
+## Drift Challenge
+
+Select **Drift Challenge** in the main menu to load **Drift Park**, built from
+`~/Downloads/drift_race_track_free.glb`. A run lasts two minutes and has no
+opponents. Build speed, turn and tap **Space** (or the touch Drift button) to
+start a slide. Link slides within 1.5 seconds to keep the chain alive; sustained
+slides build a multiplier up to 5×. Straighten up to bank points. Resetting loses
+the current chain, and the final chain is banked when time expires. Only grounded
+slides on asphalt or kerbs score. Pausing freezes the clock.
+
+The park uses the existing streamed-track loader, with two geometry/texture
+quality tiers, road and guardrail collision, a surface map and a captured aerial.
+Rebuild it from the source download with:
+
+```bash
+node scripts/track/build-track.mjs scripts/track/drift-park.config.mjs
+node scripts/track/derive-from-chunks.mjs scripts/track/drift-park.config.mjs
+```
+
+Set `DRIFT_TRACK_SOURCE` to use a different path to the same GLB.

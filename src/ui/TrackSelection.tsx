@@ -7,6 +7,7 @@ import { Button } from './kit'
 import { TrackAerial } from './TrackAerial'
 
 const details: Record<string, { location: string; character: string; description: string }> = {
+  'drift-park': {location: 'Drift playground', character: 'Hairpins / Linked slides', description: 'A purpose-built drift park with tight hairpins, sweeping transitions and a wide practice apron. Keep it sideways and link your slides.'},
   nurburgring: { location: 'Germany', character: 'Elevation / Fast sections', description: 'Commit through sweeping bends, manage the elevation changes and find your braking points.' },
   singapore: { location: 'Singapore', character: 'Street circuit / Walls close', description: 'Thread the walls round Marina Bay: tight 90° corners, two hairpins at the junction and no run-off to save you.' },
   'test-circuit': { location: 'Papaya proving grounds', character: 'Flat / Technical', description: 'A compact circuit for learning your car. Link the corners, refine your line and build confidence.' },
@@ -40,7 +41,7 @@ export function TrackSelection({ onClose }: { onClose(): void }) {
   const index = TRACKS.indexOf(track)
   return <dialog className="track-select" ref={dialog} onClose={onClose} aria-labelledby="track-select-title">
     <header className="track-select__header">
-      <div><span className="eyebrow">Quick Race / Location</span><h1 id="track-select-title">Choose your circuit<span>.</span></h1></div>
+      <div><span className="eyebrow">{settings.mode === 'drift' ? 'Drift Challenge' : 'Quick Race'} / Location</span><h1 id="track-select-title">Choose your circuit<span>.</span></h1></div>
       <Button size="sm" variant="ghost" onClick={()=>dialog.current?.close()}>Back</Button>
     </header>
     <div className="track-select__body">
@@ -60,6 +61,6 @@ export function TrackSelection({ onClose }: { onClose(): void }) {
         </div>
       </section>
     </div>
-    <footer className="track-select__footer"><div className="track-select__race-context"><span className="eyebrow">Your race</span><span>{settings.laps} {settings.laps===1?'lap':'laps'} <i>/</i> {(Number(previews[track.id as keyof typeof previews].lengthKm)*settings.laps).toFixed(2)} km <i>/</i> {TIME_PRESETS[settings.timeOfDay].label}</span></div><Button variant="primary" size="lg" onClick={()=>{dialog.current?.close();if(selected!==current)update({track:selected})}}>{selected===current?'Keep this circuit':'Select circuit'} <span aria-hidden="true">→</span></Button></footer>
+    <footer className="track-select__footer"><div className="track-select__race-context"><span className="eyebrow">Your race</span><span>{settings.mode === 'drift' ? '2-minute solo run' : <>{settings.laps} {settings.laps===1?'lap':'laps'} <i>/</i> {(Number(previews[track.id as keyof typeof previews].lengthKm)*settings.laps).toFixed(2)} km</>} <i>/</i> {TIME_PRESETS[settings.timeOfDay].label}</span></div><Button variant="primary" size="lg" onClick={()=>{dialog.current?.close();if(selected!==current)update({track:selected})}}>{selected===current?'Keep this circuit':'Select circuit'} <span aria-hidden="true">→</span></Button></footer>
   </dialog>
 }

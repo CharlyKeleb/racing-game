@@ -879,3 +879,15 @@ button.menu-track:hover,button.menu-track:focus-visible { border-color:var(--acc
 @keyframes intro-copy { from { opacity: 0; translate: -12px 0; } to { opacity: 1; translate: 0 0; } }
 @media (max-width: 700px) { .race-intro__grid { gap: 4px; bottom: calc(6vh + 70px); } .race-intro__grid li { padding: 6px 8px; font-size: 10px; } .race-intro__copy { max-width: calc(100vw - 50px); } }
 @media (prefers-reduced-motion: reduce) { .race-intro__copy { animation: none; } }
+
+/* Drift uses the existing racing palette, display type and HUD rhythm. */
+.drift-run { display:grid; gap:8px; max-width:290px; padding:18px 22px; background:linear-gradient(120deg,rgba(8,16,23,.9),rgba(8,16,23,.45)); border-left:3px solid var(--accent,#ff8700); }
+.drift-run>b { font-size:clamp(30px,4vw,50px); line-height:1; }
+.drift-run>strong { font-size:clamp(24px,3vw,38px); color:#ffd447; font-variant-numeric:tabular-nums; }
+.drift-run>small { max-width:240px; font-size:11px; opacity:.7; line-height:1.5; }
+.drift-run--urgent>b { color:#ff6767; }
+.drift-result { display:grid; gap:10px; text-align:center; padding:22px 8px; }
+.drift-result>strong { font-size:clamp(48px,7vw,80px); color:#ffd447; line-height:1; font-variant-numeric:tabular-nums; }
+.drift-result>span:not(.eyebrow) { font-size:11px; letter-spacing:.2em; }
+.drift-result>p { font-size:13px; opacity:.7; line-height:1.6; }
+@media(max-width:600px) { .drift-run{padding:10px 12px;max-width:205px;gap:5px}.drift-run>small{font-size:9px} }

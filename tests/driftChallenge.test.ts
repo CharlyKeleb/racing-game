@@ -1,0 +1,55 @@
+import { describe, expect, it } from 'vitest'
+import * as THREE from 'three'
+import { DriftChallenge, DRIFT_DURATION } from '../src/racing/DriftChallenge'
+import { RaceManager } from '../src/racing/RaceManager'
+
+// Rules use fixed simulation ticks, so pausing never drains the challenge clock.
+describe('Drift Challenge', () => {
+  it('links slides, caps the multiplier and banks once after a clean gap', () => {
+    const run = new DriftChallenge()
+    for (let i = 0; i < 1000; i++) run.update(1 / 60, 1, true)
+    expect(run.multiplier).toBe(5)
+    const points = Math.round(run.chain)
+    run.update(0.7, 0, false)
+    expect(run.total).toBe(0)
+    run.update(0.8, 0, false)
+    expect(run.total).toBe(points)
+    expect(run.chain).toBe(0)
+    run.bank()
+    expect(run.total).toBe(points)
+  })
+  it('ignores invalid slides and forfeits a reset chain without losing banked points', () => {
+    const run = new DriftChallenge()
+    run.update(1, 500, false)
+    expect(run.chain).toBe(0)
+    run.update(1, 100, true)
+    run.bank()
+    run.update(1, 200, true)
+    run.discard()
+    expect(run.total).toBe(100)
+    expect(run.chain).toBe(0)
+    run.reset()
+    expect(run.total).toBe(0)
+  })
+  it('ends a solo run on time even without completing a lap, then restarts as a lap race', () => {
+    const gates = [0, 100].map((z, index) => ({index, position:new THREE.Vector3(0,0,z), tangent:new THREE.Vector3(0,0,1), radius:10}))
+    const race = new RaceManager(gates, 1, {onStateChange:()=>{},onLap:()=>{}})
+    const p = new THREE.Vector3(0,0,-10)
+    race.start(1, 2, DRIFT_DURATION)
+    race.update(2,p)
+    expect(race.state).toBe('countdown')
+    race.update(3,p)
+    expect(race.timer.totalMs).toBe(0)
+    race.update(119,p)
+    expect(race.state).toBe('racing')
+    race.update(1,p)
+    expect(race.state).toBe('finished')
+    expect(race.timer.running).toBe(false)
+    race.start(1)
+    expect(race.durationSec).toBeNull()
+    expect(race.timer.totalMs).toBe(0)
+    race.update(3,p)
+    race.update(121,p)
+    expect(race.state).toBe('racing')
+  })
+})
