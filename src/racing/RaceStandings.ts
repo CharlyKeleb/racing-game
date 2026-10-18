@@ -41,44 +41,68 @@ export class RaceStandings {
     })
     this.lapLength = this.sectorLengths.reduce((sum, length) => sum + length, 0)
   }
-  progress(entry: RaceEntry): number {
+  /**
+   * Metres travelled into the car's validated sector, measured along the
+   * centreline (point spacing is uneven, so counting points would skew gaps by
+   * metres). Negative while still behind the start line on the grid.
+   */
+  private sectorMetres(entry: RaceEntry): number {
     const n = this.line.length, count = this.gates.length
     const gate = entry.checkpoint
     const start = this.gates[gate], end = this.gates[(gate + 1) % count]
     const span = (end - start + n) % n || n
-    let distance = (entry.index - start + n) % n
-    if (entry.x !== undefined && entry.z !== undefined) {
-      let best = Infinity
-      distance = 0
-      // Continuous segment projection within the validated sector. Nearest
-      // waypoint ranking quantised overtakes to ~4 m and reset at sector ends.
-      for (let k = 0; k < span; k++) {
-        const a = this.line[(start + k) % n], b = this.line[(start + k + 1) % n]
-        const dx = b.x - a.x, dz = b.z - a.z
-        const t = Math.max(0, Math.min(1, ((entry.x - a.x) * dx + (entry.z - a.z) * dz) / (dx * dx + dz * dz || 1)))
-        const d = (entry.x - a.x - dx * t) ** 2 + (entry.z - a.z - dz * t) ** 2
-        if (d < best) { best = d; distance = k + t }
-      }
-      if (gate === 0 && distance < 0.01) {
-        const a = this.line[start], b = this.line[(start + 1) % n]
-        const dx = b.x - a.x, dz = b.z - a.z
-        const behind = ((entry.x - a.x) * dx + (entry.z - a.z) * dz) / (dx * dx + dz * dz || 1)
-        distance = Math.min(0, behind)
-      }
-      distance = Math.min(span - 0.000001, distance)
-    } else if (distance > span) distance = 0
-    return (Math.max(1, entry.lap) - 1) * count + gate + distance / span
+    const length = this.sectorLengths[gate]
+    if (entry.x === undefined || entry.z === undefined) {
+      const k = (entry.index - start + n) % n
+      return k > span ? 0 : this.metresFrom(start, k, 0)
+    }
+    let best = Infinity, metres = 0, along = 0
+    // Continuous segment projection within the validated sector. Nearest
+    // waypoint ranking quantised overtakes to ~4 m and reset at sector ends.
+    for (let k = 0; k < span; k++) {
+      const a = this.line[(start + k) % n], b = this.line[(start + k + 1) % n]
+      const dx = b.x - a.x, dz = b.z - a.z
+      const segment = Math.hypot(dx, dz)
+      const t = Math.max(0, Math.min(1, ((entry.x - a.x) * dx + (entry.z - a.z) * dz) / (segment * segment || 1)))
+      const d = (entry.x - a.x - dx * t) ** 2 + (entry.z - a.z - dz * t) ** 2
+      if (d < best) { best = d; metres = along + t * segment }
+      along += segment
+    }
+    if (gate === 0 && metres < 0.01) {
+      // On the grid: how far behind the line, along the first segment.
+      const a = this.line[start], b = this.line[(start + 1) % n]
+      const dx = b.x - a.x, dz = b.z - a.z
+      const segment = Math.hypot(dx, dz) || 1
+      metres = Math.min(0, ((entry.x - a.x) * dx + (entry.z - a.z) * dz) / segment)
+    }
+    return Math.min(length - 0.000001, metres)
   }
+
+  /** Centreline metres from point `start` over `k` whole segments plus `t` of the next. */
+  private metresFrom(start: number, k: number, t: number): number {
+    const n = this.line.length
+    let metres = 0
+    for (let i = 0; i <= k && i < n; i++) {
+      const a = this.line[(start + i) % n], b = this.line[(start + i + 1) % n]
+      const segment = Math.hypot(b.x - a.x, b.z - a.z)
+      metres += i < k ? segment : t * segment
+    }
+    return metres
+  }
+
+  /** Sectors completed plus the share of the current one; ranks cars. */
+  progress(entry: RaceEntry): number {
+    const count = this.gates.length
+    const length = this.sectorLengths[entry.checkpoint] || 1
+    return (Math.max(1, entry.lap) - 1) * count + entry.checkpoint + this.sectorMetres(entry) / length
+  }
+
+  /** Metres from the start of the race along the centreline; gaps are differences of this. */
   distance(entry: RaceEntry): number {
     if (entry.finishMs !== null) return Math.max(1, entry.lap) * this.lapLength
-    const progress = this.progress(entry)
-    if (progress < 0) return progress * this.sectorLengths[0]
-    const whole = Math.floor(progress)
-    const lap = Math.floor(whole / this.gates.length)
-    const gate = whole % this.gates.length
-    let distance = lap * this.lapLength
-    for (let i = 0; i < gate; i++) distance += this.sectorLengths[i]
-    return distance + (progress - whole) * this.sectorLengths[gate]
+    let distance = (Math.max(1, entry.lap) - 1) * this.lapLength
+    for (let i = 0; i < entry.checkpoint; i++) distance += this.sectorLengths[i]
+    return distance + this.sectorMetres(entry)
   }
   snapshot(entries: readonly RaceEntry[]): Standing[] {
     const sorted = [...entries].sort((a, b) => {

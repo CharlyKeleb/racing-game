@@ -115,7 +115,6 @@ export class Game {
   private progress!: TrackProgress
   private wrongWayTime = 0
   /** Centreline length, meters (one lap). */
-  private lapLength = 0
   /** The car as shipped, before garage upgrades. */
   private baseConfig!: VehicleConfig
   private carId = ''
@@ -352,8 +351,6 @@ export class Game {
     this.progress = new TrackProgress(this.track.line)
     this.renderer.scene.add(this.guide.group)
     const line = this.track.line
-    this.lapLength = 0
-    for (let i = 0; i < line.length; i++) this.lapLength += line[i].distanceTo(line[(i + 1) % line.length])
     // Every point: the minimap is zoomed in and highlights the route from the car's index.
     gameStore.setState({
       minimap: {
@@ -1173,16 +1170,10 @@ export class Game {
   }
 
   /** Meters to the finish: the rest of this lap plus every lap after it. */
+  /** Metres to the finish, from the same centreline measure as the standings gaps. */
   private distanceLeft(): number {
-    const n = this.track.line.length
-    if (!n) return 0
-    const spacing = this.lapLength / n
-    const i = this.progress.index
-    let lap = ((n - i) % n) * spacing
-    // Still behind the start line on the grid: the whole lap is ahead too.
-    if (this.race.lastCheckpoint === 0 && i > n / 2) lap += this.lapLength
-    const lapsAfter = Math.max(0, this.race.totalLaps - Math.max(1, this.race.lap))
-    return this.race.state === 'finished' ? 0 : lap + lapsAfter * this.lapLength
+    if (!this.standings || this.race.state === 'finished') return 0
+    return Math.max(0, this.race.totalLaps * this.standings.lapLength - this.standings.distance(this.playerEntry))
   }
 
   /** Menu and garage show the car in the showroom; racing shows the track. */
