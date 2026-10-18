@@ -59,6 +59,9 @@ const LOCKED_INPUT: InputState = { throttle: 0, brake: 0, steer: 0, handbrake: t
 const FINISHED_INPUT: InputState = { throttle: 0, brake: 0.5, steer: 0, handbrake: false, nitro: false }
 const _velocity = new THREE.Vector3()
 const _forward = new THREE.Vector3()
+const _listenerPosition = new THREE.Vector3()
+const _listenerRight = new THREE.Vector3()
+const _rivalOffset = new THREE.Vector3()
 /** Seconds of driving against the race direction before the HUD says so. */
 const WRONG_WAY_DELAY = 1.2
 /** Garage turntable camera: distance (m) and lens (deg) when there's room. */
@@ -1104,14 +1107,7 @@ export class Game {
     this.track.update(this.vehicle.position, _velocity.set(v.x, v.y, v.z), dt)
     this.renderer.adapt(dt)
 
-    for (let i = 0; i < this.opponents.length; i++) {
-      const rival = this.opponents[i].vehicle
-      const dx = rival.position.x - this.vehicle.position.x, dz = rival.position.z - this.vehicle.position.z
-      const q = this.vehicle.quaternion
-      const heading = Math.atan2(2 * (q.w * q.y + q.x * q.z), 1 - 2 * (q.y * q.y + q.x * q.x))
-      const revs = staging ? this.rivalRevs[i] : undefined
-      this.audio.updateOpponent(i, revs?.rpm ?? rival.controller.drivetrain.rpm, revs?.throttle ?? rival.controller.throttlePedal, Math.hypot(dx, dz), dx * Math.cos(heading) - dz * Math.sin(heading), phase === 'racing' || phase === 'countdown' || phase === 'intro')
-    }
+    this.updateOpponentAudio(phase, staging)
     const ctrl = this.vehicle.controller
     const sound = this.soundState
     let slip = 0
@@ -1137,6 +1133,25 @@ export class Game {
     if (this.telemetryTimer >= 1 / TELEMETRY_HZ) {
       this.telemetryTimer = 0
       this.publishTelemetry()
+    }
+  }
+
+  /** The active camera is the listener, including during cinematic shots. */
+  private updateOpponentAudio(phase: GamePhase, staging: boolean): void {
+    if (this.opponents.length === 0) return
+    const camera = this.renderer.camera
+    // The renderer hasn't run yet: refresh the transform after camera motion.
+    camera.updateWorldMatrix(true, false)
+    _listenerPosition.setFromMatrixPosition(camera.matrixWorld)
+    _listenerRight.setFromMatrixColumn(camera.matrixWorld, 0).normalize()
+    const active = phase === 'racing' || phase === 'countdown' || phase === 'intro'
+    for (let i = 0; i < this.opponents.length; i++) {
+      const rival = this.opponents[i].vehicle
+      _rivalOffset.subVectors(rival.position, _listenerPosition)
+      // OpponentAudio expects positive-left offset; camera local +X is right.
+      const lateral = -_rivalOffset.dot(_listenerRight)
+      const revs = staging ? this.rivalRevs[i] : undefined
+      this.audio.updateOpponent(i, revs?.rpm ?? rival.controller.drivetrain.rpm, revs?.throttle ?? rival.controller.throttlePedal, _rivalOffset.length(), lateral, active)
     }
   }
 

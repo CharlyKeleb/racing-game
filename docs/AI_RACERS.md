@@ -27,8 +27,9 @@ and reads vanilla stores. No React imports belong in racing, audio or vehicles.
   behind gate zero cannot be counted as nearly a lap ahead. Continuous segment
   projection updates close overtakes between sampled points. Nearest line index
   alone cannot award a skipped sector.
-- `audio/OpponentAudio.ts`: a lightweight engine graph per rival with distance
-  attenuation and stereo positioning. Shares a decoded recording cache by audio
+- `audio/OpponentAudio.ts`: a lightweight engine graph per rival with 3D distance
+  attenuation and stereo positioning relative to the active camera, including
+  cinematic height, orientation and roll. Shares a decoded recording cache by audio
   URL, with each rival using its own model's engine bank and firing rate. Uses a
   synth while recordings are unavailable.
 
