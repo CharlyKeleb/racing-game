@@ -8,6 +8,7 @@ import { TrackAerial } from './TrackAerial'
 
 const details: Record<string, { location: string; character: string; description: string }> = {
   nurburgring: { location: 'Germany', character: 'Elevation / Fast sections', description: 'Commit through sweeping bends, manage the elevation changes and find your braking points.' },
+  singapore: { location: 'Singapore', character: 'Street circuit / Walls close', description: 'Thread the walls round Marina Bay: tight 90° corners, two hairpins at the junction and no run-off to save you.' },
   'test-circuit': { location: 'Papaya proving grounds', character: 'Flat / Technical', description: 'A compact circuit for learning your car. Link the corners, refine your line and build confidence.' },
 }
 
