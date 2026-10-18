@@ -29,6 +29,8 @@ const PAST = 0.5
 /** Wall extent around the floor height: deep enough to catch a car mid-drop, tall enough to stop a launched one. */
 const BELOW = 3
 const ABOVE = 4
+/** A floor this much lower one probe further out is a drop (a quay, a ledge), not a slope: an edge too. */
+const DROP = 2
 /** Neighbouring edges further apart than this aren't joined (the wall would cut across the floor). */
 const MAX_JUMP = 6
 
@@ -41,10 +43,17 @@ export interface SafetyWallMesh {
 
 /** Distance to the floor's edge along one side, and the floor height there; null when it carries on. */
 function edgeAt(p: WallPoint, nx: number, nz: number, probe: FloorProbe): { d: number; y: number } | null {
-  let y = p.y
+  // No floor under the centreline itself means the collision isn't there (or
+  // isn't queryable yet), not that the world ends: never wall in the road.
+  const road = probe(p.x, p.y, p.z)
+  if (road === null) return null
+  let y = road
   let misses = 0
   for (let d = FIRST; d <= MAX; d += STEP) {
     const h = probe(p.x + nx * d, y, p.z + nz * d)
+    // Marina Bay's promenade falls away to the ground plane by the water: the
+    // floor carries on 8 m down, which is still falling off the track.
+    if (h !== null && h < y - DROP) return { d: Math.max(FIRST - STEP, d - STEP) + PAST, y }
     if (h === null) {
       // Two misses in a row: a one-probe hole is a seam, not the end of the world.
       if (++misses === 2) return { d: Math.max(FIRST - STEP, d - 2 * STEP) + PAST, y }

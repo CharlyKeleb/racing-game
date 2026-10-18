@@ -24,6 +24,11 @@ export default {
     // Circuit asphalt (11861 under ~98% of the racing line; the others are short
     // bridge / junction sections), then run-off asphalt, concrete, orange paint, paving.
     [mats(11861, 12031, 1941, 1951, 11851, 1131, 11841, 1171), 'road'],
+    // The strips between the asphalt and the verge: painted edge line (1101),
+    // red/white kerbs (1111, 1121) and gutter kerb (1161). Left as props they
+    // had no collision, so every road edge had a 0.1-0.9 m crack in the floor
+    // that wheels dropped into and cars sank through.
+    [mats(1101, 1111, 1121, 1161), 'road'],
     [mats(191), 'ground'], // grass
     [mats(181), 'terrain'], // the base ground plane under the whole city
     [mats(1881, 1891, 1901, 11751, 1871, 1531, 1841, 12011, 171, 12001), 'barrier'], // walls, fences
@@ -38,6 +43,15 @@ export default {
     barrier: [0.05, 0.4],
     prop: [0.08, 1],
   },
+  /**
+   * Materials outside the floor layers that still get floor collision: the
+   * Singapore Airlines (1451) and DHL (1461) ground logos are painted straight
+   * onto the run-off with nothing under them, and the concrete (131) and grey
+   * paving (1191) run-off beside the kerbs is also the city's pavements and
+   * building walls, so it stays a prop (cheap on Low) and only collides.
+   */
+  collide: [[mats(1451, 1461, 131, 1191), 'ground']],
+
   weld: { road: 'posnrm', ground: 'posnrm', barrier: 'pos', prop: 'posnrm', decal: 'none' },
   keepUvs: /^$/,
 
@@ -46,6 +60,8 @@ export default {
 
   /** City beyond the circuit's bounding box + this margin (m) is dropped. */
   sceneryMargin: 450,
+  /** That box is the circuit asphalt's, not every 'road' material's (pavements run all over the city). */
+  cropTo: mats(11861, 12031, 1941, 1951, 11851, 1131, 11841, 1171),
 
   vegKeep: { default: [0.6, 0.25] },
 
@@ -105,7 +121,8 @@ export default {
 
   /** Surface map (derive-from-chunks.mjs): material → surface. */
   surfaces: [
-    [mats(11861, 12031, 1941, 1951, 11851, 1131, 11841, 1171), 'asphalt'],
+    [mats(1111, 1121, 1161), 'kerb'],
+    [mats(11861, 12031, 1941, 1951, 11851, 1131, 11841, 1171, 1101), 'asphalt'],
     [mats(191), 'grass'],
   ],
 }

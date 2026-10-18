@@ -342,7 +342,9 @@ export class Game {
   /** Roadside corner boards + progress tracking + minimap outline for the current track. */
   private attachGuide(): void {
     this.guide?.dispose()
-    this.buildSafetyWalls()
+    // Built at the next race start: colliders only answer ray queries after a
+    // physics step, and at boot/track load none has run yet.
+    this.removeSafetyWalls()
     const edges = measureRoadEdges(this.track.line, (x, z) => this.track.surfaceAt(x, z))
     this.roadEdges = edges
     this.standings = new RaceStandings(this.track.line, this.track.checkpoints)
@@ -370,13 +372,17 @@ export class Game {
 
   /** Invisible walls where the track's collision floor ends, so a car can't drop off the world (see SafetyWalls). */
   private buildSafetyWalls(): void {
-    if (this.safetyWalls) this.physics.world.removeRigidBody(this.safetyWalls)
-    this.safetyWalls = null
+    this.removeSafetyWalls()
     const walls = planSafetyWalls(this.track.line, (x, y, z) => this.physics.groundHeight(x, y, z))
     if (walls.segments === 0) return
     const body = this.physics.world.createRigidBody(RAPIER.RigidBodyDesc.fixed())
     this.physics.world.createCollider(RAPIER.ColliderDesc.trimesh(walls.vertices, walls.indices).setFriction(0.2).setRestitution(0.1), body)
     this.safetyWalls = body
+  }
+
+  private removeSafetyWalls(): void {
+    if (this.safetyWalls) this.physics.world.removeRigidBody(this.safetyWalls)
+    this.safetyWalls = null
   }
 
   /** A track ready to race and see (track switching): core, then visuals. */
@@ -553,6 +559,7 @@ export class Game {
 
   private async launchRace(): Promise<void> {
     this.clearOpponents()
+    if (!this.safetyWalls) this.buildSafetyWalls()
     const token = this.opponentToken
     const { settings } = gameStore.getState()
     this.raceQueued = true

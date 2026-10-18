@@ -280,6 +280,68 @@ function simplify(g, error, { prune = false } = {}) {
   return compact({ ...g, idx })
 }
 
+/**
+ * Collision only: a strip hanging off the road's open edges, `width` m out
+ * and sloping `drop` m down, wherever `cover` (the chunk's road and run-off)
+ * has no floor just outside. Where the source model has a hole between the
+ * asphalt and the verge (the Nürburgring has a 1.4 m one at the last chicane)
+ * it catches the wheels and the car instead of letting them fall through.
+ */
+/** XZ coverage of some meshes on a 0.25 m grid: has(x, z) is true where a cell centre lies in one of their triangles. */
+function floorCover(meshes) {
+  const C = 0.25
+  const cells = new Set()
+  for (const g of meshes) {
+    for (let t = 0; t < g.idx.length; t += 3) {
+      const a = g.idx[t] * 3, b = g.idx[t + 1] * 3, c = g.idx[t + 2] * 3
+      const x0 = Math.floor(Math.min(g.pos[a], g.pos[b], g.pos[c]) / C), x1 = Math.floor(Math.max(g.pos[a], g.pos[b], g.pos[c]) / C)
+      const z0 = Math.floor(Math.min(g.pos[a + 2], g.pos[b + 2], g.pos[c + 2]) / C), z1 = Math.floor(Math.max(g.pos[a + 2], g.pos[b + 2], g.pos[c + 2]) / C)
+      const d = (g.pos[b] - g.pos[a]) * (g.pos[c + 2] - g.pos[a + 2]) - (g.pos[b + 2] - g.pos[a + 2]) * (g.pos[c] - g.pos[a])
+      for (let i = x0; i <= x1; i++) for (let j = z0; j <= z1; j++) {
+        if (Math.abs(d) < 1e-9) continue
+        const x = (i + 0.5) * C, z = (j + 0.5) * C
+        const u = ((x - g.pos[a]) * (g.pos[c + 2] - g.pos[a + 2]) - (z - g.pos[a + 2]) * (g.pos[c] - g.pos[a])) / d
+        const v = ((g.pos[b] - g.pos[a]) * (z - g.pos[a + 2]) - (g.pos[b + 2] - g.pos[a + 2]) * (x - g.pos[a])) / d
+        if (u >= 0 && v >= 0 && u + v <= 1) cells.add(i * 1000003 + j)
+      }
+    }
+  }
+  return { has: (x, z) => cells.has(Math.floor(x / C) * 1000003 + Math.floor(z / C)) }
+}
+
+function skirt(g, width, drop, cover) {
+  const edges = new Map() // "a,b" (a<b) → [count, third vertex]
+  const tris = g.idx.length / 3
+  for (let t = 0; t < tris; t++) {
+    for (let k = 0; k < 3; k++) {
+      const a = g.idx[t * 3 + k], b = g.idx[t * 3 + ((k + 1) % 3)], c = g.idx[t * 3 + ((k + 2) % 3)]
+      const key = a < b ? `${a},${b}` : `${b},${a}`
+      const e = edges.get(key)
+      if (e) e[0]++
+      else edges.set(key, [1, a, b, c])
+    }
+  }
+  const pos = Array.from(g.pos), idx = Array.from(g.idx)
+  let n = g.pos.length / 3
+  for (const [count, a, b, c] of edges.values()) {
+    if (count !== 1) continue
+    const ax = g.pos[a * 3], az = g.pos[a * 3 + 2], bx = g.pos[b * 3], bz = g.pos[b * 3 + 2]
+    let nx = -(bz - az), nz = bx - ax
+    const l = Math.hypot(nx, nz)
+    if (l < 1e-4) continue
+    nx /= l; nz /= l
+    // Outward: away from the triangle's third vertex.
+    if ((g.pos[c * 3] - ax) * nx + (g.pos[c * 3 + 2] - az) * nz > 0) { nx = -nx; nz = -nz }
+    // Floor (run-off, more road) just outside: nothing to bridge, no skirt.
+    const mx = (ax + bx) / 2, mz = (az + bz) / 2
+    if (cover && cover.has(mx + nx * 0.5, mz + nz * 0.5) && cover.has(mx + nx * 1, mz + nz * 1)) continue
+    pos.push(ax + nx * width, g.pos[a * 3 + 1] - drop, az + nz * width, bx + nx * width, g.pos[b * 3 + 1] - drop, bz + nz * width)
+    idx.push(a, b, n, b, n + 1, n)
+    n += 2
+  }
+  return { ...g, pos: Float32Array.from(pos), idx: Uint32Array.from(idx), lock: new Uint8Array(n) }
+}
+
 /** Connected components (by shared vertex) — one per tree card cluster. */
 function components(pr) {
   const parent = new Int32Array(pr.pos.length / 3).map((_, i) => i)
@@ -364,7 +426,11 @@ const S = cfg.chunkSize
 // the terrain texture already shows, and cost ~1M triangles of alpha cards.
 const keepBox = (() => {
   let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity
-  for (const pr of prims) if (pr.layer === 'road') for (let i = 0; i < pr.pos.length; i += 3) {
+  // cfg.cropTo: material regex for the box (default: every road material).
+  // Marina Bay's pavements are 'road' for collision but run for kilometres
+  // through the city, so it crops to the circuit asphalt instead.
+  const circuit = (pr) => (cfg.cropTo ? cfg.cropTo.test(pr.mat) : pr.layer === 'road')
+  for (const pr of prims) if (circuit(pr)) for (let i = 0; i < pr.pos.length; i += 3) {
     x0 = Math.min(x0, pr.pos[i]); x1 = Math.max(x1, pr.pos[i]); z0 = Math.min(z0, pr.pos[i + 2]); z1 = Math.max(z1, pr.pos[i + 2])
   }
   const m = cfg.sceneryMargin
@@ -525,6 +591,12 @@ for (const cell of [...cells.values()].sort((a, b) => a.i - b.i || a.j - b.j)) {
         const b = bounds(g.pos)
         for (let k = 0; k < 3; k++) { entry.min[k] = Math.min(entry.min[k], b.min[k]); entry.max[k] = Math.max(entry.max[k], b.max[k]) }
         if (['road', 'ground', 'barrier'].includes(grp.layer)) colParts.push({ layer: grp.layer, parts: grp.lod0 })
+        else {
+          // Painted-on ground (logos, ads) that has no road or grass under it:
+          // without collision it's a hole in the floor (see cfg.collide).
+          const extra = cfg.collide?.find(([re]) => re.test(mat))
+          if (extra) colParts.push({ layer: extra[1], parts: grp.lod0 })
+        }
       }
       layerTris[`${grp.layer}${lod}`] = (layerTris[`${grp.layer}${lod}`] ?? 0) + g.idx.length / 3
       if (lod === 0) matTris[mat] = (matTris[mat] ?? 0) + g.idx.length / 3
@@ -566,10 +638,32 @@ for (const cell of [...cells.values()].sort((a, b) => a.i - b.i || a.j - b.j)) {
   manifestChunks.push(entry)
 
   // Collision: positions only, one mesh per layer so the runtime can tag barriers.
-  for (const layer of ['road', 'ground', 'barrier']) {
+  // Road and ground are simplified separately, so the vertices where they meet
+  // are locked: free, each side pulled its edge in on its own and left thin
+  // cracks along every kerb and verge that wheels dropped into and cars sank
+  // through.
+  const floors = {}
+  for (const layer of ['road', 'ground']) {
     const parts = colParts.filter((c) => c.layer === layer).flatMap((c) => c.parts)
-    if (!parts.length) continue
-    const g = simplify(weld(gather(parts, false), 'pos'), cfg.collisionError[layer])
+    if (parts.length) floors[layer] = weld(gather(parts, false), 'pos')
+  }
+  const seamKey = (pos, v) => `${Math.round(pos[v * 3] * 50)},${Math.round(pos[v * 3 + 1] * 50)},${Math.round(pos[v * 3 + 2] * 50)}`
+  if (floors.road && floors.ground) {
+    const keys = (g) => { const k = new Set(); for (let v = 0; v < g.pos.length / 3; v++) k.add(seamKey(g.pos, v)); return k }
+    const roadKeys = keys(floors.road), groundKeys = keys(floors.ground)
+    for (const [g, other] of [[floors.road, groundKeys], [floors.ground, roadKeys]]) {
+      for (let v = 0; v < g.pos.length / 3; v++) if (other.has(seamKey(g.pos, v))) g.lock[v] = 1
+    }
+  }
+  for (const layer of ['road', 'ground', 'barrier']) {
+    let welded = floors[layer]
+    if (!welded) {
+      const parts = colParts.filter((c) => c.layer === layer).flatMap((c) => c.parts)
+      if (!parts.length) continue
+      welded = weld(gather(parts, false), 'pos')
+    }
+    let g = simplify(welded, cfg.collisionError[layer])
+    if (g && layer === 'road') g = skirt(g, cfg.collisionSkirt ?? 2.5, 0.3, floorCover(Object.values(floors)))
     if (!g) continue
     collisionParts.push({ name: `${layer}__${id}`, g })
     totals.col += g.idx.length / 3
