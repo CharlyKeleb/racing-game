@@ -3,6 +3,8 @@ import { beforeAll, describe, expect, it } from 'vitest'
 import type { InputState } from '../src/input/InputManager'
 import { Surface } from '../src/vehicles/Surface'
 import { DEFAULT_VEHICLE_CONFIG, resolveVehicleConfig, type VehicleConfig } from '../src/vehicles/VehicleConfig'
+import * as THREE from 'three'
+import { peakSlipAngle } from '../src/vehicles/TirePhysics'
 import { VehicleController } from '../src/vehicles/VehicleController'
 import porsche911Json from '../public/models/cars/porsche911/vehicle-config.json'
 
@@ -60,7 +62,7 @@ function spawnCar(cfg: VehicleConfig) {
     world.step()
     return body.angvel().y * (180 / Math.PI)
   }
-  return { ctrl, step, body }
+  return { ctrl, step, body, world }
 }
 
 const drive = (steer: number): InputState => ({ throttle: 1, brake: 0, steer, handbrake: false, nitro: false })
@@ -310,4 +312,38 @@ describe('Porsche 911 handling', () => {
     expect(brakeSlide(200)).toBeGreaterThan(4) // TireSmoke starts at 2.5 m/s
     expect(brakeSlide(60)).toBeLessThan(2.5)
   })
+})
+
+
+it('full keyboard lock uses less front-tire slip without losing cornering after a 100 km/h entry',async()=>{
+  await RAPIER.init()
+  const corner=(scale:number)=>{
+    const {ctrl,step,body,world}=spawnCar({...PORSCHE_911,steerPeakSlipScale:scale})
+    try {
+      while(ctrl.forwardSpeed<100/3.6)step(pedals({throttle:1}))
+      let slip=0,turn=0,angle=0,samples=0
+      for(let i=0;i<90;i++){
+        step(pedals({throttle:.5,steer:1}))
+        if(i<30)continue
+        const rotation=body.rotation(),q=new THREE.Quaternion(rotation.x,rotation.y,rotation.z,rotation.w)
+        const up=new THREE.Vector3(0,1,0).applyQuaternion(q)
+        const f=new THREE.Vector3(0,0,1).applyQuaternion(q).applyAxisAngle(up,ctrl.steerAngle)
+        const r=new THREE.Vector3(-1,0,0).applyQuaternion(q).applyAxisAngle(up,ctrl.steerAngle)
+        for(const w of ctrl.wheels.filter(w=>w.cfg.steered&&w.grounded)){
+          const v=body.velocityAtPoint(w.contactPoint)
+          const velocity=new THREE.Vector3(v.x,v.y,v.z)
+          slip+=Math.abs(Math.atan2(velocity.dot(r),Math.abs(velocity.dot(f))))
+          samples++
+        }
+        turn+=Math.abs(body.angvel().y)*Math.abs(ctrl.forwardSpeed)
+        angle+=Math.abs(ctrl.steerAngle)
+      }
+      return {slip:slip/samples,turn:turn/60,angle:angle/60}
+    } finally {world.free()}
+  }
+  const old=corner(0),limited=corner(PORSCHE_911.steerPeakSlipScale)
+  console.info(`[100 km/h entry, full lock] ${JSON.stringify({old,limited,peak:peakSlipAngle(PORSCHE_911.tires)})}`)
+  expect(limited.angle).toBeLessThan(old.angle)
+  expect(limited.slip).toBeLessThan(old.slip*.9)
+  expect(limited.turn).toBeGreaterThan(old.turn)
 })

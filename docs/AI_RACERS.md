@@ -47,7 +47,10 @@ mass, grip, forces or position.
 
 Relaxed reduces pace, brakes earlier, reacts more slowly and varies pace more.
 Challenging balances those factors. Intense raises pace slightly, reacts sooner,
-and is more consistent. These change driving decisions, not vehicle physics.
+and is more consistent. Corner/braking planning shares of each car’s tire grip
+are 55%/50% for Relaxed, 80%/75% for Challenging and 88%/82% for Intense.
+Personality, pace and catch-up still modify the plan. The raw braking plan is
+capped by available brake force after the personality’s braking modifier. These change driving decisions, not vehicle physics.
 Difficulty is chosen in Race setup and applied when the next field is created.
 
 `racing/Overtaking.ts` owns follow/draft/pass/yield decisions. It holds a target
@@ -123,14 +126,22 @@ Unfinished rivals are marked DNF; there are no estimated finish times.
 
 ## Verification and tuning
 
-Run `npm test`, `npm run build`, and `npm run lint`. AI tests include a complete
+Run `npm test`, `npm run build`, and `npm run lint`. Use `npm run test:ai`
+to print each driver’s car, difficulty, two checkpoint-validated lap times and
+actual recovery count. All fields must finish both laps with zero respawns.
+The mixed-field presets exercise the same parked obstruction and starting grid.
+During tuning, 98%/92% corner/braking shares caused a recovery in the Intense
+mixed field; 88%/82% retains a margin below that setting. AI tests include a complete
 Papaya lap and three-car fields driving two Nürburgring laps for every selectable
 handling configuration against the shipped collision mesh, including mixed
 models, all three difficulties, the intro timing, the new starting slots and a
 parked obstruction ahead of the grid. The checks require
 complete laps, earned boost use, Viper drift entries and no recovery resets.
 These use actual vehicle physics and ordered checkpoint timing.
-Only procedural canvas textures are stubbed in the headless test.
+Only procedural canvas textures are stubbed in the headless test. AI steering
+normalisation uses `vehicles/SteeringLimit.ts`, the same grip-based envelope as
+the player controller, so changing the steering cap does not silently change
+what a partial AI steering input means.
 
 Then drive both tracks: leave the grid stationary to check overtaking, race
 beside rivals, brake in front of one, pause/resume, reset, retry and return to the

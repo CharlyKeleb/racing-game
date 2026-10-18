@@ -6,7 +6,8 @@ import { Drivetrain, type GearRequest } from './Drivetrain'
 import { Nitro } from './Nitro'
 import { Surface, surfaceProps } from './Surface'
 import { Suspension } from './Suspension'
-import { computeTireForces } from './TirePhysics'
+import { steeringLimit, type SteeringLimitConfig } from './SteeringLimit'
+import { computeTireForces, peakSlipAngle } from './TirePhysics'
 import type { VehicleConfig, WheelConfig } from './VehicleConfig'
 
 /** Per-wheel runtime state, read by visuals, audio and effects. */
@@ -89,6 +90,7 @@ export class VehicleController {
   /** Chassis yaw inertia (matches Vehicle's box inertia) and front-to-rear axle distance. */
   private readonly yawInertia: number
   private readonly wheelbase: number
+  private readonly steeringConfig: SteeringLimitConfig
   /** Axle positions along the car (local Z), where downforce acts. */
   private readonly frontAxleZ: number
   private readonly rearAxleZ: number
@@ -106,6 +108,11 @@ export class VehicleController {
     this.yawInertia = (cfg.massKg / 3) * (hx * hx + hz * hz)
     const zs = cfg.wheels.map((w) => w.position[2])
     this.wheelbase = Math.max(1, Math.max(...zs) - Math.min(...zs))
+    this.steeringConfig = {
+      wheelbase: this.wheelbase, maxSteerAngle: cfg.maxSteerAngle, steerFalloffSpeed: cfg.steerFalloffSpeed,
+      grip: cfg.tires.grip, peakSlip: peakSlipAngle(cfg.tires),
+      downforcePerKg: cfg.downforceCoefficient / cfg.massKg, steerPeakSlipScale: cfg.steerPeakSlipScale,
+    }
     this.frontAxleZ = Math.max(...zs)
     this.rearAxleZ = Math.min(...zs)
     // Split drive between axles: front = +Z. With both axles driven, the front
@@ -150,12 +157,13 @@ export class VehicleController {
     this.forwardSpeed = _vel.dot(_fwd)
     const speed = Math.abs(this.forwardSpeed)
 
-    // Steering: angle and turn-in rate both shrink with speed, so a keyboard tap
-    // at 200 km/h is a lane change, not a spin. Returning to center is faster.
+    // Steering: limit road-speed lock to the grip-supported turn plus a tire-slip
+    // allowance. Turn-in still slows with speed; returning to center is faster.
     // In a drift the driver needs real opposite lock, so the high-speed limit opens up.
     const gripFactor = 1 / (1 + speed / cfg.steerFalloffSpeed)
     const speedFactor = gripFactor + (Math.max(gripFactor, 0.55) - gripFactor) * this.drift.amount
-    const targetSteer = -input.steer * cfg.maxSteerAngle * speedFactor
+    const available = steeringLimit(this.steeringConfig, speed, input.handbrake ? 1 : this.drift.amount, surfaceProps(this.surfaceAt(t.x,t.z)).grip)
+    const targetSteer = -input.steer * available
     const centering = Math.abs(targetSteer) < Math.abs(this.steerAngle) || targetSteer * this.steerAngle < 0
     const maxDelta = cfg.steerSpeed * speedFactor * (centering ? cfg.steerReturnScale : 1) * dt
     this.steerAngle += Math.max(-maxDelta, Math.min(maxDelta, targetSteer - this.steerAngle))

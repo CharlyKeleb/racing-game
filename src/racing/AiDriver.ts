@@ -1,3 +1,4 @@
+import { steeringLimit, type SteeringLimitConfig } from '../vehicles/SteeringLimit'
 import type { InputState } from '../input/InputManager'
 import type { Point3 } from './TrackProgress'
 import { AI_DIFFICULTIES, DRIVER_PROFILES, type AiDifficulty, type DriverProfile } from './AiProfiles'
@@ -9,27 +10,13 @@ export interface DriverPose { x: number; z: number; heading: number; speed: numb
 export interface TrafficCar extends DriverPose { id: number }
 export interface DriverResources { charge: number; boosting: boolean; drifting: boolean }
 const EMPTY_RESOURCES: DriverResources = { charge: 0, boosting: false, drifting: false }
-export interface SteeringConfig {
-  wheelbase: number
-  maxSteerAngle: number
-  steerFalloffSpeed: number
-  /** Tire grip (μ). Corner and braking speeds scale with it; defaults to REFERENCE_GRIP. */
-  grip?: number
-  /** Downforce coefficient over mass (1/m): extra grip share per (m/s)² is this ÷ g. */
-  downforcePerKg?: number
+export interface SteeringConfig extends SteeringLimitConfig {
   /** Brake force over mass, m/s²: a hard cap on planned braking. */
   brakeDecel?: number
 }
 
-/** Tire grip the corner (5.5 m/s²) and braking (5 m/s²) targets were first tuned against. */
+/** Default grip for numeric callers without a vehicle configuration. */
 const REFERENCE_GRIP = 1.25
-/**
- * Share of the car's grip the AI plans to use, leaving room for line errors and
- * traffic. First tuned at 5.5 and 5 m/s² (45% / 41%), which left rivals
- * lifting through every fast bend and braking a long way early.
- */
-const CORNER_SHARE = 9.2 / (REFERENCE_GRIP * 9.81)
-const BRAKE_SHARE = 8.5 / (REFERENCE_GRIP * 9.81)
 /** Straight-line speed the plan allows, m/s (×profile.straight); the engine caps it before this. */
 const STRAIGHT_CAP = 88
 /**
@@ -86,7 +73,8 @@ export class AiDriver {
     this.length = this.distances[n]
     const grip = config.grip ?? REFERENCE_GRIP
     const downforce = (config.downforcePerKg ?? 0) / 9.81
-    const braking = Math.min(BRAKE_SHARE * grip * 9.81, config.brakeDecel ?? Infinity) * profile.braking * AI_DIFFICULTIES[difficulty].braking
+    const preset = AI_DIFFICULTIES[difficulty]
+    const braking = Math.min(preset.brakeGripShare * grip * 9.81 * profile.braking, config.brakeDecel ?? Infinity)
     for (let i = 0; i < n; i++) {
       const a = line[(i - 2 + n) % n], b = line[i], c = line[(i + 2) % n]
       const ab = Math.hypot(b.x - a.x, b.z - a.z)
@@ -95,7 +83,7 @@ export class AiDriver {
       const curvature = 2 * Math.abs((b.x - a.x) * (c.z - a.z) - (b.z - a.z) * (c.x - a.x)) / Math.max(0.001, ab * bc * ac)
       // Lateral grip a(v) = A·(1 + k·v²) with downforce; v²·κ = a(v) gives v² = A / (κ − A·k).
       // Where downforce outgrows the bend (κ ≤ A·k) only the straight-line cap applies.
-      const lateral = CORNER_SHARE * grip * 9.81 * profile.corner
+      const lateral = preset.cornerGripShare * grip * 9.81 * profile.corner
       const room = Math.max(curvature, 0.001) - lateral * downforce
       this.speeds[i] = clamp(room > 0 ? Math.sqrt(lateral / room) : Infinity, 9, STRAIGHT_CAP * profile.straight)
     }
@@ -156,7 +144,7 @@ export class AiDriver {
     this.derivative += ((error - this.previousError) / dt - this.derivative) * Math.min(1, dt * 5)
     this.previousError = error
     const angle = Math.atan2(2 * this.config.wheelbase * lateral, dx * dx + dz * dz) + 0.06 * error + 0.015 * this.integral + 0.012 * this.derivative
-    const available = this.config.maxSteerAngle / (1 + speed / this.config.steerFalloffSpeed)
+    const available = steeringLimit(this.config, speed, resources.drifting ? 1 : 0)
     const difficulty = AI_DIFFICULTIES[this.difficulty]
     const wantedSteer = clamp(-angle / available, -1, 1)
     this.input.steer += (wantedSteer - this.input.steer) * Math.min(1, dt / difficulty.reaction)
