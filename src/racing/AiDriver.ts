@@ -23,9 +23,22 @@ export interface SteeringConfig {
 
 /** Tire grip the corner (5.5 m/s²) and braking (5 m/s²) targets were first tuned against. */
 const REFERENCE_GRIP = 1.25
-/** Share of the car's grip the AI plans to use, leaving room for line errors and traffic. */
-const CORNER_SHARE = 5.5 / (REFERENCE_GRIP * 9.81)
-const BRAKE_SHARE = 5 / (REFERENCE_GRIP * 9.81)
+/**
+ * Share of the car's grip the AI plans to use, leaving room for line errors and
+ * traffic. First tuned at 5.5 and 5 m/s² (45% / 41%), which left rivals
+ * lifting through every fast bend and braking a long way early.
+ */
+const CORNER_SHARE = 9.2 / (REFERENCE_GRIP * 9.81)
+const BRAKE_SHARE = 8.5 / (REFERENCE_GRIP * 9.81)
+/** Straight-line speed the plan allows, m/s (×profile.straight); the engine caps it before this. */
+const STRAIGHT_CAP = 88
+/**
+ * Catch-up: a rival behind the player asks for up to CATCH_UP more pace,
+ * reaching it CATCH_UP_METRES back; one ahead eases by at most EASE_OFF.
+ */
+const CATCH_UP = 0.08
+const CATCH_UP_METRES = 250
+const EASE_OFF = 0.02
 
 /** Numeric, deterministic controller. Owns inputs, never moves a rigid body. */
 export class AiDriver {
@@ -84,7 +97,7 @@ export class AiDriver {
       // Where downforce outgrows the bend (κ ≤ A·k) only the straight-line cap applies.
       const lateral = CORNER_SHARE * grip * 9.81 * profile.corner
       const room = Math.max(curvature, 0.001) - lateral * downforce
-      this.speeds[i] = clamp(room > 0 ? Math.sqrt(lateral / room) : Infinity, 9, 65 * profile.straight)
+      this.speeds[i] = clamp(room > 0 ? Math.sqrt(lateral / room) : Infinity, 9, STRAIGHT_CAP * profile.straight)
     }
     // Two backward passes propagate braking through the closed seam.
     for (let k = n * 2 - 1; k >= 0; k--) {
@@ -107,7 +120,7 @@ export class AiDriver {
     this.input.handbrake = this.input.nitro = false
   }
 
-  /** gap is meters behind the player. Catch-up changes requested pace by at most 6%. */
+  /** gap is meters behind the player (negative when ahead). Catch-up: see CATCH_UP / EASE_OFF. */
   update(dt: number, pose: DriverPose, traffic: readonly TrafficCar[], id: number, gap: number, laneLimit: number, resources: DriverResources = EMPTY_RESOURCES): InputState {
     const index = this.progress.update(pose.x, pose.z)
     const n = this.line.length
@@ -147,7 +160,7 @@ export class AiDriver {
     const difficulty = AI_DIFFICULTIES[this.difficulty]
     const wantedSteer = clamp(-angle / available, -1, 1)
     this.input.steer += (wantedSteer - this.input.steer) * Math.min(1, dt / difficulty.reaction)
-    const rubber = 1 + clamp(gap / 6000, -0.06, 0.06)
+    const rubber = 1 + clamp((gap / CATCH_UP_METRES) * CATCH_UP, -EASE_OFF, CATCH_UP)
     this.targetSpeed = Math.min(this.speeds[index] * this.pace * rubber * difficulty.pace * (1 - difficulty.variation * (0.5 + 0.5 * Math.sin(this.elapsed * 0.37 + id * 2))), trafficSpeed)
     if (distanceFromLine > 5 || Math.abs(error) > 0.8) this.targetSpeed = Math.min(this.targetSpeed, 10)
     const delta = this.targetSpeed - pose.speed

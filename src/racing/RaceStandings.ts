@@ -11,6 +11,11 @@ export interface RaceEntry {
   x?: number
   z?: number
 }
+/** A tracked index within this many metres of the car is trusted to narrow the projection. */
+const HINT_RADIUS = 30
+/** Centreline metres either side of the tracked index searched for the exact projection. */
+const HINT_WINDOW = 80
+
 export interface Standing { id: number; name: string; player: boolean; position: number; finishMs: number | null; gapMeters: number; gapLaps: number; gapMs: number | null }
 
 /** Gate-validated progress: skipping a corner cannot promote a car into a later sector. */
@@ -56,10 +61,24 @@ export class RaceStandings {
       const k = (entry.index - start + n) % n
       return k > span ? 0 : this.metresFrom(start, k, 0)
     }
-    let best = Infinity, metres = 0, along = 0
     // Continuous segment projection within the validated sector. Nearest
     // waypoint ranking quantised overtakes to ~4 m and reset at sector ends.
-    for (let k = 0; k < span; k++) {
+    // The car's tracked centreline index (TrackProgress, which follows the car
+    // and can't jump) narrows the search: a whole-sector nearest match latched
+    // onto a parallel stretch where the track folds back on itself.
+    let from = 0, to = span
+    const hint = this.line[entry.index]
+    if (hint && (entry.x - hint.x) ** 2 + (entry.z - hint.z) ** 2 < HINT_RADIUS * HINT_RADIUS) {
+      const k = (entry.index - start + n) % n
+      const centre = k <= span ? k : n - k < k - span ? 0 : span
+      from = centre
+      for (let m = 0; from > 0 && m < HINT_WINDOW; from--) m += this.segment((start + from - 1) % n)
+      to = centre
+      for (let m = 0; to < span && m < HINT_WINDOW; to++) m += this.segment((start + to) % n)
+    }
+    let best = Infinity, metres = 0
+    let along = from > 0 ? this.metresFrom(start, from, 0) : 0
+    for (let k = from; k < to; k++) {
       const a = this.line[(start + k) % n], b = this.line[(start + k + 1) % n]
       const dx = b.x - a.x, dz = b.z - a.z
       const segment = Math.hypot(dx, dz)
@@ -76,6 +95,26 @@ export class RaceStandings {
       metres = Math.min(0, ((entry.x - a.x) * dx + (entry.z - a.z) * dz) / segment)
     }
     return Math.min(length - 0.000001, metres)
+  }
+
+  /**
+   * Centreline index to put a recovering car back on: `back` points behind
+   * where it is, but inside its validated sector, so a reset never skips a
+   * gate or costs more than a few metres.
+   */
+  recoveryIndex(entry: RaceEntry, back = 2): number {
+    const n = this.line.length, count = this.gates.length
+    const start = this.gates[entry.checkpoint], end = this.gates[(entry.checkpoint + 1) % count]
+    const span = (end - start + n) % n || n
+    const k = (entry.index - start + n) % n
+    const inside = k <= span ? k : n - k < k - span ? 0 : span
+    return (start + Math.max(0, Math.min(span - 1, inside - back))) % n
+  }
+
+  /** Length of the centreline segment from point i to the next. */
+  private segment(i: number): number {
+    const a = this.line[i], b = this.line[(i + 1) % this.line.length]
+    return Math.hypot(b.x - a.x, b.z - a.z)
   }
 
   /** Centreline metres from point `start` over `k` whole segments plus `t` of the next. */

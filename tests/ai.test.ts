@@ -23,7 +23,9 @@ describe('AI numeric control', () => {
     expect(driver.input.steer).toBeGreaterThan(0)
     const speed = driver.targetSpeed
     driver.update(1 / 60, pose, [], 1, 100000, 2)
-    expect(driver.targetSpeed).toBeCloseTo(speed * 1.06)
+    expect(driver.targetSpeed).toBeCloseTo(speed * 1.08)
+    driver.update(1 / 60, pose, [], 1, -100000, 2)
+    expect(driver.targetSpeed).toBeCloseTo(speed * 0.98 / 1.08 * 1.08)
     for (const v of [driver.input.steer, driver.input.throttle, driver.input.brake]) expect(Number.isFinite(v)).toBe(true)
     expect(Math.abs(driver.input.steer)).toBeLessThanOrEqual(1)
   })
