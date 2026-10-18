@@ -1,3 +1,4 @@
+import { hudCoversPoint } from '../stores/hudLayoutStore'
 import { driftEvent, readDriftRecord, saveDriftRecord } from '../racing/driftEvents'
 import { DriftZones } from '../effects/DriftZones'
 import { DriftChallenge } from '../racing/DriftChallenge'
@@ -1190,7 +1191,7 @@ export class Game {
             // Full strength from 6 m to 70 m; fade out up close (the car fills the screen) and toward 160 m.
             target = Math.min(1, (range - 3) / 3) * Math.min(1, (160 - tag.distance) / 90)
             // Stay out from under the standings and lap panels.
-            if ((tag.x > 72 && tag.y < 28) || (tag.x < 40 && tag.y < 16)) target *= 0.25
+            if (hudCoversPoint(tag.x, tag.y)) target *= 0.25
           }
         }
       }

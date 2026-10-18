@@ -68,9 +68,9 @@ function spawnCar(cfg: VehicleConfig) {
 const drive = (steer: number): InputState => ({ throttle: 1, brake: 0, steer, handbrake: false, nitro: false })
 
 /** Accelerate in a straight line to ~120 km/h, then hold full right lock. */
-function holdTurn(cfg: VehicleConfig) {
+function holdTurn(cfg: VehicleConfig, entryKmh = 120) {
   const { ctrl, step } = spawnCar(cfg)
-  while (ctrl.forwardSpeed < 120 / 3.6) step(drive(0))
+  while (ctrl.forwardSpeed < entryKmh / 3.6) step(drive(0))
   const turn: number[] = []
   for (let i = 0; i < 120; i++) turn.push(step(drive(1)))
   const release: number[] = []
@@ -100,6 +100,24 @@ describe.each(CARS)('handling smoothness: %s', (_, cfg) => {
   it('stops rotating soon after the steering is released', () => {
     const { release } = holdTurn(cfg)
     expect(Math.abs(release[30])).toBeLessThan(2) // within 0.5 s
+  })
+})
+
+describe.each([0.55, 3])('911 turn-in with downforce coefficient %s', (downforceCoefficient) => {
+  beforeAll(() => RAPIER.init())
+
+  it('settles within one swing after a 130 km/h full-lock entry', () => {
+    const { turn, release } = holdTurn({ ...PORSCHE_911, downforceCoefficient }, 130)
+    const settled = turn.slice(40)
+    let reversals = 0
+    for (let i = 2; i < settled.length; i++) {
+      const previous = settled[i - 1] - settled[i - 2]
+      const current = settled[i] - settled[i - 1]
+      if (previous * current < 0 && Math.abs(current) > 0.05) reversals++
+    }
+    expect(reversals).toBeLessThanOrEqual(1)
+    expect(Math.max(...turn.map(Math.abs)) / Math.abs(turn.at(-1)!)).toBeLessThan(1.6)
+    expect(Math.abs(release[30])).toBeLessThan(2)
   })
 })
 

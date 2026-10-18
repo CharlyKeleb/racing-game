@@ -363,15 +363,15 @@ export class VehicleController {
     if (rate <= 0 || handbrake || speed < 3) return
     const yaw = this.body.angvel()
     const yawRate = yaw.x * _up.x + yaw.y * _up.y + yaw.z * _up.z
-    // The 15% headroom over tire grip also covers what downforce adds (≤ ~12% at 200 km/h
-    // on the shipped cars). Don't scale this with downforce: the cap is what catches the
-    // turn-in yaw overshoot, and raising it lets a held turn wobble (see handling tests).
-    // Braking into a corner rotates a real car (weight shifts onto the nose), so let it
-    // turn in tighter on the brakes instead of trimming that rotation away.
-    const gripLimit = (cfg.tires.grip * 9.81 * (1.15 + TRAIL_BRAKE_ROTATION * this.brake)) / speed
+    // Follow available tire load, including aerodynamic load. Damping toward the
+    // steady turn rate catches oscillation on both sides of the target.
+    const normalAcceleration = 9.81 + cfg.downforceCoefficient * speed * speed / cfg.massKg
+    const gripLimit = (cfg.tires.grip * normalAcceleration * (1.15 + TRAIL_BRAKE_ROTATION * this.brake)) / speed
     const wanted = (this.forwardSpeed * Math.tan(this.steerAngle)) / this.wheelbase
     const target = Math.max(-gripLimit, Math.min(gripLimit, wanted))
-    const excess = yawRate - Math.max(Math.min(0, target), Math.min(Math.max(0, target), yawRate))
+    const excess = yawRate - target
+    // Tire forces supply turn-in; use a gentler correction while building yaw.
+    if (yawRate * target >= 0 && Math.abs(yawRate) < Math.abs(target)) rate *= 0.2
     if (excess === 0) return
 
     const sideways = Math.abs(lv.x * _right.x + lv.y * _right.y + lv.z * _right.z)
