@@ -10,7 +10,7 @@ import type { QualityPreset } from '../stores/gameStore'
  * Its lighting is baked into the textures, so the room is drawn unlit — no
  * lights, no shadow passes, cheap on phones. The car is the only lit thing:
  * a PMREM environment baked from the room itself (so the paint reflects this
- * exact garage), an overhead key light, two coloured rims, a soft contact
+ * exact garage), a neutral fill with a low overhead key, two faint rims, a soft contact
  * shadow and — on Medium/High — a faint polished-floor reflection.
  *
  * While active, the track, sky and sun are hidden, and the scene's fog,
@@ -212,7 +212,9 @@ export class Showroom {
       scene.fog = new THREE.FogExp2(0x0b0c10, 0.012)
       scene.background = BACKGROUND
       scene.environment = this.envMap
-      scene.environmentIntensity = 0.95
+      // The bake holds the room's bright lamps and tubes; at full strength
+      // their reflection washed the paint out (Guards Red read pink-orange).
+      scene.environmentIntensity = 0.5
       this.group.visible = true
     } else if (this.saved) {
       scene.fog = this.saved.fog
@@ -417,16 +419,17 @@ export class Showroom {
   }
 
   /**
-   * Car lights only (the room is unlit). Warm overhead key matching the
-   * workshop's sodium/fluorescent mix, a cool rim from the bay side and a warm
-   * one opposite, so the body lines read against the dark corners.
+   * Car lights only (the room is unlit). The paint should show its true
+   * colour, so the car is lit mostly by an even, neutral white fill. The
+   * overhead spot is kept low and white, mainly to cast the floor shadow: at
+   * full strength (a warm 330) it blew a hot spot over the roof and bonnet
+   * and tinted every colour. Two faint rims still pick out the body lines
+   * against the dark corners.
    */
   private buildLights(): void {
-    const hemi = new THREE.HemisphereLight(0xe8e2d4, 0x14110d, 0.45)
+    const hemi = new THREE.HemisphereLight(0xffffff, 0x2a2a2a, 2.2)
 
-    // Tuned to the room's baked light: warm and a little dimmer than a studio key,
-    // so the car doesn't look pasted on top of the garage.
-    const key = new THREE.SpotLight(0xffe7c8, 330, 18, THREE.MathUtils.degToRad(42), 0.8, 1.5)
+    const key = new THREE.SpotLight(0xffffff, 60, 18, THREE.MathUtils.degToRad(42), 0.8, 1.5)
     key.position.set(0.6, 4.4, 0.9)
     key.target.position.set(0, 0, 0)
     key.shadow.mapSize.set(1024, 1024)
@@ -437,9 +440,9 @@ export class Showroom {
     key.shadow.camera.far = 10
     this.key = key
 
-    const rimCool = new THREE.PointLight(0x9cc8ff, 40, 14, 1.6)
+    const rimCool = new THREE.PointLight(0x9cc8ff, 16, 14, 1.6)
     rimCool.position.set(-4.5, 2.2, -4)
-    const rimWarm = new THREE.PointLight(0xffc489, 35, 14, 1.6)
+    const rimWarm = new THREE.PointLight(0xffc489, 14, 14, 1.6)
     rimWarm.position.set(5, 2.0, 3.5)
 
     this.group.add(hemi, key, key.target, rimCool, rimWarm)
