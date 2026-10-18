@@ -10,6 +10,7 @@ import { draftingStrength } from './Drafting'
 import { AiDriver, type DriverResources, type TrafficCar } from './AiDriver'
 import { RaceManager } from './RaceManager'
 import type { RaceEntry } from './RaceStandings'
+import { RecoveryMonitor } from './RecoveryMonitor'
 
 const HOLD: InputState = { throttle: 0, brake: 0, steer: 0, handbrake: true, nitro: false }
 const COLORS = [0x27b8eb, 0xffd447, 0xe64f67]
@@ -24,6 +25,7 @@ export class Opponent {
   readonly entry: RaceEntry
   private readonly resources: DriverResources = { charge: 0, boosting: false, drifting: false }
   private readonly position = new THREE.Vector3()
+  private readonly recovery = new RecoveryMonitor()
   private readonly ownedMaterials: THREE.Material[] = []
   readonly id: number
   private readonly world: RAPIER.World
@@ -57,7 +59,8 @@ export class Opponent {
     this.pose.speed = this.vehicle.controller.forwardSpeed
   }
   drive(dt: number, traffic: readonly TrafficCar[], gap: number, laneLimit: number): void {
-    const active = this.race.state === 'racing'
+    // Finished cars keep driving a cool-down lap instead of parking on the line.
+    const active = this.race.state === 'racing' || this.race.state === 'finished'
     const controller = this.vehicle.controller
     this.resources.charge = controller.nitro.charge
     this.resources.boosting = controller.nitro.active
@@ -66,19 +69,39 @@ export class Opponent {
     const input = active ? this.driver.update(dt, this.pose, traffic, this.id, gap, laneLimit, this.resources) : HOLD
     this.vehicle.fixedUpdate(input, dt)
   }
-  capture(dt: number, traffic: readonly TrafficCar[] = []): void {
+  /**
+   * After the physics step: race progress, then recovery when the car fell off
+   * the world, is on its roof or has been stuck too long. `recover` gives the
+   * spawn (on the centreline just behind the car, inside its validated
+   * sector); without it the car goes back to its last gate.
+   */
+  capture(dt: number, traffic: readonly TrafficCar[] = [], recover?: (entry: RaceEntry) => SpawnPoint): void {
     this.vehicle.capture()
-    const p = this.vehicle.body.translation()
+    const p = this.vehicle.body.translation(), q = this.vehicle.body.rotation()
     this.position.set(p.x, p.y, p.z)
     this.race.update(dt, this.position)
-    if (this.race.state === 'racing' && (p.y < this.track.killY || this.driver.needsRecovery)) {
-      const spawn = this.track.respawnAt(this.race.lastCheckpoint)
-      // Never drop a recovering car onto another racer. It returns to the last
-      // validated gate, so recovery cannot skip a sector or gain a lap.
+    const index = this.driver.progress.update(p.x, p.z)
+    const centre = this.track.line[index]
+    const reason = this.race.state === 'racing' ? this.recovery.update(dt, {
+      drop: p.y - centre.y,
+      upY: 1 - 2 * (q.x * q.x + q.z * q.z),
+      speed: Math.abs(this.vehicle.controller.forwardSpeed),
+      // Wedged cars are the driver's job (it reverses out, then asks via needsRecovery).
+      pedal: 0,
+      offLine: Math.hypot(p.x - centre.x, p.z - centre.z),
+    }) : null
+    if (this.race.state === 'racing' && (p.y < this.track.killY || reason !== null || this.driver.needsRecovery)) {
+      this.entry.checkpoint = this.race.lastCheckpoint
+      this.entry.index = index
+      const spawn = recover ? recover(this.entry) : this.track.respawnAt(this.race.lastCheckpoint)
+      // Never drop a recovering car onto another racer, and never past its
+      // last validated gate, so recovery cannot skip a sector or gain a lap.
       if (!traffic.some(car => car.id !== this.id && Math.hypot(car.x - spawn.position.x, car.z - spawn.position.z) < 8)) {
         this.vehicle.respawn(spawn)
         this.position.copy(spawn.position)
         this.driver.reset()
+        this.recovery.reset()
+        this.driver.progress.update(spawn.position.x, spawn.position.z)
       }
     }
     const e = this.entry

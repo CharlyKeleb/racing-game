@@ -15,6 +15,7 @@ import { COUNTDOWN_SEC, RaceManager, START_LIGHTS, startLightsLit } from '../rac
 import { draftingStrength } from '../racing/Drafting'
 import { Opponent } from '../racing/Opponent'
 import { RaceStandings, type RaceEntry } from '../racing/RaceStandings'
+import { RecoveryMonitor } from '../racing/RecoveryMonitor'
 import type { TrafficCar } from '../racing/AiDriver'
 import { gameStore, type GamePhase, type Settings } from '../stores/gameStore'
 import { telemetryStore } from '../stores/telemetryStore'
@@ -23,12 +24,13 @@ import { applyCarBuild, samePerformance, type CarBuild } from '../vehicles/CarBu
 import { CarLivery } from '../vehicles/CarLivery'
 import { buildPlaceholderCar, rigCarModel, type CarModel } from '../vehicles/CarModel'
 import { getCar, selectableCars, stepCar, type CarEntry } from '../vehicles/carRegistry'
-import { Vehicle } from '../vehicles/Vehicle'
+import { Vehicle, type SpawnPoint } from '../vehicles/Vehicle'
 import { resolveVehicleConfig, type VehicleConfig } from '../vehicles/VehicleConfig'
 import { Environment } from '../world/Environment'
 import type { RaceTrack } from '../world/RaceTrack'
 import { Surface } from '../vehicles/Surface'
 import { measureRoadEdges } from '../world/SurfaceMap'
+import { planSafetyWalls } from '../world/SafetyWalls'
 import { Showroom } from '../world/Showroom'
 import { StreamedTrack } from '../world/StreamedTrack'
 import { Track } from '../world/Track'
@@ -50,6 +52,8 @@ interface StackedTag extends RivalTag {
 export type ShowroomFocus = 'car' | 'wheel'
 
 const LOCKED_INPUT: InputState = { throttle: 0, brake: 0, steer: 0, handbrake: true, nitro: false }
+/** Past the flag: brake to a stop in a straight line while the rivals finish. */
+const FINISHED_INPUT: InputState = { throttle: 0, brake: 0.5, steer: 0, handbrake: false, nitro: false }
 const _velocity = new THREE.Vector3()
 const _forward = new THREE.Vector3()
 /** Seconds of driving against the race direction before the HUD says so. */
@@ -96,6 +100,9 @@ export class Game {
   private opponentToken = 0
   private roadEdges!: { left: Float32Array; right: Float32Array }
   private standings!: RaceStandings
+  private readonly recovery = new RecoveryMonitor()
+  private safetyWalls: RAPIER.RigidBody | null = null
+  private readonly recoverSpawn = (entry: RaceEntry): SpawnPoint => this.recoverySpawn(entry)
   private readonly playerPose: TrafficCar = { id: 0, x: 0, z: 0, heading: 0, speed: 0 }
   private readonly playerEntry: RaceEntry = { id: 0, name: 'You', player: true, lap: 0, checkpoint: 0, index: 0, finishMs: null }
   private traffic: TrafficCar[] = [this.playerPose]
@@ -335,6 +342,7 @@ export class Game {
   /** Roadside corner boards + progress tracking + minimap outline for the current track. */
   private attachGuide(): void {
     this.guide?.dispose()
+    this.buildSafetyWalls()
     const edges = measureRoadEdges(this.track.line, (x, z) => this.track.surfaceAt(x, z))
     this.roadEdges = edges
     this.standings = new RaceStandings(this.track.line, this.track.checkpoints)
@@ -358,6 +366,17 @@ export class Game {
         gates: this.track.checkpoints.map((c) => [c.position.x, c.position.z]),
       },
     })
+  }
+
+  /** Invisible walls where the track's collision floor ends, so a car can't drop off the world (see SafetyWalls). */
+  private buildSafetyWalls(): void {
+    if (this.safetyWalls) this.physics.world.removeRigidBody(this.safetyWalls)
+    this.safetyWalls = null
+    const walls = planSafetyWalls(this.track.line, (x, y, z) => this.physics.groundHeight(x, y, z))
+    if (walls.segments === 0) return
+    const body = this.physics.world.createRigidBody(RAPIER.RigidBodyDesc.fixed())
+    this.physics.world.createCollider(RAPIER.ColliderDesc.trimesh(walls.vertices, walls.indices).setFriction(0.2).setRestitution(0.1), body)
+    this.safetyWalls = body
   }
 
   /** A track ready to race and see (track switching): core, then visuals. */
@@ -842,11 +861,33 @@ export class Game {
     this.progress?.update(this.track.spawn.position.x, this.track.spawn.position.z)
   }
 
-  /** Mid-race reset (R / touch button / falling off the world): back to the last checkpoint. */
+  /**
+   * Mid-race reset (R / touch button / fallen off, flipped or stuck): back on
+   * the centreline a few metres behind the car, inside the sector it has
+   * validated, so a reset never skips a gate.
+   */
   resetToCheckpoint(): void {
-    this.vehicle.respawn(this.track.respawnAt(this.race.lastCheckpoint))
+    this.playerEntry.checkpoint = this.race.lastCheckpoint
+    this.playerEntry.index = this.progress.index
+    const spawn = this.recoverySpawn(this.playerEntry)
+    this.vehicle.respawn(spawn)
     this.camera.snap()
+    this.recovery.reset()
     this.progress.reset()
+    this.progress.update(spawn.position.x, spawn.position.z)
+  }
+
+  /** Where a car in `entry`'s place goes back on the road: centreline, road height, facing the race direction. */
+  private recoverySpawn(entry: RaceEntry): SpawnPoint {
+    if (!this.standings) return this.track.respawnAt(entry.checkpoint)
+    const line = this.track.line, n = line.length
+    const i = this.standings.recoveryIndex(entry)
+    const p = line[i], a = line[(i - 1 + n) % n], b = line[(i + 1) % n]
+    const road = this.physics.groundHeight(p.x, p.y, p.z, (c) => this.track.isRoadCollider(c))
+    return {
+      position: new THREE.Vector3(p.x, (road ?? p.y) + 0.8, p.z),
+      heading: Math.atan2(b.x - a.x, b.z - a.z),
+    }
   }
 
   /** Feed from the on-screen touch controls. */
@@ -874,8 +915,9 @@ export class Game {
     const skip = this.input.consume('skip')
     if (skip) this.skipRaceIntro()
     const phase = gameStore.getState().phase
-    if (phase === 'paused' || phase === 'finished') return
-    if (this.input.consume('reset') && phase === 'racing') this.resetToCheckpoint()
+    if (phase === 'paused') return
+    const racing = phase === 'racing' && this.race.state === 'racing'
+    if (this.input.consume('reset') && racing) this.resetToCheckpoint()
 
     const inMenu = phase === 'menu' || phase === 'garage' || phase === 'loading'
     const controls = this.race.controlsEnabled && !inMenu
@@ -885,7 +927,7 @@ export class Game {
     this.playerPose.speed = this.vehicle.controller.forwardSpeed
     for (const opponent of this.opponents) opponent.readPose()
     this.vehicle.controller.drafting = controls ? draftingStrength(this.playerPose, this.traffic, 0) : 0
-    this.vehicle.fixedUpdate(controls ? this.input.state : LOCKED_INPUT, dt)
+    this.vehicle.fixedUpdate(phase === 'finished' ? FINISHED_INPUT : controls ? this.input.state : LOCKED_INPUT, dt)
     for (const opponent of this.opponents) {
       const i = opponent.driver.progress.index
       const laneLimit = Math.max(0, Math.min(this.roadEdges.left[i], this.roadEdges.right[i]) - 2)
@@ -895,12 +937,24 @@ export class Game {
     this.physics.step(dt)
     this.vehicle.capture()
     for (const opponent of this.opponents) {
-      if (!inMenu) opponent.capture(dt, this.traffic)
+      if (!inMenu) opponent.capture(dt, this.traffic, this.recoverSpawn)
     }
     // Physics position, not the render-interpolated one (that lags a tick).
-    if (this.vehicle.body.translation().y < this.track.killY) {
-      if (phase === 'racing') this.resetToCheckpoint()
+    const body = this.vehicle.body.translation(), rotation = this.vehicle.body.rotation()
+    if (body.y < this.track.killY) {
+      if (racing) this.resetToCheckpoint()
       else this.resetCar()
+    } else if (racing) {
+      const centre = this.track.line[this.progress.update(body.x, body.z)]
+      const input = this.input.state
+      const reason = this.recovery.update(dt, {
+        drop: body.y - centre.y,
+        upY: 1 - 2 * (rotation.x * rotation.x + rotation.z * rotation.z),
+        speed: Math.abs(this.vehicle.controller.forwardSpeed),
+        pedal: Math.max(input.throttle, input.brake),
+        offLine: Math.hypot(body.x - centre.x, body.z - centre.z),
+      })
+      if (reason) this.resetToCheckpoint()
     }
     const position = this.vehicle.body.translation()
     this.racePosition.set(position.x, position.y, position.z)
@@ -910,7 +964,7 @@ export class Game {
     this.playerEntry.index = this.progress.update(position.x, position.z)
     this.playerEntry.x = position.x
     this.playerEntry.z = position.z
-    if (this.race.state === 'finished') {
+    if (this.race.state === 'finished' && this.playerEntry.finishMs === null) {
       this.playerEntry.finishMs = this.race.timer.totalMs
       this.publishTelemetry()
     }
@@ -920,11 +974,11 @@ export class Game {
     const phase = gameStore.getState().phase
     if (phase === 'loading' && this.raceTransition) return
     for (const opponent of this.opponents) {
-      opponent.vehicle.render(phase === 'paused' || phase === 'finished' ? 1 : alpha, phase === 'paused' || phase === 'finished' ? 0 : dt)
-      this.opponentFlames.get(opponent.id)?.update(opponent.vehicle.controller.nitro.intensity, phase === 'paused' || phase === 'finished' ? 0 : dt)
+      opponent.vehicle.render(phase === 'paused' ? 1 : alpha, phase === 'paused' ? 0 : dt)
+      this.opponentFlames.get(opponent.id)?.update(opponent.vehicle.controller.nitro.intensity, phase === 'paused' ? 0 : dt)
       opponent.vehicle.model.root.visible = opponent.vehicle.position.distanceToSquared(this.vehicle.position) < 300 * 300
     }
-    this.vehicle.render(phase === 'paused' || phase === 'finished' ? 1 : alpha, phase === 'paused' || phase === 'finished' ? 0 : dt)
+    this.vehicle.render(phase === 'paused' ? 1 : alpha, phase === 'paused' ? 0 : dt)
     if (!gameStore.getState().carSwitching) {
       this.showroomAnchor.position.copy(this.vehicle.model.root.position)
       this.showroomAnchor.quaternion.copy(this.vehicle.model.root.quaternion)
