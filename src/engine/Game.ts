@@ -1100,7 +1100,6 @@ export class Game {
     }
     this.driftZones?.update(this.vehicle.position.x,this.vehicle.position.z,gameStore.getState().settings.mode === 'drift' && ['racing','countdown','intro','paused'].includes(phase),(this.race.lastCheckpoint+1)%this.track.checkpoints.length)
     this.environment.follow(this.vehicle.position)
-    this.showroom.update(dt)
     const v = this.vehicle.body.linvel()
     this.track.update(this.vehicle.position, _velocity.set(v.x, v.y, v.z), dt)
     this.renderer.adapt(dt)

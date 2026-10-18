@@ -10,7 +10,7 @@ import type { QualityPreset } from '../stores/gameStore'
  * Its lighting is baked into the textures, so the room is drawn unlit — no
  * lights, no shadow passes, cheap on phones. The car is the only lit thing:
  * a PMREM environment baked from the room itself (so the paint reflects this
- * exact garage), an overhead key light, two coloured rims, a soft contact
+ * exact garage), a neutral fill with a low overhead key, a soft contact
  * shadow and — on Medium/High — a faint polished-floor reflection.
  *
  * While active, the track, sky and sun are hidden, and the scene's fog,
@@ -45,10 +45,9 @@ export class Showroom {
   readonly group = new THREE.Group()
   private readonly renderer: THREE.WebGLRenderer
   private readonly disposables: { dispose(): void }[] = []
-  /** Excluded from the environment bake (mirror, particles, the car's own shadow). */
+  /** Excluded from the environment bake (mirror, the car's own shadow). */
   private readonly bakeHidden: THREE.Object3D[] = []
   private reflector: Reflector | null = null
-  private dust!: THREE.Points
   private envMap: THREE.Texture | null = null
   private manifest: GarageManifest | null = null
   /** The loaded room model, which detail it is, and what it owns (freed when swapped). */
@@ -58,7 +57,6 @@ export class Showroom {
   private wantsHigh = false
   private saved: { fog: THREE.Scene['fog']; background: THREE.Scene['background']; environment: THREE.Texture | null; intensity: number } | null = null
   private active = false
-  private time = 0
   /** Scene the showroom was last activated in, to hot-swap reflections when the room loads. */
   private sceneRef: THREE.Scene | null = null
   private fallbackFloor!: THREE.Mesh
@@ -73,7 +71,6 @@ export class Showroom {
     this.group.visible = false
     this.buildFallbackFloor()
     this.buildContactShadow()
-    this.buildDust()
     this.buildLights()
   }
 
@@ -208,11 +205,13 @@ export class Showroom {
     if (active) {
       this.envMap ??= this.bakeEnvironment()
       this.saved = { fog: scene.fog, background: scene.background, environment: scene.environment, intensity: scene.environmentIntensity }
-      // A faint haze on the car and dust only; the room itself ignores fog.
+      // A faint haze on the car only; the room itself ignores fog.
       scene.fog = new THREE.FogExp2(0x0b0c10, 0.012)
       scene.background = BACKGROUND
       scene.environment = this.envMap
-      scene.environmentIntensity = 0.95
+      // The bake holds the room's bright lamps and tubes; at full strength
+      // their reflection washed the paint out (Guards Red read pink-orange).
+      scene.environmentIntensity = 0.5
       this.group.visible = true
     } else if (this.saved) {
       scene.fog = this.saved.fog
@@ -223,20 +222,6 @@ export class Showroom {
     }
   }
 
-  /** Per-frame ambience (dust drifting through the light). Only runs while visible. */
-  update(dt: number): void {
-    if (!this.active) return
-    this.time += dt
-    const pos = this.dust.geometry.attributes.position as THREE.BufferAttribute
-    const arr = pos.array as Float32Array
-    const top = (this.manifest?.ceiling ?? 5) - 0.5
-    for (let i = 0; i < arr.length; i += 3) {
-      arr[i + 1] += dt * (0.04 + (i % 7) * 0.006)
-      arr[i] += Math.sin(this.time * 0.3 + i) * dt * 0.03
-      if (arr[i + 1] > top) arr[i + 1] = 0.2
-    }
-    pos.needsUpdate = true
-  }
 
   /**
    * Renders the room into a cube map from just above the car, so paint and
@@ -256,7 +241,9 @@ export class Showroom {
     for (const o of this.bakeHidden) o.visible = false
 
     const pmrem = new THREE.PMREMGenerator(this.renderer)
-    const target = pmrem.fromScene(bakeScene, 0.02, 0.1, 80, { size: 256, position: new THREE.Vector3(0, 1.1, 0) })
+    // Blurred (sigma 0.06): sharp, the lamp bulbs and tubes became bright pin-points
+    // that sparkled across the clear coat.
+    const target = pmrem.fromScene(bakeScene, 0.06, 0.1, 80, { size: 256, position: new THREE.Vector3(0, 1.1, 0) })
     pmrem.dispose()
     this.disposables.push(target)
 
@@ -399,34 +386,19 @@ export class Showroom {
     this.group.add(reflector)
   }
 
-  private buildDust(): void {
-    const count = 420
-    const arr = new Float32Array(count * 3)
-    for (let i = 0; i < count; i++) {
-      arr[i * 3] = (Math.random() - 0.5) * 14
-      arr[i * 3 + 1] = Math.random() * 5
-      arr[i * 3 + 2] = (Math.random() - 0.5) * 14
-    }
-    const geo = new THREE.BufferGeometry()
-    geo.setAttribute('position', new THREE.BufferAttribute(arr, 3))
-    const mat = new THREE.PointsMaterial({ color: 0xfff1d6, size: 0.022, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false })
-    this.disposables.push(geo, mat)
-    this.dust = new THREE.Points(geo, mat)
-    this.bakeHidden.push(this.dust)
-    this.group.add(this.dust)
-  }
 
   /**
-   * Car lights only (the room is unlit). Warm overhead key matching the
-   * workshop's sodium/fluorescent mix, a cool rim from the bay side and a warm
-   * one opposite, so the body lines read against the dark corners.
+   * Car lights only (the room is unlit). The paint should show its true
+   * colour, so the car is lit mostly by an even, neutral white fill. The
+   * overhead spot is kept low and white, mainly to cast the floor shadow: at
+   * full strength (a warm 330) it blew a hot spot over the roof and bonnet
+   * and tinted every colour. No rim point lights: each left a tiny hot dot
+   * that sparkled on the clear coat.
    */
   private buildLights(): void {
-    const hemi = new THREE.HemisphereLight(0xe8e2d4, 0x14110d, 0.45)
+    const hemi = new THREE.HemisphereLight(0xffffff, 0x2a2a2a, 2.2)
 
-    // Tuned to the room's baked light: warm and a little dimmer than a studio key,
-    // so the car doesn't look pasted on top of the garage.
-    const key = new THREE.SpotLight(0xffe7c8, 330, 18, THREE.MathUtils.degToRad(42), 0.8, 1.5)
+    const key = new THREE.SpotLight(0xffffff, 60, 18, THREE.MathUtils.degToRad(42), 0.8, 1.5)
     key.position.set(0.6, 4.4, 0.9)
     key.target.position.set(0, 0, 0)
     key.shadow.mapSize.set(1024, 1024)
@@ -437,12 +409,8 @@ export class Showroom {
     key.shadow.camera.far = 10
     this.key = key
 
-    const rimCool = new THREE.PointLight(0x9cc8ff, 40, 14, 1.6)
-    rimCool.position.set(-4.5, 2.2, -4)
-    const rimWarm = new THREE.PointLight(0xffc489, 35, 14, 1.6)
-    rimWarm.position.set(5, 2.0, 3.5)
 
-    this.group.add(hemi, key, key.target, rimCool, rimWarm)
+    this.group.add(hemi, key, key.target)
   }
 
   dispose(): void {
