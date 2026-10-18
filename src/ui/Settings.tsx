@@ -13,7 +13,8 @@ const sections = [
   { id: 'graphics', label: 'Graphics', icon: GiComputerFan, hint: 'Balance detail and performance.' },
   { id: 'driving', label: 'Driving', icon: GiSteeringWheel, hint: 'Set your view and race preferences.' },
   { id: 'audio', label: 'Audio', icon: GiSpeaker, hint: 'Find the right volume for your engine.' },
-  { id: 'controls', label: 'Controls', icon: GiGamepad, hint: 'Everything you need behind the wheel.' },
+  { id: 'controls', label: 'Keyboard', icon: GiSteeringWheel, hint: 'Keyboard driving controls.' },
+  { id: 'controller', label: 'Controller', icon: GiGamepad, hint: 'Connect your controller and get ready to drive.' },
 ] as const
 
 /** Top-layer modal: previews and other menu layers cannot paint over it. */
@@ -56,8 +57,10 @@ export function Settings({ onClose }: { onClose?: () => void }) {
           <input aria-label="Master volume" className="ui-range" type="range" min={0} max={1} step={.05} value={settings.masterVolume} onChange={e=>update({masterVolume:Number(e.target.value)})}/>
           <span className="settings__help">Engine, tires, effects and garage ambience.</span>
         </label>}
-        {section === 'controls' && <>
-          <p className="settings__help" role="status">{controllerConnected ? 'Controller connected' : 'Connect a controller and press a button to activate it.'}</p>
+        {section === 'controller' && <>
+          <h3 role="status">{controllerConnected ? 'Controller connected' : 'No controller connected'}</h3>
+          <p className="settings__help">Plug in with USB, or pair your controller in your device’s Bluetooth settings. Return to the game and press any controller button to activate it.</p>
+          {!controllerConnected && <p className="settings__help">Keep this game window focused. If your controller isn’t detected, reconnect it and press a button again.</p>}
           <dl className="settings__controls">
             <div><dt>Steer</dt><dd>Left stick</dd></div>
             <div><dt>Accelerate / brake</dt><dd>RT / LT · R2 / L2</dd></div>
