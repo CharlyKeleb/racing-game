@@ -21,6 +21,8 @@ export default {
     {at:[-135,-65],dir:[-0.3,1]},
   ],
   checkpointRadius:12, gateSurface:/^Asphalt$/,lineSurface:/^Asphalt$/,lineSpacing:3,
-  lineVia:{2:[[62,159]],5:[[-65,-40]],7:[[60,-75]],8:[[-90,-118]],9:[[-145,-25]]}, spawnBehind:10,
+  // Keep gate 5 → 6 direct: a via on the entry spur creates overlapping
+  // out-and-back sections and sends AI cars into oncoming traffic.
+  lineVia:{2:[[62,159]],7:[[60,-75]],8:[[-90,-118]],9:[[-145,-25]]}, spawnBehind:10,
   surfaces:[[/^Asphalt$/,'asphalt'],[/^Ground$/,'grass']],
 }
