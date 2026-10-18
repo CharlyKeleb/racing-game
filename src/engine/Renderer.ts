@@ -92,6 +92,11 @@ export class Renderer {
     return this.ratio
   }
 
+  /** Intro whip-pan smear (post stack only; skipped when post FX are off). */
+  setWhipBlur(strength: number): void {
+    this.postfx.setWhipBlur(strength)
+  }
+
   render(): void {
     if (this.postfxEnabled) this.postfx.render()
     else this.renderer.render(this.scene, this.camera)

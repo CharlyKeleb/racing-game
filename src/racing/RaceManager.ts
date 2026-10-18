@@ -10,7 +10,18 @@ export interface RaceEvents {
   onLap(lap: number, timeMs: number, best: boolean): void
 }
 
-const COUNTDOWN_SEC = 3
+export const COUNTDOWN_SEC = 3
+/** Red lights on the start gantry; they come on one by one through the countdown and all go out at the start. */
+export const START_LIGHTS = 5
+const FIRST_LIGHT_SEC = 0.25
+const LIGHT_INTERVAL_SEC = 0.55
+
+/** How many start lights are lit with `countdown` seconds still to go. */
+export function startLightsLit(countdown: number): number {
+  if (countdown <= 0) return 0
+  const elapsed = COUNTDOWN_SEC - countdown
+  return Math.max(0, Math.min(START_LIGHTS, Math.floor((elapsed - FIRST_LIGHT_SEC) / LIGHT_INTERVAL_SEC) + 1))
+}
 
 /** Race rules: countdown → N laps → finished. Knows nothing about rendering. */
 export class RaceManager {

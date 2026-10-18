@@ -133,7 +133,8 @@ describe('race cinematic handoff', () => {
     const order: string[] = []
     const game = Object.assign(Object.create(Game.prototype), {
       updateShowroom:()=>order.push('scene'),
-      vehicle:{render:()=>order.push('player'),position:{},model:{root:{}}},
+      vehicle:{render:()=>order.push('player'),position:{},model:{root:{}},config:{engine:{idleRpm:900}}},
+      playerRevs:{reset:()=>{}},
       opponents:[{vehicle:{render:()=>order.push('rival'),model:{root:{}}}}],
       environment:{follow:()=>{}},
       physics:{world:{}},

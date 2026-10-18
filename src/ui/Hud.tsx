@@ -1,6 +1,7 @@
 import { formatTime } from '../racing/LapTimer'
 import { useGame, useTelemetry } from './hooks'
 import { Minimap } from './Minimap'
+import { RivalTags } from './RivalTags'
 import { NitroGauge, RpmGauge, Speedometer } from './Speedometer'
 
 /** Dial full scale. Comfortably above the 911's ~306 km/h top speed. */
@@ -18,6 +19,8 @@ export function Hud() {
   // Shift light just under the redline; needles sweep once on the start countdown.
   const shift = t.gear > 0 && t.rpm >= t.redlineRpm * 0.94
   const sweep = phase === 'countdown'
+  // Lights out: flash GO for the first moments of the race.
+  const go = phase === 'racing' && t.lap === 1 && t.totalMs < 900
 
   return (
     <div className={`hud${t.nitroActive ? ' hud--nitro' : ''}${t.nitroPerfect ? ' hud--nitro-perfect' : ''}`}>
@@ -48,7 +51,7 @@ export function Hud() {
         <Minimap />
       </div>
 
-      <div className="rival-labels" aria-hidden="true">{t.rivalLabels.map(label => <div key={label.id} className={`rival-label rival-label--${label.id}`} style={{ left: `${label.x}%`, top: `${label.y}%` }}><b>{label.position}</b><span>{label.name}<small>{label.style === 'power' ? 'Straight-line specialist' : label.style === 'drift' ? 'Corner attacker' : 'Precision driver'}</small></span></div>)}</div>
+      <RivalTags />
       {t.drafting > 0.15 && phase === 'racing' && <div className="hud-drafting"><span>Slipstream</span><b>Building nitro</b></div>}
       {t.wrongWay && <div className="hud-wrongway">Wrong way</div>}
 
@@ -73,9 +76,14 @@ export function Hud() {
         <div className="hud-nitro-call hud-nitro-call--missed">Missed</div>
       ) : null}
 
-      {phase === 'countdown' && t.countdown > 0 && (
-        <div className="countdown" key={Math.ceil(t.countdown)}>
-          {Math.ceil(t.countdown)}
+      {(phase === 'countdown' || go) && (
+        <div className={`start-lights${go ? ' start-lights--go' : ''}`} role="img" aria-label={go ? 'Go' : `${t.startLights} of ${t.startLightCount} start lights lit`}>
+          <div className="start-lights__gantry">
+            {Array.from({ length: t.startLightCount }, (_, i) => (
+              <span key={i} className={`start-lights__pod${i < t.startLights ? ' is-lit' : ''}`}><i /><i /></span>
+            ))}
+          </div>
+          {go && <div className="start-lights__go">Go</div>}
         </div>
       )}
 

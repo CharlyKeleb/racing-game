@@ -350,16 +350,44 @@ kbd { font-family: inherit; font-size: 11px; padding: 1px 6px; border: 1px solid
 @keyframes speedlines { to { transform: rotate(2deg) scale(1.02); } }
 .hud-fps { position: absolute; top: var(--gutter); right: var(--gutter); font-size: 12px; color: var(--muted); letter-spacing: 0.1em; }
 
-.countdown {
-  position: absolute; top: 36%; left: 50%; transform: translate(-50%, -50%) skewX(var(--skew));
-  font-style: italic; font-weight: 900; font-size: clamp(120px, 22vw, 220px); line-height: 1;
-  color: var(--accent); text-shadow: 0 10px 60px rgba(255, 210, 0, 0.45), 0 4px 0 #000;
-  animation: countdown-pop 0.9s ease-out both;
+/* Start gantry: red pods light one by one through the countdown, then flash green at lights out. */
+.start-lights {
+  position: absolute; top: 14%; left: 50%; transform: translateX(-50%);
+  display: flex; flex-direction: column; align-items: center; gap: 18px; pointer-events: none;
 }
-@keyframes countdown-pop {
-  0% { opacity: 0; transform: translate(-50%, -50%) skewX(var(--skew)) scale(1.8); }
-  25% { opacity: 1; transform: translate(-50%, -50%) skewX(var(--skew)) scale(1); }
-  100% { opacity: 0.85; transform: translate(-50%, -50%) skewX(var(--skew)) scale(0.92); }
+.start-lights__gantry {
+  display: flex; gap: clamp(8px, 1.6vw, 16px); padding: 10px clamp(12px, 2vw, 20px);
+  background: linear-gradient(#141a24, #07090d); border: 1px solid #2a3240; border-radius: 6px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  animation: gantry-drop 0.45s cubic-bezier(0.2, 1.4, 0.4, 1) both;
+}
+.start-lights__pod { display: flex; flex-direction: column; gap: 6px; padding: 6px; background: #0b0e13; border-radius: 999px; }
+.start-lights__pod i {
+  display: block; width: clamp(18px, 3.2vw, 34px); aspect-ratio: 1; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #3a1414, #1a0707 70%); box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.8);
+  transition: background 60ms, box-shadow 60ms;
+}
+.start-lights__pod.is-lit i {
+  background: radial-gradient(circle at 35% 30%, #ffb3a8, #ff2a1a 45%, #a00800);
+  box-shadow: 0 0 18px 4px rgba(255, 40, 20, 0.75), 0 0 48px 10px rgba(255, 30, 10, 0.35);
+}
+.start-lights--go .start-lights__pod i {
+  background: radial-gradient(circle at 35% 30%, #d9ffd0, #2dff5a 45%, #058a22);
+  box-shadow: 0 0 18px 4px rgba(40, 255, 90, 0.75), 0 0 48px 10px rgba(40, 255, 90, 0.35);
+  animation: lights-out 0.9s ease-in both;
+}
+.start-lights__go {
+  font-style: italic; font-weight: 900; font-size: clamp(72px, 14vw, 150px); line-height: 1; text-transform: uppercase;
+  color: #2dff5a; text-shadow: 0 10px 60px rgba(40, 255, 90, 0.5), 0 4px 0 #000;
+  transform: skewX(var(--skew)); animation: go-pop 0.9s ease-out both;
+}
+@keyframes gantry-drop { from { opacity: 0; transform: translateY(-40px); } }
+@keyframes lights-out { 0%, 55% { opacity: 1; } 100% { opacity: 0.15; } }
+@keyframes go-pop {
+  0% { opacity: 0; transform: skewX(var(--skew)) scale(1.9); }
+  20% { opacity: 1; transform: skewX(var(--skew)) scale(1); }
+  70% { opacity: 1; }
+  100% { opacity: 0; transform: skewX(var(--skew)) scale(1.06); }
 }
 
 .speedo { position: absolute; right: var(--gutter); bottom: var(--gutter); display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
@@ -787,16 +815,52 @@ button.menu-track:hover,button.menu-track:focus-visible { border-color:var(--acc
 .hud-field li > * { transform: skewX(6deg); }
 .hud-field small { color: #aab7c5; font-size: 10px; }
 .hud-field__player, .hud-field__player small { color: #ffdc3d; }
-.rival-labels { position: absolute; inset: 0; pointer-events: none; }
-.rival-label { position: absolute; display: flex; gap: 7px; align-items: center; transform: translate(-50%, -100%); transition: left 50ms linear, top 50ms linear; padding: 5px 9px; background: #0c1523d9; border-bottom: 2px solid #27b8eb; font-size: 12px; text-shadow: 0 1px 3px #000; }
-.rival-label > b { color: #ffdc3d; font-size: 17px; }
-.rival-label small { display: block; margin-top: 1px; color: #b4c3d1; font-size: 9px; text-transform: uppercase; letter-spacing: .06em; }
-.rival-label--2 { border-color: #ffd447; }
-.rival-label--3 { border-color: #e64f67; }
+/* Rival tags (NFS-style): slanted chip on a stem above each rival's roof. Placed per frame by RivalTags. */
+.rival-tags { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.rival-tag {
+  --tag: #35c8ff; --tag-scale: 1;
+  position: absolute; opacity: 0; display: flex; flex-direction: column; align-items: center;
+  transform: translate(-50%, -100%) scale(var(--tag-scale)); transform-origin: 50% 100%;
+  will-change: left, top, transform, opacity; font-family: var(--font-display);
+}
+.rival-tag--drift { --tag: #ff3fa4; }
+.rival-tag--power { --tag: #ff8a1f; }
+.rival-tag__chip {
+  display: flex; align-items: stretch; transform: skewX(var(--skew));
+  background: linear-gradient(90deg, #070c16f0, #0c1626d9); border-bottom: 2px solid var(--tag);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45), 0 0 14px color-mix(in srgb, var(--tag) 35%, transparent);
+  white-space: nowrap;
+}
+.rival-tag__chip > * { transform: skewX(calc(var(--skew) * -1)); }
+.rival-tag__position {
+  display: grid; place-items: center; min-width: 26px; padding: 0 7px; margin-left: -4px;
+  background: var(--tag); color: #050910; font-size: 18px; font-weight: 900; font-style: italic;
+}
+.rival-tag--leader .rival-tag__position { background: linear-gradient(#ffe56b, #ffb800); }
+.rival-tag__name {
+  display: flex; flex-direction: column; justify-content: center; padding: 4px 9px 3px;
+  color: #fff; font-size: 14px; font-weight: 800; font-style: italic; letter-spacing: 0.06em; text-transform: uppercase; line-height: 1.05;
+}
+.rival-tag__name small {
+  display: none; margin-top: 2px; color: var(--tag); font-size: 9px; font-weight: 700; font-style: normal; letter-spacing: 0.12em;
+}
+.rival-tag.is-near .rival-tag__name small { display: block; }
+.rival-tag__distance {
+  display: grid; place-items: center; padding: 0 9px 0 4px; color: #b9c8d8;
+  font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums;
+}
+.rival-tag__stem {
+  width: 2px; height: 14px; margin-top: 2px;
+  background: linear-gradient(var(--tag), transparent); box-shadow: 0 0 6px var(--tag);
+}
+.rival-tag__stem::after {
+  content: ''; display: block; width: 6px; height: 6px; margin: 12px 0 0 -2px; transform: rotate(45deg);
+  background: var(--tag); box-shadow: 0 0 8px var(--tag);
+}
 .hud-drafting { position: absolute; bottom: 22%; left: 50%; transform: translateX(-50%) skewX(-7deg); padding: 7px 16px; background: #0c1523cf; border-left: 2px solid #32b8e9; text-align: center; text-transform: uppercase; }
 .hud-drafting span { display: block; font-size: 13px; letter-spacing: .16em; color: #53ccff; }
 .hud-drafting b { font-size: 9px; letter-spacing: .12em; color: #dbe4ef; }
-@media (max-width: 700px) { .hud-field { min-width: 120px; padding: 4px 6px; } .hud-field li { font-size: 10px; gap: 5px; padding: 3px 0; } .rival-label small { display: none; } }
+@media (max-width: 700px) { .hud-field { min-width: 120px; padding: 4px 6px; } .hud-field li { font-size: 10px; gap: 5px; padding: 3px 0; } .rival-tag__name { font-size: 12px; } .rival-tag__name small, .rival-tag__distance { display: none !important; } }
 
 .race-intro { position: fixed; inset: 0; pointer-events: none; font-family: var(--font-display); }
 .race-intro__bar { position: absolute; left: 0; right: 0; height: clamp(24px,6vh,64px); background: #050910; }

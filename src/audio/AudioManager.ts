@@ -51,6 +51,8 @@ export class AudioManager {
   /** True while the game is paused; otherwise the context must stay running. */
   private paused = false
   private resumeTriedAt = -Infinity
+  /** One second of white noise for the intro whooshes and impacts, made on first use. */
+  private noise: AudioBuffer | null = null
 
   constructor() {
     // Howler suspends its AudioContext 30 s after load (and after each of its
@@ -175,6 +177,87 @@ export class AudioManager {
       this.sound.playClip(this.ignition, 0.9)
       this.sound.holdEngineUntil(ctx.currentTime + IGNITION_SETTLE)
     })
+  }
+
+  private noiseSource(ctx: AudioContext): AudioBufferSourceNode {
+    if (!this.noise) {
+      this.noise = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate)
+      const data = this.noise.getChannelData(0)
+      for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1
+    }
+    const src = ctx.createBufferSource()
+    src.buffer = this.noise
+    return src
+  }
+
+  /** Intro whip-pan: a band of noise swept up through the cut, `lead` seconds before it lands. */
+  playWhoosh(lead: number): void {
+    const ctx = this.ctx
+    if (!ctx || this.paused) return
+    const t = ctx.currentTime, end = t + lead * 2.4
+    const src = this.noiseSource(ctx)
+    const band = ctx.createBiquadFilter()
+    band.type = 'bandpass'
+    band.Q.value = 1.4
+    band.frequency.setValueAtTime(300, t)
+    band.frequency.exponentialRampToValueAtTime(3200, t + lead)
+    band.frequency.exponentialRampToValueAtTime(500, end)
+    const gain = ctx.createGain()
+    gain.gain.setValueAtTime(0.0001, t)
+    gain.gain.exponentialRampToValueAtTime(0.5, t + lead)
+    gain.gain.exponentialRampToValueAtTime(0.0001, end)
+    src.connect(band).connect(gain).connect(this.master)
+    src.start(t)
+    src.stop(end + 0.05)
+  }
+
+  /** Lands a shot: a sub thump with a short burst of low noise. */
+  playImpact(weight = 1): void {
+    const ctx = this.ctx
+    if (!ctx || this.paused) return
+    const t = ctx.currentTime
+    const sub = ctx.createOscillator()
+    sub.type = 'sine'
+    sub.frequency.setValueAtTime(120, t)
+    sub.frequency.exponentialRampToValueAtTime(38, t + 0.45)
+    const subGain = ctx.createGain()
+    subGain.gain.setValueAtTime(0.0001, t)
+    subGain.gain.exponentialRampToValueAtTime(0.7 * weight, t + 0.012)
+    subGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.6)
+    sub.connect(subGain).connect(this.master)
+    sub.start(t)
+    sub.stop(t + 0.65)
+    const src = this.noiseSource(ctx)
+    const low = ctx.createBiquadFilter()
+    low.type = 'lowpass'
+    low.frequency.value = 900
+    const gain = ctx.createGain()
+    gain.gain.setValueAtTime(0.35 * weight, t)
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.18)
+    src.connect(low).connect(gain).connect(this.master)
+    src.start(t)
+    src.stop(t + 0.2)
+  }
+
+  /** Start gantry: a short tone per red light, a long high one at lights out. */
+  playStartLight(go: boolean): void {
+    const ctx = this.ctx
+    if (!ctx || this.paused) return
+    const t = ctx.currentTime, length = go ? 0.7 : 0.16
+    const tone = ctx.createOscillator()
+    tone.type = 'square'
+    tone.frequency.value = go ? 1320 : 660
+    const soften = ctx.createBiquadFilter()
+    soften.type = 'lowpass'
+    soften.frequency.value = 2600
+    const gain = ctx.createGain()
+    gain.gain.setValueAtTime(0.0001, t)
+    gain.gain.exponentialRampToValueAtTime(0.22, t + 0.008)
+    gain.gain.setValueAtTime(0.22, t + length - 0.05)
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + length)
+    tone.connect(soften).connect(gain).connect(this.master)
+    tone.start(t)
+    tone.stop(t + length + 0.02)
   }
 
   /** Menu/garage vs. on track: sets the room tone and whether the engine is heard. */

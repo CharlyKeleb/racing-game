@@ -1,7 +1,8 @@
 import RAPIER from '@dimforge/rapier3d-compat'
 import * as THREE from 'three'
 import { AudioManager, type CarSoundState } from '../audio/AudioManager'
-import { RaceIntroCamera, RACE_INTRO_SECONDS, introShot } from '../camera/RaceIntroCamera'
+import { StagingRevs } from '../audio/StagingRevs'
+import { RaceIntroCamera, RACE_INTRO_SECONDS, INTRO_CUTS, WHIP_SECONDS, introShot } from '../camera/RaceIntroCamera'
 import { startingGrid } from '../racing/StartingGrid'
 import { ChaseCamera, type ShowroomFraming } from '../camera/ChaseCamera'
 import { DirectionGuide } from '../effects/DirectionGuide'
@@ -10,13 +11,14 @@ import { DrivingEffects } from '../effects/DrivingEffects'
 import { Headlights } from '../effects/Headlights'
 import { TrackProgress } from '../racing/TrackProgress'
 import { InputManager, type InputState } from '../input/InputManager'
-import { RaceManager } from '../racing/RaceManager'
+import { COUNTDOWN_SEC, RaceManager, START_LIGHTS, startLightsLit } from '../racing/RaceManager'
 import { draftingStrength } from '../racing/Drafting'
 import { Opponent } from '../racing/Opponent'
 import { RaceStandings, type RaceEntry } from '../racing/RaceStandings'
 import type { TrafficCar } from '../racing/AiDriver'
 import { gameStore, type GamePhase, type Settings } from '../stores/gameStore'
 import { telemetryStore } from '../stores/telemetryStore'
+import { rivalTagStore, type RivalTag } from '../stores/rivalTagStore'
 import { applyCarBuild, samePerformance, type CarBuild } from '../vehicles/CarBuild'
 import { CarLivery } from '../vehicles/CarLivery'
 import { buildPlaceholderCar, rigCarModel, type CarModel } from '../vehicles/CarModel'
@@ -37,6 +39,13 @@ import { initRapier, PhysicsWorld } from './PhysicsWorld'
 import { Renderer } from './Renderer'
 
 const TELEMETRY_HZ = 20
+/** Opacity of a tag sitting behind a nearer car's tag. */
+const CROWDED_TAG_OPACITY = 0.3
+
+/** A rival tag plus how visible the engine wants it this frame, before smoothing. */
+interface StackedTag extends RivalTag {
+  target: number
+}
 // Handbrake, not brake: brake at standstill would engage reverse.
 export type ShowroomFocus = 'car' | 'wheel'
 
@@ -94,6 +103,9 @@ export class Game {
   private readonly labelPoint = new THREE.Vector3()
   private readonly labelDirection = new THREE.Vector3()
   private readonly labelRay = new RAPIER.Ray({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 1 })
+  /** One screen tag per rival, mutated each frame (see rivalTagStore). */
+  private rivalTags: StackedTag[] = []
+  private rivalTagFrame = 0
   private readonly racePosition = new THREE.Vector3()
   private livery!: CarLivery
   private showroom!: Showroom
@@ -125,6 +137,13 @@ export class Game {
   private revHeld = false
   private revRpm = 0
   private showroomRev: { rpm: number; throttle: number } | null = null
+  /** Grid revs before lights out (sound and tach only), player and per rival. */
+  private readonly playerRevs = new StagingRevs(0)
+  private rivalRevs: StagingRevs[] = []
+  /** Intro seconds as of the last frame, so each cut's sound cue fires once. */
+  private introCueAt = 0
+  /** Start lights already announced this countdown. */
+  private lightsShown = 0
   private showroomYaw = 0.9
   /** Orbit state: camera height above the car's focus, zoom factor, flick momentum. */
   private showroomHeight = ORBIT_REST_HEIGHT
@@ -306,6 +325,8 @@ export class Game {
           racing: 'racing',
           finished: 'finished',
         }
+        // The intro's last shot is framed like the grid chase camera, so start it fresh there.
+        if (state === 'countdown') this.camera.snap()
         gameStore.getState().setPhase(phase[state])
       },
       onLap: () => this.publishTelemetry(),
@@ -502,6 +523,9 @@ export class Game {
   private clearOpponents(): void {
     this.raceTransition = false
     this.audio.clearOpponents()
+    this.rivalRevs = []
+    this.rivalTags = []
+    rivalTagStore.setState({ tags: this.rivalTags })
     this.opponentToken++
     for (const flames of this.opponentFlames.values()) flames.dispose()
     this.opponentFlames.clear()
@@ -563,7 +587,13 @@ export class Game {
         this.traffic.push(opponent.pose)
         this.entries.push(opponent.entry)
         opponent.start(settings.laps,RACE_INTRO_SECONDS)
+        this.rivalTags.push({ id, x: 50, y: 50, scale: 1, opacity: 0, distance: 0, target: 0 })
+        const revs = new StagingRevs(id)
+        revs.reset(rival.config.engine.idleRpm)
+        this.rivalRevs.push(revs)
       }
+
+      rivalTagStore.setState({ tags: this.rivalTags })
       this.audio.setOpponentCars(rivals)
       this.audio.playStart()
       this.prepareRaceIntro()
@@ -580,6 +610,9 @@ export class Game {
 
   /** Paint the cinematic before React reveals it; never expose the grid camera. */
   private prepareRaceIntro(): void {
+    this.playerRevs.reset(this.vehicle.config.engine.idleRpm)
+    this.introCueAt = 0
+    this.lightsShown = 0
     this.updateShowroom('intro')
     this.vehicle.render(1)
     for (const opponent of this.opponents) opponent.vehicle.render(1)
@@ -935,10 +968,20 @@ export class Game {
     } else if (phase === 'intro') {
       this.introCamera.update(1-this.race.introRemaining/this.race.introDuration,this.vehicle.model.root,this.opponents[0]?.vehicle.model.root ?? this.vehicle.model.root,this.physics.world)
     } else if (phase !== 'paused') {
-      const gridFraming = phase === 'countdown' ? 1 : this.camera.mode === 'chase' ? Math.max(0,1-this.race.timer.totalMs/1500) : 0
+      // Creep in on the car as the lights build, then settle into the race camera after the start.
+      const lightsT = Math.min(1, (COUNTDOWN_SEC - this.race.countdown) / COUNTDOWN_SEC)
+      const gridFraming = phase === 'countdown' ? 1 - 0.5 * lightsT * lightsT * (3 - 2 * lightsT) : this.camera.mode === 'chase' ? 0.5 * Math.max(0,1-this.race.timer.totalMs/1200) : 0
       this.camera.update(this.vehicle.model.root, this.vehicle.speedKmh, dt, this.vehicle.controller.nitro.intensity, this.vehicle.motion,gridFraming)
       this.effects.update(this.vehicle, dt)
       this.updateGuide(dt)
+    }
+    if (this.rivalTags.length > 0) this.updateRivalTags(phase === 'countdown' || phase === 'racing', dt)
+    this.renderer.setWhipBlur(phase === 'intro' ? this.introCamera.whip * 0.05 : 0)
+    const staging = phase === 'intro' || phase === 'countdown'
+    if (staging) this.updateStaging(phase, dt)
+    else if (phase === 'racing' && this.lightsShown > 0) {
+      this.lightsShown = 0
+      this.audio.playStartLight(true)
     }
     this.environment.follow(this.vehicle.position)
     this.showroom.update(dt)
@@ -951,14 +994,15 @@ export class Game {
       const dx = rival.position.x - this.vehicle.position.x, dz = rival.position.z - this.vehicle.position.z
       const q = this.vehicle.quaternion
       const heading = Math.atan2(2 * (q.w * q.y + q.x * q.z), 1 - 2 * (q.y * q.y + q.x * q.x))
-      this.audio.updateOpponent(i, rival.controller.drivetrain.rpm, rival.controller.throttlePedal, Math.hypot(dx, dz), dx * Math.cos(heading) - dz * Math.sin(heading), phase === 'racing' || phase === 'countdown' || phase === 'intro')
+      const revs = staging ? this.rivalRevs[i] : undefined
+      this.audio.updateOpponent(i, revs?.rpm ?? rival.controller.drivetrain.rpm, revs?.throttle ?? rival.controller.throttlePedal, Math.hypot(dx, dz), dx * Math.cos(heading) - dz * Math.sin(heading), phase === 'racing' || phase === 'countdown' || phase === 'intro')
     }
     const ctrl = this.vehicle.controller
     const sound = this.soundState
     let slip = 0
     for (const w of ctrl.wheels) slip = Math.max(slip, w.slip)
-    sound.rpm = this.showroomRev?.rpm ?? (revAudible ? this.revRpm : ctrl.drivetrain.rpm)
-    sound.throttle = this.showroomRev?.throttle ?? (revAudible ? (this.revHeld ? 1 : 0) : ctrl.throttlePedal)
+    sound.rpm = this.showroomRev?.rpm ?? (revAudible ? this.revRpm : staging ? this.playerRevs.rpm : ctrl.drivetrain.rpm)
+    sound.throttle = this.showroomRev?.throttle ?? (revAudible ? (this.revHeld ? 1 : 0) : staging ? this.playerRevs.throttle : ctrl.throttlePedal)
     sound.gear = ctrl.drivetrain.gear
     sound.slip = slip
     sound.nitro = ctrl.nitro.intensity
@@ -981,6 +1025,96 @@ export class Game {
     }
   }
 
+  /**
+   * Glue each rival's tag above its roof: project it every frame, shrink it with
+   * distance, and fade it (never pop it) behind walls, off screen, too far or too close.
+   */
+  private updateRivalTags(show: boolean, dt: number): void {
+    const camera = this.renderer.camera
+    camera.updateMatrixWorld()
+    const fade = 1 - Math.exp(-12 * dt)
+    for (let i = 0; i < this.rivalTags.length; i++) {
+      const tag = this.rivalTags[i]
+      const opponent = this.opponents[i]
+      let target = 0
+      if (show && opponent) {
+        const position = opponent.vehicle.position
+        tag.distance = position.distanceTo(this.vehicle.position)
+        this.labelPoint.copy(position); this.labelPoint.y += 1.25
+        this.labelDirection.subVectors(this.labelPoint, camera.position)
+        const range = this.labelDirection.length()
+        if (tag.distance < 160 && range > 3) {
+          this.labelDirection.divideScalar(range)
+          this.labelRay.origin = camera.position
+          this.labelRay.dir = this.labelDirection
+          const obstruction = this.physics.world.castRay(this.labelRay, range, true, RAPIER.QueryFilterFlags.EXCLUDE_DYNAMIC)
+          this.labelPoint.project(camera)
+          const onScreen = this.labelPoint.z > -1 && this.labelPoint.z < 1 && Math.abs(this.labelPoint.x) < 0.95 && Math.abs(this.labelPoint.y) < 0.9
+          if (onScreen) {
+            // Keep following the car even while it fades out behind a wall.
+            tag.x = (this.labelPoint.x + 1) * 50
+            tag.y = (1 - this.labelPoint.y) * 50
+            tag.scale = Math.max(0.6, Math.min(1, 16 / range))
+          }
+          if (onScreen && !(obstruction && obstruction.timeOfImpact < range - 1)) {
+            // Full strength from 6 m to 70 m; fade out up close (the car fills the screen) and toward 160 m.
+            target = Math.min(1, (range - 3) / 3) * Math.min(1, (160 - tag.distance) / 90)
+            // Stay out from under the standings and lap panels.
+            if ((tag.x > 72 && tag.y < 28) || (tag.x < 40 && tag.y < 16)) target *= 0.25
+          }
+        }
+      }
+      tag.target = target
+    }
+    // Tags never move off their car. Where two collide, the nearer one draws on top
+    // (the HUD orders them by distance) and the one behind it dims.
+    for (const far of this.rivalTags) {
+      if (far.target === 0) continue
+      for (const near of this.rivalTags) {
+        if (near === far || near.target === 0 || near.distance >= far.distance) continue
+        const width = 9 * (near.scale + far.scale), height = 4.5 * (near.scale + far.scale)
+        if (Math.abs(far.x - near.x) < width && Math.abs(far.y - near.y) < height) {
+          far.target = Math.min(far.target, CROWDED_TAG_OPACITY)
+          break
+        }
+      }
+    }
+    for (const tag of this.rivalTags) {
+      tag.opacity += (tag.target - tag.opacity) * fade
+      if (tag.opacity < 0.01) tag.opacity = 0
+    }
+    rivalTagStore.setState({ frame: ++this.rivalTagFrame })
+  }
+
+  /** Grid build-up: whooshes and thumps on the intro cuts, engines revving, the start-light beeps. */
+  private updateStaging(phase: 'intro' | 'countdown', dt: number): void {
+    if (phase === 'intro') {
+      const seconds = this.race.introDuration - this.race.introRemaining
+      for (let i = 0; i < INTRO_CUTS.length; i++) {
+        const cut = INTRO_CUTS[i]
+        if (this.introCueAt < cut - WHIP_SECONDS && seconds >= cut - WHIP_SECONDS) this.audio.playWhoosh(WHIP_SECONDS)
+        if (this.introCueAt < cut && seconds >= cut) {
+          this.audio.playImpact(i === 0 ? 0.8 : 1)
+          // Cut to the hero shot of your car: the driver blips it. Cut to the field: they answer.
+          if (i === 0) this.playerRevs.kick(0.8, 0.45)
+          else for (const revs of this.rivalRevs) revs.kick(0.55 + 0.2 * Math.random(), 0.3)
+        }
+      }
+      this.introCueAt = seconds
+    }
+    const lit = phase === 'countdown' ? startLightsLit(this.race.countdown) : 0
+    if (lit > this.lightsShown) this.audio.playStartLight(false)
+    this.lightsShown = lit
+    // Rivals hold more revs with every light; your revs are yours on the throttle.
+    const hold = phase === 'countdown' ? 0.12 + 0.3 * (COUNTDOWN_SEC - this.race.countdown) / COUNTDOWN_SEC : 0
+    const engine = this.vehicle.config.engine
+    this.playerRevs.update(dt, engine.idleRpm, engine.redlineRpm, 0, phase === 'countdown' ? this.input.state.throttle : -1)
+    for (let i = 0; i < this.rivalRevs.length; i++) {
+      const config = this.opponents[i]?.vehicle.config.engine
+      if (config) this.rivalRevs[i].update(dt, config.idleRpm, config.redlineRpm, hold)
+    }
+  }
+
   private updateGuide(dt: number): void {
     const p = this.vehicle.position
     this.progress.update(p.x, p.z)
@@ -998,34 +1132,13 @@ export class Game {
     const ctrl = this.vehicle.controller
     const t = this.race.timer
     const standings = this.standings?.snapshot(this.entries) ?? []
-    const rivalLabels: import('../stores/telemetryStore').Telemetry['rivalLabels'] = []
-    const camera = this.renderer.camera
-    camera.updateMatrixWorld()
-    for (const opponent of this.opponents) {
-      const position = opponent.vehicle.position
-      if (position.distanceToSquared(this.vehicle.position) > 100 * 100) continue
-      this.labelPoint.copy(position); this.labelPoint.y += 2.2
-      this.labelDirection.subVectors(this.labelPoint, camera.position)
-      const distance = this.labelDirection.length()
-      if (distance < 4) continue
-      this.labelDirection.divideScalar(distance)
-      this.labelRay.origin = camera.position
-      this.labelRay.dir = this.labelDirection
-      const obstruction = this.physics.world.castRay(this.labelRay, distance, true, RAPIER.QueryFilterFlags.EXCLUDE_DYNAMIC)
-      if (obstruction && obstruction.timeOfImpact < distance - 1) continue
-      this.labelPoint.project(camera)
-      if (this.labelPoint.z < -1 || this.labelPoint.z > 1 || Math.abs(this.labelPoint.x) > 0.9 || Math.abs(this.labelPoint.y) > 0.75) continue
-      const x = (this.labelPoint.x + 1) * 50, y = (1 - this.labelPoint.y) * 50
-      if ((x > 72 && y < 30) || (x < 65 && y < 18)) continue
-      if (rivalLabels.some(label => Math.abs(label.x - x) < 10 && Math.abs(label.y - y) < 6)) continue
-      rivalLabels.push({ id: opponent.id, name: opponent.driver.profile.name, style: opponent.driver.profile.style, x, y, position: standings.find(s => s.id === opponent.id)?.position ?? opponent.id })
-    }
+    const rivalLabels = this.opponents.map(o => ({ id: o.id, name: o.driver.profile.name, style: o.driver.profile.style, position: standings.find(s => s.id === o.id)?.position ?? o.id }))
     telemetryStore.setState({
       rivalLabels,
       introShot: introShot(this.race.introDuration > 0 ? 1-this.race.introRemaining/this.race.introDuration : 0),
       introProgress: this.race.introDuration > 0 ? 1-this.race.introRemaining/this.race.introDuration : 0,
       speedKmh: this.vehicle.speedKmh,
-      rpm: ctrl.drivetrain.rpm,
+      rpm: this.race.state === 'intro' || this.race.state === 'countdown' ? this.playerRevs.rpm : ctrl.drivetrain.rpm,
       gear: ctrl.drivetrain.gear,
       nitro: ctrl.nitro.charge,
       drafting: ctrl.drafting,
@@ -1045,6 +1158,8 @@ export class Game {
       bestLapMs: t.bestLapMs,
       totalMs: t.totalMs,
       countdown: this.race.countdown,
+      startLights: this.race.state === 'countdown' ? startLightsLit(this.race.countdown) : 0,
+      startLightCount: START_LIGHTS,
       fps: this.fps,
       carX: this.vehicle.position.x,
       carZ: this.vehicle.position.z,

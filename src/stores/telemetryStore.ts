@@ -8,7 +8,8 @@ import { createStore } from 'zustand/vanilla'
 export interface Telemetry {
   introShot: number
   introProgress: number
-  rivalLabels: { id: number; name: string; style: string; x: number; y: number; position: number }[]
+  /** Who each rival tag names; placement is per frame in rivalTagStore. */
+  rivalLabels: { id: number; name: string; style: string; position: number }[]
   opponents: { id: number; x: number; z: number }[]
   standings: Standing[]
   speedKmh: number
@@ -40,6 +41,9 @@ export interface Telemetry {
   bestLapMs: number | null
   totalMs: number
   countdown: number
+  /** Start gantry: red lights lit now, out of how many. */
+  startLights: number
+  startLightCount: number
   fps: number
   /** Car position on the XZ plane and yaw (0 = facing +Z), for the minimap. */
   carX: number
@@ -81,6 +85,8 @@ export const initialTelemetry: Telemetry = {
   bestLapMs: null,
   totalMs: 0,
   countdown: 0,
+  startLights: 0,
+  startLightCount: 5,
   fps: 0,
   carX: 0,
   carZ: 0,
