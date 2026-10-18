@@ -44,7 +44,7 @@ export class Opponent {
     this.vehicle = new Vehicle(config, rigCarModel(scene, config), world, spawn)
     this.vehicle.controller.surfaceAt = (x, z) => track.surfaceAt(x, z)
     const front = config.wheels.find(w => w.id === 'FL')!, rear = config.wheels.find(w => w.id === 'RL')!
-    this.driver = new AiDriver(track.line, { wheelbase: Math.abs(front.position[2] - rear.position[2]), maxSteerAngle: config.maxSteerAngle, steerFalloffSpeed: config.steerFalloffSpeed }, 0.94 + id * 0.025, DRIVER_PROFILES[(id - 1) % DRIVER_PROFILES.length], difficulty)
+    this.driver = new AiDriver(track.line, { wheelbase: Math.abs(front.position[2] - rear.position[2]), maxSteerAngle: config.maxSteerAngle, steerFalloffSpeed: config.steerFalloffSpeed, grip: config.tires.grip, downforcePerKg: config.downforceCoefficient / config.massKg, brakeDecel: config.brakeForce / config.massKg }, 0.94 + id * 0.025, DRIVER_PROFILES[(id - 1) % DRIVER_PROFILES.length], difficulty)
     this.pose = { id, x: 0, z: 0, heading: spawn.heading, speed: 0 }
     this.entry = { id, name: NAMES[(id - 1) % NAMES.length], player: false, lap: 0, checkpoint: 0, index: 0, finishMs: null, x: spawn.position.x, z: spawn.position.z }
     this.race = new RaceManager(track.checkpoints, 3, { onStateChange: () => {}, onLap: () => {} })

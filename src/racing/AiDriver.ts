@@ -9,7 +9,23 @@ export interface DriverPose { x: number; z: number; heading: number; speed: numb
 export interface TrafficCar extends DriverPose { id: number }
 export interface DriverResources { charge: number; boosting: boolean; drifting: boolean }
 const EMPTY_RESOURCES: DriverResources = { charge: 0, boosting: false, drifting: false }
-export interface SteeringConfig { wheelbase: number; maxSteerAngle: number; steerFalloffSpeed: number }
+export interface SteeringConfig {
+  wheelbase: number
+  maxSteerAngle: number
+  steerFalloffSpeed: number
+  /** Tire grip (μ). Corner and braking speeds scale with it; defaults to REFERENCE_GRIP. */
+  grip?: number
+  /** Downforce coefficient over mass (1/m): extra grip share per (m/s)² is this ÷ g. */
+  downforcePerKg?: number
+  /** Brake force over mass, m/s²: a hard cap on planned braking. */
+  brakeDecel?: number
+}
+
+/** Tire grip the corner (5.5 m/s²) and braking (5 m/s²) targets were first tuned against. */
+const REFERENCE_GRIP = 1.25
+/** Share of the car's grip the AI plans to use, leaving room for line errors and traffic. */
+const CORNER_SHARE = 5.5 / (REFERENCE_GRIP * 9.81)
+const BRAKE_SHARE = 5 / (REFERENCE_GRIP * 9.81)
 
 /** Numeric, deterministic controller. Owns inputs, never moves a rigid body. */
 export class AiDriver {
@@ -55,19 +71,26 @@ export class AiDriver {
       this.distances[i + 1] = this.distances[i] + Math.hypot(b.x - a.x, b.z - a.z)
     }
     this.length = this.distances[n]
+    const grip = config.grip ?? REFERENCE_GRIP
+    const downforce = (config.downforcePerKg ?? 0) / 9.81
+    const braking = Math.min(BRAKE_SHARE * grip * 9.81, config.brakeDecel ?? Infinity) * profile.braking * AI_DIFFICULTIES[difficulty].braking
     for (let i = 0; i < n; i++) {
       const a = line[(i - 2 + n) % n], b = line[i], c = line[(i + 2) % n]
       const ab = Math.hypot(b.x - a.x, b.z - a.z)
       const bc = Math.hypot(c.x - b.x, c.z - b.z)
       const ac = Math.hypot(c.x - a.x, c.z - a.z)
       const curvature = 2 * Math.abs((b.x - a.x) * (c.z - a.z) - (b.z - a.z) * (c.x - a.x)) / Math.max(0.001, ab * bc * ac)
-      this.speeds[i] = clamp(Math.sqrt(5.5 * profile.corner / Math.max(curvature, 0.001)), 9, 65 * profile.straight)
+      // Lateral grip a(v) = A·(1 + k·v²) with downforce; v²·κ = a(v) gives v² = A / (κ − A·k).
+      // Where downforce outgrows the bend (κ ≤ A·k) only the straight-line cap applies.
+      const lateral = CORNER_SHARE * grip * 9.81 * profile.corner
+      const room = Math.max(curvature, 0.001) - lateral * downforce
+      this.speeds[i] = clamp(room > 0 ? Math.sqrt(lateral / room) : Infinity, 9, 65 * profile.straight)
     }
     // Two backward passes propagate braking through the closed seam.
     for (let k = n * 2 - 1; k >= 0; k--) {
       const i = k % n, next = (i + 1) % n
       const ds = this.distances[i + 1] - this.distances[i]
-      this.speeds[i] = Math.min(this.speeds[i], Math.sqrt(this.speeds[next] ** 2 + 2 * 5 * profile.braking * AI_DIFFICULTIES[difficulty].braking * ds))
+      this.speeds[i] = Math.min(this.speeds[i], Math.sqrt(this.speeds[next] ** 2 + 2 * braking * ds))
     }
   }
 
