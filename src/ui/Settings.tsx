@@ -1,5 +1,4 @@
-import { useStore } from 'zustand'
-import { controllerStore } from '../stores/controllerStore'
+import { ControllerSettings } from './ControllerSettings'
 import { Help } from './Help'
 import { useEffect, useRef, useState } from 'react'
 import { GiGears, GiSteeringWheel, GiSpeaker, GiGamepad, GiComputerFan } from 'react-icons/gi'
@@ -27,7 +26,6 @@ export function SettingsDialog({ onClose }: { onClose(): void }) {
 }
 
 export function Settings({ onClose }: { onClose?: () => void }) {
-  const controllerConnected = useStore(controllerStore, s => s.connected)
   const settings = useGame((s) => s.settings)
   const update = useGame((s) => s.updateSettings)
   const [section, setSection] = useState<typeof sections[number]['id']>('graphics')
@@ -41,7 +39,7 @@ export function Settings({ onClose }: { onClose?: () => void }) {
         {sections.map(s => <button key={s.id} aria-pressed={section === s.id} onClick={() => setSection(s.id)}><s.icon aria-hidden="true"/><span>{s.label}</span></button>)}
       </nav>
       <div className="settings__content" key={section}>
-        <span className="eyebrow">{active.label}</span><p className="settings__hint">{active.hint}</p>
+        {section !== 'controller' && <><span className="eyebrow">{active.label}</span><p className="settings__hint">{active.hint}</p></>}
         {section === 'graphics' && <>
           <SettingChoices<QualityPreset> preview={quality=><SettingScene quality={quality}/>} label="Visual quality" value={settings.quality} options={[[ 'low','Low'],['medium','Medium'],['high','High']]} onPick={quality=>update({quality})}/>
           <p className="settings__help">Illustrative previews. Low favors speed; High adds richer lighting and detail.</p>
@@ -57,22 +55,7 @@ export function Settings({ onClose }: { onClose?: () => void }) {
           <input aria-label="Master volume" className="ui-range" type="range" min={0} max={1} step={.05} value={settings.masterVolume} onChange={e=>update({masterVolume:Number(e.target.value)})}/>
           <span className="settings__help">Engine, tires, effects and garage ambience.</span>
         </label>}
-        {section === 'controller' && <>
-          <h3 role="status">{controllerConnected ? 'Controller connected' : 'No controller connected'}</h3>
-          <p className="settings__help">Plug in with USB, or pair your controller in your device’s Bluetooth settings. Return to the game and press any controller button to activate it.</p>
-          {!controllerConnected && <p className="settings__help">Keep this game window focused. If your controller isn’t detected, reconnect it and press a button again.</p>}
-          <dl className="settings__controls">
-            <div><dt>Steer</dt><dd>Left stick</dd></div>
-            <div><dt>Accelerate / brake</dt><dd>RT / LT · R2 / L2</dd></div>
-            <div><dt>Handbrake / skip intro</dt><dd>A · Cross</dd></div>
-            <div><dt>Nitro</dt><dd>X or RB · Square or R1</dd></div>
-            <div><dt>Camera</dt><dd>Y · Triangle</dd></div>
-            <div><dt>Reset car</dt><dd>B · Circle</dd></div>
-            <div><dt>Pause / resume</dt><dd>Menu · Options</dd></div>
-            <div><dt>Menus</dt><dd>Stick / D-pad · A / Cross select · B / Circle back</dd></div>
-          </dl>
-          <p className="settings__help">Xbox, PlayStation and compatible controllers with the standard browser mapping. Drift: tap brake or handbrake while turning. Tap nitro again on the cue for a perfect boost.</p>
-        </>}
+        {section === 'controller' && <ControllerSettings />}
         {section === 'controls' && <dl className="settings__controls">
           <div><dt>Accelerate</dt><dd><kbd>W</kbd> / <kbd>↑</kbd></dd></div>
           <div><dt>Brake / reverse</dt><dd><kbd>S</kbd> / <kbd>↓</kbd></dd></div>

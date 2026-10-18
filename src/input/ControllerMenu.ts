@@ -1,6 +1,6 @@
 import { PAD } from './gamepad'
 
-const SELECTOR = 'button, input, select, [tabindex="0"], a[href]'
+const SELECTOR = 'button, input, select, summary, [tabindex="0"], a[href]'
 
 /** Controller focus stays inside the topmost modal, just like keyboard focus. */
 export function controllerControls(): HTMLElement[] {

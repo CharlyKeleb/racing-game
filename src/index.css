@@ -921,3 +921,56 @@ button.menu-track:hover,button.menu-track:focus-visible { border-color:var(--acc
 
 /* Programmatic controller focus needs the same visible cue as keyboard focus. */
 .controller-input .overlay :focus { outline: 3px solid var(--yellow, #ffe14a); outline-offset: 4px; }
+
+/* Controller setup: one connection story, one set of button labels. */
+.controller-page { display:grid; gap:20px; }
+.controller-page__heading { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.controller-page__heading .eyebrow { font-size:9px; letter-spacing:.15em; color:var(--muted); }
+.controller-page__heading h3 { margin:6px 0 0; font:italic 900 clamp(24px,3vw,32px)/1 var(--font-display); text-transform:uppercase; }
+.controller-page__status { display:flex; align-items:center; gap:7px; flex-shrink:0; padding:7px 9px; border:1px solid #ffffff20; color:#b6c2d2; font-size:10px; }
+.controller-page__status i { width:5px; height:5px; border-radius:50%; background:#8591a1; }
+.controller-page__status.is-connected { color:#9ee8c3; border-color:#9ee8c340; background:#9ee8c30a; }
+.controller-page__status.is-connected i { background:#9ee8c3; box-shadow:0 0 8px #9ee8c360; }
+.controller-page__hero { position:relative; overflow:hidden; display:grid; justify-items:center; padding:14px 12px 16px; border:1px solid #ffffff15; background:radial-gradient(ellipse at 50% 55%,#24405780,transparent 67%),repeating-linear-gradient(0deg,transparent 0 29px,#ffffff03 29px 30px),#0a121f; }
+.controller-page__hero::after { content:''; position:absolute; width:32px; height:2px; bottom:0; left:0; background:var(--accent-2); }
+.controller-page__platform { display:flex; padding:3px; gap:2px; border:1px solid #ffffff18; background:#060c16; z-index:1; }
+.controller-page__platform button { padding:6px 14px; border:0; background:transparent; color:#8c9cb0; font:700 11px var(--font-ui, sans-serif); cursor:pointer; }
+.controller-page__platform button[aria-pressed="true"] { background:#26374a; color:#fff; }
+.controller-page__platform button:focus-visible { outline:2px solid var(--accent-2); outline-offset:2px; }
+.controller-page__art { width:100%; max-width:340px; height:auto; margin:8px 0 -5px; filter:drop-shadow(0 14px 12px #0005); }
+.controller-page__caption { color:#8d9db1; font-size:10px; letter-spacing:.03em; }
+.controller-page__connect { display:grid; gap:12px; padding-left:2px; }
+.controller-page__connect > div { display:flex; align-items:flex-start; gap:12px; }
+.controller-page__connect b { color:var(--accent-2); font:700 12px/1.5 var(--font-display); border-bottom:1px solid #19c3ff40; }
+.controller-page__connect strong { display:block; font-size:12px; font-weight:600; }
+.controller-page__connect small { display:block; margin-top:4px; color:var(--muted); font-size:11px; line-height:1.5; }
+.controller-page__section { display:flex; justify-content:space-between; align-items:center; gap:8px; padding-top:2px; }
+.controller-page__section .eyebrow { font-size:10px; }
+.controller-page__section > span:last-child { font-size:10px; color:var(--muted); }
+.controller-page__bindings { margin:-8px 0 0; display:grid; grid-template-columns:1fr 1fr; column-gap:22px; }
+.controller-page__bindings > div { display:flex; align-items:center; justify-content:space-between; gap:8px; min-height:38px; border-bottom:1px solid #ffffff0d; }
+.controller-page__bindings dt { color:#aebccd; font-size:11px; }
+.controller-page__bindings dd { margin:0; color:#edf3fa; font-size:11px; font-weight:700; }
+.controller-page__menu { display:flex; flex-wrap:wrap; gap:10px 16px; font-size:10px; color:var(--muted); }
+.controller-page__menu > span { display:flex; align-items:center; gap:6px; }
+.controller-page__menu b { display:inline-grid; place-items:center; min-width:19px; height:19px; border:1px solid #71829970; border-radius:50%; color:var(--ink); font-size:10px; }
+.controller-page__help { border-top:1px solid #ffffff12; padding-top:14px; font-size:11px; color:var(--muted); }
+.controller-page__help summary { cursor:pointer; color:#b7c7da; }
+.controller-page__help p { margin:10px 0 0; line-height:1.65; }
+@media (max-width:480px) {
+ .controller-page { gap:16px; }
+ .controller-page__heading h3 { font-size:24px; }
+ .controller-page__status { font-size:9px; padding:6px; }
+ .controller-page__bindings { column-gap:14px; }
+ .controller-page__bindings dt,.controller-page__bindings dd { font-size:10px; }
+ .controller-page__section > span:last-child { display:none; }
+}
+.controller-page__art { max-width:280px; }
+.controller-page__guide { border:1px solid #ffffff18; background:#080f1980; }
+.controller-page__guide > summary { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:14px; cursor:pointer; font-size:12px; font-weight:600; }
+.controller-page__guide > summary::after { content:'+'; color:var(--accent-2); font-size:18px; font-weight:400; }
+.controller-page__guide[open] > summary::after { content:'−'; }
+.controller-page__guide > summary small { margin-left:auto; color:var(--muted); font-size:10px; font-weight:400; }
+.controller-page__guide .controller-page__section { padding:8px 14px 16px; }
+.controller-page__guide .controller-page__bindings { margin:0 14px; }
+.controller-page__guide .controller-page__menu { padding:16px 14px; }
