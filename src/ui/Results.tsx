@@ -5,6 +5,7 @@ import { Button, Panel } from './kit'
 
 export function Results() {
   const game = useGameInstance()
+  const standings = useTelemetry((s) => s.standings)
   const total = useTelemetry((s) => s.totalMs)
   const best = useTelemetry((s) => s.bestLapMs)
   return (
@@ -16,6 +17,7 @@ export function Results() {
           <dt>Best lap</dt>
           <dd className="mono">{formatTime(best)}</dd>
         </dl>
+        {standings.length > 1 && <ol className="race-standings" aria-label="Race standings">{standings.map(s => <li key={s.id} className={s.player ? 'race-standings__player' : ''}><b>{s.position}</b><span>{s.name}</span><span className="mono">{s.finishMs === null ? 'DNF' : formatTime(s.finishMs)}</span></li>)}</ol>}
         <Button variant="primary" size="lg" onClick={() => game?.startRace()} autoFocus>
           Race again
         </Button>

@@ -10,7 +10,7 @@ import { Chevron } from './kit'
 export function CarPicker({ className = '' }: { className?: string }) {
   const game = useGameInstance()
   const name = useGame((s) => s.carName)
-  const switching = useGame((s) => s.carSwitching)
+  const switching = useGame((s) => s.carSwitching || s.trackSwitching)
   const carId = useGame((s) => s.settings.car)
   const cars = selectableCars()
   if (cars.length < 2) return null

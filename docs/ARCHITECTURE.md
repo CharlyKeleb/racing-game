@@ -182,7 +182,8 @@ src/
 ├── world/       RaceTrack (interface), Track (procedural), StreamedTrack (chunked GLB streaming),
 │                streaming/ChunkPlanner (pure LOD planning), Environment (sky, sun, fog), tracks
 ├── camera/      ChaseCamera (chase + cockpit, speed FOV)
-├── racing/      RaceManager, CheckpointManager, LapTimer
+├── racing/      RaceManager, CheckpointManager, LapTimer, AiDriver, AiProfiles,
+│                Overtaking, Drafting, RaceStandings
 ├── input/       InputManager (keyboard + gamepad → InputState)
 ├── audio/       AudioManager (procedural engine + tire squeal)
 ├── effects/     PostFX (bloom, SMAA, tone mapping)
@@ -234,7 +235,7 @@ The game runs before any authored asset exists:
 - [ ] Camera shake on barrier hits; minimap from the gate positions
 
 ### Milestone 3: Racing
-- AI opponents on a racing line (waypoints + PID steering, rubber-banding)
+- [x] AI opponents using player vehicle physics, curvature speed planning, PID steering, traffic avoidance, bounded catch-up and checkpoint standings (see [AI racers](AI_RACERS.md))
 - Ghost car (record `InputState` per tick and replay it, deterministic by design)
 - Garage scene and car selection (`carRegistry`)
 - Touch controls

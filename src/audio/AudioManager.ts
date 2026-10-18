@@ -1,5 +1,6 @@
 import { Howler } from 'howler'
 import { CarSound, type CarSoundState } from './CarSound'
+import { OpponentAudio } from './OpponentAudio'
 import { GarageAmbience } from './GarageAmbience'
 import { decodeWav16, type EngineBank } from './GranularEngine'
 import type { EngineBankMessage } from './engineWorklet'
@@ -21,6 +22,10 @@ export type { CarSoundState }
  * Howler owns the global volume/unlock so one-shot SFX share the same mixer.
  */
 export class AudioManager {
+  private rivals: OpponentAudio[] = []
+  private bankCache = new Map<string, Promise<EngineBankMessage>>()
+  private workletReady: Promise<void> | null = null
+  private engineBank: EngineBankMessage | null = null
   private ctx: AudioContext | null = null
   private master!: GainNode
   private sound: CarSound | null = null
@@ -46,6 +51,8 @@ export class AudioManager {
   /** True while the game is paused; otherwise the context must stay running. */
   private paused = false
   private resumeTriedAt = -Infinity
+  /** One second of white noise for the intro whooshes and impacts, made on first use. */
+  private noise: AudioBuffer | null = null
 
   constructor() {
     // Howler suspends its AudioContext 30 s after load (and after each of its
@@ -66,6 +73,7 @@ export class AudioManager {
     this.firingPerRev = firingPerRev
     this.sound?.setFiringPerRev(firingPerRev)
     if (!changed || !this.ctx || !this.sound) return
+    this.engineBank = null
     this.sampled?.disconnect()
     this.sampled?.port.close()
     this.sampled = null
@@ -129,7 +137,7 @@ export class AudioManager {
         fetchBuffer('engine-bank.json'),
         fetchBuffer('ignition.mp3').catch(() => null),
         fetchBuffer('lift-off.mp3').catch(() => null),
-        ctx.audioWorklet.addModule(engineWorkletUrl),
+        this.workletReady ??= ctx.audioWorklet.addModule(engineWorkletUrl),
       ])
       const bank = JSON.parse(new TextDecoder().decode(manifest)) as EngineBank
       // Parsed by hand: decodeAudioData would resample and shift the pitch marks.
@@ -142,12 +150,14 @@ export class AudioManager {
 
       const node = new AudioWorkletNode(ctx, 'granular-engine', { numberOfInputs: 0, outputChannelCount: [1] })
       const msg: EngineBankMessage = { pcm, bank }
-      node.port.postMessage(msg, [pcm.buffer])
+      node.port.postMessage(msg)
       // The car may have changed while this loaded.
       if (this.carAudioUrl !== base) {
         node.port.close()
         return
       }
+      this.engineBank = msg
+      this.bankCache.set(base, Promise.resolve(msg))
       node.connect(sound.engineIn)
       this.sampled = node
       // The synth keeps running silently: it's the stand-in again if the car changes.
@@ -167,6 +177,87 @@ export class AudioManager {
       this.sound.playClip(this.ignition, 0.9)
       this.sound.holdEngineUntil(ctx.currentTime + IGNITION_SETTLE)
     })
+  }
+
+  private noiseSource(ctx: AudioContext): AudioBufferSourceNode {
+    if (!this.noise) {
+      this.noise = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate)
+      const data = this.noise.getChannelData(0)
+      for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1
+    }
+    const src = ctx.createBufferSource()
+    src.buffer = this.noise
+    return src
+  }
+
+  /** Intro whip-pan: a band of noise swept up through the cut, `lead` seconds before it lands. */
+  playWhoosh(lead: number): void {
+    const ctx = this.ctx
+    if (!ctx || this.paused) return
+    const t = ctx.currentTime, end = t + lead * 2.4
+    const src = this.noiseSource(ctx)
+    const band = ctx.createBiquadFilter()
+    band.type = 'bandpass'
+    band.Q.value = 1.4
+    band.frequency.setValueAtTime(300, t)
+    band.frequency.exponentialRampToValueAtTime(3200, t + lead)
+    band.frequency.exponentialRampToValueAtTime(500, end)
+    const gain = ctx.createGain()
+    gain.gain.setValueAtTime(0.0001, t)
+    gain.gain.exponentialRampToValueAtTime(0.5, t + lead)
+    gain.gain.exponentialRampToValueAtTime(0.0001, end)
+    src.connect(band).connect(gain).connect(this.master)
+    src.start(t)
+    src.stop(end + 0.05)
+  }
+
+  /** Lands a shot: a sub thump with a short burst of low noise. */
+  playImpact(weight = 1): void {
+    const ctx = this.ctx
+    if (!ctx || this.paused) return
+    const t = ctx.currentTime
+    const sub = ctx.createOscillator()
+    sub.type = 'sine'
+    sub.frequency.setValueAtTime(120, t)
+    sub.frequency.exponentialRampToValueAtTime(38, t + 0.45)
+    const subGain = ctx.createGain()
+    subGain.gain.setValueAtTime(0.0001, t)
+    subGain.gain.exponentialRampToValueAtTime(0.7 * weight, t + 0.012)
+    subGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.6)
+    sub.connect(subGain).connect(this.master)
+    sub.start(t)
+    sub.stop(t + 0.65)
+    const src = this.noiseSource(ctx)
+    const low = ctx.createBiquadFilter()
+    low.type = 'lowpass'
+    low.frequency.value = 900
+    const gain = ctx.createGain()
+    gain.gain.setValueAtTime(0.35 * weight, t)
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.18)
+    src.connect(low).connect(gain).connect(this.master)
+    src.start(t)
+    src.stop(t + 0.2)
+  }
+
+  /** Start gantry: a short tone per red light, a long high one at lights out. */
+  playStartLight(go: boolean): void {
+    const ctx = this.ctx
+    if (!ctx || this.paused) return
+    const t = ctx.currentTime, length = go ? 0.7 : 0.16
+    const tone = ctx.createOscillator()
+    tone.type = 'square'
+    tone.frequency.value = go ? 1320 : 660
+    const soften = ctx.createBiquadFilter()
+    soften.type = 'lowpass'
+    soften.frequency.value = 2600
+    const gain = ctx.createGain()
+    gain.gain.setValueAtTime(0.0001, t)
+    gain.gain.exponentialRampToValueAtTime(0.22, t + 0.008)
+    gain.gain.setValueAtTime(0.22, t + length - 0.05)
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + length)
+    tone.connect(soften).connect(gain).connect(this.master)
+    tone.start(t)
+    tone.stop(t + length + 0.02)
   }
 
   /** Menu/garage vs. on track: sets the room tone and whether the engine is heard. */
@@ -237,7 +328,47 @@ export class AudioManager {
     void this.ctx?.resume()
   }
 
+  clearOpponents(): void {
+    for (const rival of this.rivals) rival.dispose()
+    this.rivals = []
+  }
+
+  setOpponentCars(cars: readonly { audioUrl?: string; firingPerRev: number }[]): void {
+    this.clearOpponents()
+    const ctx = this.ctx
+    if (!ctx) return
+    for (const car of cars) {
+      const rival = new OpponentAudio(ctx, this.master, car.firingPerRev)
+      this.rivals.push(rival)
+      const base = car.audioUrl
+      if (!base) continue
+      let bank = this.bankCache.get(base)
+      if (!bank && base === this.carAudioUrl && this.engineBank) bank = Promise.resolve(this.engineBank)
+      if (!bank) {
+        bank = (async () => {
+          const [wav, manifest] = await Promise.all([
+            fetch(base + 'engine-bank.wav').then(r => { if (!r.ok) throw new Error('Engine recording unavailable'); return r.arrayBuffer() }),
+            fetch(base + 'engine-bank.json').then(r => { if (!r.ok) throw new Error('Engine bank unavailable'); return r.json() as Promise<EngineBank> }),
+            this.workletReady ??= ctx.audioWorklet.addModule(engineWorkletUrl),
+          ])
+          return { pcm: decodeWav16(wav).pcm, bank: manifest }
+        })()
+        this.bankCache.set(base, bank)
+      }
+      void bank.then(recording => {
+        if (this.rivals.includes(rival)) rival.setBank(recording)
+      }).catch(() => this.bankCache.delete(base))
+    }
+  }
+
+  updateOpponent(index: number, rpm: number, throttle: number, distance: number, lateral: number, active: boolean): void {
+    this.rivals[index]?.update(rpm, throttle, distance, lateral, active)
+  }
+
   dispose(): void {
+    this.clearOpponents()
+    this.engineBank = null
+    this.bankCache.clear()
     this.sound?.dispose()
     this.ambience?.dispose()
     this.sampled?.disconnect()

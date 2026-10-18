@@ -7,6 +7,7 @@ import { Hud } from './ui/Hud'
 import { useGame } from './ui/hooks'
 import { MainMenu } from './ui/MainMenu'
 import { PauseMenu } from './ui/PauseMenu'
+import { RaceIntro } from './ui/RaceIntro'
 import { Results } from './ui/Results'
 import { TouchControls } from './ui/TouchControls'
 import { isTouchDevice } from './engine/device'
@@ -55,6 +56,7 @@ export default function App() {
         )}
         {phase === 'menu' && <MainMenu />}
         {phase === 'garage' && <Garage />}
+        {phase === 'intro' && <RaceIntro />}
         {(phase === 'countdown' || phase === 'racing' || phase === 'paused' || phase === 'finished') && <Hud />}
         {(phase === 'countdown' || phase === 'racing') && touch && <TouchControls />}
         {phase === 'paused' && <PauseMenu />}

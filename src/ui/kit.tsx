@@ -1,3 +1,5 @@
+import { Help } from './Help'
+import { optionHelp } from './optionHelp'
 import type { ButtonHTMLAttributes, ReactNode } from 'react'
 import type { CarClass } from '../vehicles/CarBuild'
 
@@ -118,15 +120,17 @@ export function Segmented<T extends string | number>({
   value,
   options,
   onPick,
+  help = false,
 }: {
   label: string
   value: T
   options: [T, string][]
   onPick(v: T): void
+  help?: boolean
 }) {
   return (
     <div className="ui-field">
-      <span className="ui-field__label">{label}</span>
+      <span className="ui-field__label">{label}{help && optionHelp[label] && <Help label={label}>{optionHelp[label]}</Help>}</span>
       <div className="ui-segmented" role="radiogroup" aria-label={label}>
         {options.map(([v, text]) => (
           <button
