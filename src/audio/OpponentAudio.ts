@@ -28,6 +28,7 @@ export class OpponentAudio {
     this.sampled.connect(this.tone)
     this.fallback.gain.value = 0
   }
+  /** Distance is 3D metres from the camera; lateral is metres toward camera-left. */
   update(rpm: number, throttle: number, distance: number, lateral: number, active: boolean): void {
     const t = this.ctx.currentTime
     const level = active ? (0.12 + 0.08 * throttle) / (1 + (distance / 12) ** 2) : 0

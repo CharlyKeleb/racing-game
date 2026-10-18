@@ -2,6 +2,8 @@ import * as THREE from 'three'
 import { describe, expect, it, vi } from 'vitest'
 import { startingGrid } from '../src/racing/StartingGrid'
 import { RACE_INTRO_SECONDS } from '../src/camera/RaceIntroCamera'
+import { AI_DIFFICULTIES, DRIVER_PROFILES } from '../src/racing/AiProfiles'
+import { steeringLimit } from '../src/vehicles/SteeringLimit'
 import { AiDriver } from '../src/racing/AiDriver'
 import { RaceStandings, type RaceEntry } from '../src/racing/RaceStandings'
 import { initRapier, PhysicsWorld } from '../src/engine/PhysicsWorld'
@@ -28,6 +30,38 @@ describe('AI numeric control', () => {
     expect(driver.targetSpeed).toBeCloseTo(speed * 0.98 / 1.08 * 1.08)
     for (const v of [driver.input.steer, driver.input.throttle, driver.input.brake]) expect(Number.isFinite(v)).toBe(true)
     expect(Math.abs(driver.input.steer)).toBeLessThanOrEqual(1)
+  })
+  it('plans corner speed from each preset’s grip share and the car’s own tires', () => {
+    for (const difficulty of ['relaxed','challenging','intense'] as const) {
+      for (const grip of [1.25,1.7,1.95]) {
+        const driver = new AiDriver(circle,{...config,grip},1,DRIVER_PROFILES[0],difficulty)
+        expect(driver.speeds[0]).toBeCloseTo(Math.sqrt(AI_DIFFICULTIES[difficulty].cornerGripShare*grip*9.81*80),5)
+      }
+    }
+  })
+  it('normalises AI steering against the same grip limit as the vehicle', () => {
+    const limitedConfig={...config,grip:1.7,peakSlip:.125,steerFalloffSpeed:10,steerPeakSlipScale:.5}
+    const legacyConfig={...limitedConfig,steerPeakSlipScale:0}
+    const limited=new AiDriver(circle,limitedConfig),legacy=new AiDriver(circle,legacyConfig)
+    const pose={x:80,z:0,heading:0,speed:28}
+    limited.update(1/60,pose,[],1,0,2)
+    legacy.update(1/60,pose,[],1,0,2)
+    expect(Math.abs(limited.input.steer)).toBeGreaterThan(Math.abs(legacy.input.steer))
+    expect(limited.input.steer*steeringLimit(limitedConfig,pose.speed)).toBeCloseTo(legacy.input.steer*steeringLimit(legacyConfig,pose.speed))
+  })
+  it('never plans more braking than the hardware allows, even for an aggressive profile', async () => {
+    const {readFile}=await import('node:fs/promises')
+    const manifest=JSON.parse(await readFile('public/models/tracks/nurburgring/track.json','utf8')) as {line:[number,number,number][]}
+    const line=manifest.line.map(([x,y,z])=>({x,y,z}))
+    for(const difficulty of ['relaxed','challenging','intense'] as const){
+      const driver=new AiDriver(line,{...config,grip:1.95,brakeDecel:3},1,DRIVER_PROFILES[2],difficulty)
+      let peak=0
+      for(let i=0;i<line.length;i++){
+        const ds=driver.distances[i+1]-driver.distances[i]
+        peak=Math.max(peak,(driver.speeds[i]**2-driver.speeds[(i+1)%line.length]**2)/(2*ds))
+      }
+      expect(peak).toBeCloseTo(3,6)
+    }
   })
   it('brakes for a slower car and never boosts through traffic', () => {
     const driver = new AiDriver(circle, config)
@@ -106,6 +140,7 @@ it.each(['bmw', 'porsche911', 'koenigsegg', 'mixed', 'mixed relaxed', 'mixed int
     rival.start(2,RACE_INTRO_SECONDS)
     return rival
   })
+  const respawns = opponents.map(o => vi.spyOn(o.vehicle, 'respawn'))
   const edges = measureRoadEdges(track.line, (x, z) => track.surfaceAt(x, z))
   const obstruction = { position: track.spawn.position.clone().add(new THREE.Vector3(Math.sin(track.spawn.heading)*30,0,Math.cos(track.spawn.heading)*30)), heading:track.spawn.heading }
   const blocker = new Vehicle(config, rigCarModel(buildPlaceholderCar(config), config), physics.world, obstruction)
@@ -132,6 +167,9 @@ it.each(['bmw', 'porsche911', 'koenigsegg', 'mixed', 'mixed relaxed', 'mixed int
       for (const o of opponents) o.capture(1 / 60, traffic)
     }
     expect(opponents.map(o => ({ state: o.race.state, gate: o.race.lastCheckpoint, pose: o.pose })), JSON.stringify(opponents.map(o => ({ id:o.id, lap:o.race.lap, gate:o.race.lastCheckpoint, index:o.driver.progress.index, pose:o.pose, input:o.driver.input, target:o.driver.targetSpeed, lane:(o.driver as unknown as {lane:number}).lane })))).toMatchObject([{ state: 'finished' }, { state: 'finished' }, { state: 'finished' }])
+    console.info(`[AI ${scenario}] ${JSON.stringify(opponents.map((o,i) => ({driver:o.driver.profile.name, car:configs[i].id, difficulty, lapsMs:o.race.timer.laps.map(t=>Math.round(t)), recoveries:respawns[i].mock.calls.length})))}`)
+    expect(opponents.map(o=>o.race.timer.laps.length)).toEqual([2,2,2])
+    expect(respawns.reduce((sum,spy)=>sum+spy.mock.calls.length,0)).toBe(0)
     expect(recoveries, JSON.stringify({incidents, boosts, drifts})).toBe(0)
     expect(boosts.reduce((sum,n)=>sum+n,0), JSON.stringify({boosts,drifts})).toBeGreaterThan(0)
     expect(drifts[2], JSON.stringify({boosts,drifts})).toBeGreaterThan(0)

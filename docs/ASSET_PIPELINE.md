@@ -169,3 +169,15 @@ A free download is **not** automatically licensed for redistribution in a
 published game. Record the source and license of every model in
 `public/models/CREDITS.md` before you ship it. Brand names and liveries may also
 need clearance. Keep `.blend` source files out of git, or in Git LFS.
+
+### Steering grip limit
+
+`steerPeakSlipScale` defaults to `0.5` and is resolved for every vehicle, including
+older configs that omit it. At speed, steering lock is capped by the smaller of
+the existing speed falloff and the kinematic angle for the available tire grip
+(including downforce and surface friction), plus this share of the tire’s peak
+slip angle. `0` retains the previous steering envelope for comparisons.
+
+Parking lock is preserved. A held handbrake opens the original drift lock
+immediately; active drift amount blends toward it smoothly, preserving opposite
+lock. AI uses the same limit when converting desired wheel angles into inputs.
