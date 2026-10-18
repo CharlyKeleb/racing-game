@@ -1,3 +1,4 @@
+import { driftEvent } from '../racing/driftEvents'
 import { useEffect, useRef, useState } from 'react'
 import { TIME_PRESETS } from '../world/timeOfDay'
 import { TRACKS } from '../world/tracks'
@@ -61,6 +62,6 @@ export function TrackSelection({ onClose }: { onClose(): void }) {
         </div>
       </section>
     </div>
-    <footer className="track-select__footer"><div className="track-select__race-context"><span className="eyebrow">Your race</span><span>{settings.mode === 'drift' ? '2-minute solo run' : <>{settings.laps} {settings.laps===1?'lap':'laps'} <i>/</i> {(Number(previews[track.id as keyof typeof previews].lengthKm)*settings.laps).toFixed(2)} km</>} <i>/</i> {TIME_PRESETS[settings.timeOfDay].label}</span></div><Button variant="primary" size="lg" onClick={()=>{dialog.current?.close();if(selected!==current)update({track:selected})}}>{selected===current?'Keep this circuit':'Select circuit'} <span aria-hidden="true">→</span></Button></footer>
+    <footer className="track-select__footer"><div className="track-select__race-context"><span className="eyebrow">Your race</span><span>{settings.mode === 'drift' ? `${driftEvent(settings.driftEvent).laps} scored ${driftEvent(settings.driftEvent).laps===1?'lap':'laps'} / No time limit` : <>{settings.laps} {settings.laps===1?'lap':'laps'} <i>/</i> {(Number(previews[track.id as keyof typeof previews].lengthKm)*settings.laps).toFixed(2)} km</>} <i>/</i> {TIME_PRESETS[settings.timeOfDay].label}</span></div><Button variant="primary" size="lg" onClick={()=>{dialog.current?.close();if(selected!==current)update({track:selected})}}>{selected===current?'Keep this circuit':'Select circuit'} <span aria-hidden="true">→</span></Button></footer>
   </dialog>
 }

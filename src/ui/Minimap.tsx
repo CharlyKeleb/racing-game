@@ -18,6 +18,7 @@ const ROUTE_POINTS = 120
  */
 export function Minimap() {
   const drift = useGame(s => s.settings.mode === 'drift')
+  const gate = useTelemetry(s=>s.driftGate)
   const opponents = useTelemetry((s) => s.opponents)
   const data = useGame((s) => s.minimap)
   const carX = useTelemetry((s) => s.carX)
@@ -64,6 +65,7 @@ export function Minimap() {
           <path className="minimap__track" d={outline.d} vectorEffect="non-scaling-stroke" />
           <path className="minimap__route" d={route} vectorEffect="non-scaling-stroke" />
           {opponents.map(o => <circle key={o.id} cx={o.x} cy={o.z} r={10} fill={['#27b8eb', '#ffd447', '#e64f67'][(o.id - 1) % 3]} stroke="#101820" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />)}
+          {drift && data?.gates.map(([x,z],i)=><circle key={i} cx={x} cy={z} r={i===(gate+1)%data.gates.length?8:4} fill={i===(gate+1)%data.gates.length?'#ffd447':'#24e7df'} opacity={i>gate||i===0?1:.25} />)}
           <line className="minimap__start" {...outline.start} vectorEffect="non-scaling-stroke" />
         </g>
         <g className="minimap__car" transform={`translate(${CAR_X} ${CAR_Y})`}>
@@ -71,7 +73,7 @@ export function Minimap() {
           <path d="M0,-3.6 L2.6,2.6 L0,1.2 L-2.6,2.6 Z" />
         </g>
       </svg>
-      <div className="minimap__dist mono">{drift ? 'DRIFT / OPEN SESSION' : `${(distanceLeft / 1000).toFixed(2)} km`}</div>
+      <div className="minimap__dist mono">{drift ? `${(distanceLeft / 1000).toFixed(2)} KM / TO FINISH` : `${(distanceLeft / 1000).toFixed(2)} km`}</div>
     </div>
   )
 }

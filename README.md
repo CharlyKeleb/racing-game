@@ -66,12 +66,21 @@ Track selection images: see [Adding and updating race previews](docs/TRACK_PREVI
 ## Drift Challenge
 
 Select **Drift Challenge** in the main menu to load **Drift Park**, built from
-`~/Downloads/drift_race_track_free.glb`. A run lasts two minutes and has no
-opponents. Build speed, turn and tap **Space** (or the touch Drift button) to
-start a slide. Link slides within 1.5 seconds to keep the chain alive; sustained
-slides build a multiplier up to 5×. Straighten up to bank points. Resetting loses
-the current chain, and the final chain is banked when time expires. Only grounded
-slides on asphalt or kerbs score. Pausing freezes the clock.
+`~/Downloads/drift_race_track_free.glb`. Choose Flow State (one lap), Speed Session (one lap with a 65 km/h scoring
+minimum), or Marathon (two laps). Each has no time limit
+and no opponents. Follow the route and pass every gate before crossing the
+finish line. Flow State’s bronze, silver and gold targets are 2,000, 5,000 and 9,000 points;
+personal bests are saved separately for each track and event. Drift setup retains
+the event selector and time-of-day controls.
+
+Build speed, turn and tap **Space** (or the touch Drift button) to start a slide.
+Link slides within 2.5 seconds to keep the chain alive; sustained slides build
+up to 5×. Straighten up to bank. Wall impacts, spins, sustained off-track driving
+and resets lose the active chain. Cyan clipping zones boost scoring by 1.75×;
+clean transitions add 250 base points. Forward slides on asphalt or kerbs need
+the event’s minimum speed, three grounded wheels and 12° of angle to score. Crossing the
+finish banks the final chain. Results show medals, best chain, longest drift,
+clean transitions and broken chains.
 
 The park uses the existing streamed-track loader, with two geometry/texture
 quality tiers, road and guardrail collision, a surface map and a captured aerial.

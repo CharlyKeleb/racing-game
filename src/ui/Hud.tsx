@@ -1,3 +1,4 @@
+import { DriftEventHud, DriftComboHud } from './DriftHud'
 import { formatTime } from '../racing/LapTimer'
 import { useGame, useTelemetry } from './hooks'
 import { Minimap } from './Minimap'
@@ -28,12 +29,7 @@ export function Hud() {
       <div className="hud-speedlines" aria-hidden="true" />
       <div className="hud-tl">
         {t.standings.length > 1 && <div className="hud-lap" aria-label="Race position"><span className="eyebrow">Position</span><b>{t.standings.find(s => s.player)?.position ?? 1}</b><span className="hud-lap__total">/{t.standings.length}</span></div>}
-        {drift ? <div className={`drift-run ${t.challengeRemaining <= 15 ? 'drift-run--urgent' : ''}`}>
-          <span className="eyebrow">Drift Challenge / Time left</span>
-          <b className="mono">{Math.floor(Math.ceil(t.challengeRemaining) / 60)}:{String(Math.ceil(t.challengeRemaining) % 60).padStart(2, '0')}</b>
-          <span className="eyebrow">Banked points</span><strong>{t.driftTotal.toLocaleString()}</strong>
-          <small>Link slides · straighten to bank · reset loses chain</small>
-        </div> : <><div className="hud-lap">
+        {drift ? <DriftEventHud /> : <><div className="hud-lap">
           <span className="eyebrow">Lap</span>
           <b>{Math.max(t.lap, 1)}</b>
           <span className="hud-lap__total">/{t.totalLaps}</span>
@@ -62,7 +58,7 @@ export function Hud() {
       {t.drafting > 0.15 && phase === 'racing' && <div className="hud-drafting"><span>Slipstream</span><b>Building nitro</b></div>}
       {t.wrongWay && <div className="hud-wrongway">Wrong way</div>}
 
-      {drift && t.driftChain > 0 ? <div className="hud-drift"><span className="hud-drift__label">{t.driftActive ? 'Link it' : 'Banking'} · {t.driftCombo}× combo</span><b className="hud-drift__score">+{t.driftChain.toLocaleString()}</b></div> : t.driftActive ? (
+      {drift ? <DriftComboHud /> : t.driftActive ? (
         <div className="hud-drift">
           <span className="hud-drift__label">Drift</span>
           <b className="hud-drift__score">{t.driftScore.toLocaleString()}</b>

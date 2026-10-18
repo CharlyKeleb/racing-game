@@ -11,7 +11,7 @@ function loadingGame(loadVisuals: () => Promise<void>) {
   return Object.assign(Object.create(Game.prototype), {
     track: { loadVisuals, line: [{x:0,y:0,z:0},{x:0,y:0,z:100},{x:100,y:0,z:100},{x:100,y:0,z:0}], spawn: { heading: 0, position: { x: 0, y:0.6, z: 0 } }, isRoadCollider: () => true },
     physics: { groundHeight: () => 0 },
-    vehicle: { respawn: vi.fn() },
+    vehicle: { respawn: vi.fn(), controller: { setDriftMode: vi.fn() } },
     camera: { snap: vi.fn() },
     progress: { reset: vi.fn(), update: vi.fn() },
     driftChallenge: new DriftChallenge(),

@@ -30,10 +30,25 @@ export interface Telemetry {
   /** Just mistimed the perfect tap (flashes briefly). */
   nitroMissed: boolean
   /** Drift under way, and its points so far. */
+  driftAngle: number
+  driftScoring: boolean
+  driftZone: boolean
+  driftLink: number
+  driftComboProgress: number
+  driftMessage: string
+  driftBestChain: number
+  driftLongest: number
+  driftTransitions: number
+  driftZoneSeconds: number
+  driftPeakCombo: number
+  driftBusts: number
+  driftPersonalBest: number
+  driftNewBest: boolean
   driftTotal: number
   driftCombo: number
   driftChain: number
-  challengeRemaining: number
+  driftGate: number
+  driftGateCount: number
   driftActive: boolean
   driftScore: number
   /** Points of the drift that just ended, shown briefly; 0 = nothing to show. */
@@ -79,10 +94,25 @@ export const initialTelemetry: Telemetry = {
   nitroWindow: false,
   nitroPerfect: false,
   nitroMissed: false,
+  driftAngle: 0,
+  driftScoring: false,
+  driftZone: false,
+  driftLink: 0,
+  driftComboProgress: 0,
+  driftMessage: '',
+  driftBestChain: 0,
+  driftLongest: 0,
+  driftTransitions: 0,
+  driftZoneSeconds: 0,
+  driftPeakCombo: 1,
+  driftBusts: 0,
+  driftPersonalBest: 0,
+  driftNewBest: false,
   driftTotal: 0,
   driftCombo: 1,
   driftChain: 0,
-  challengeRemaining: 120,
+  driftGate: 0,
+  driftGateCount: 10,
   driftActive: false,
   driftScore: 0,
   driftBanked: 0,

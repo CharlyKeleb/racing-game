@@ -1,3 +1,4 @@
+import { driftEvent } from '../racing/driftEvents'
 import { GiCheckeredFlag, GiStopwatch, GiRaceCar, GiRoad, GiHomeGarage, GiGears } from 'react-icons/gi'
 import { useEffect, useState } from 'react'
 import { buildStats, carClass, performanceRank } from '../vehicles/CarBuild'
@@ -57,7 +58,7 @@ export function MainMenu() {
           <ModeSelect />
           <TrackPicker />
           <Button size="sm" variant="ghost" onClick={() => setShowRaceSetup(true)}>
-            {settings.mode === 'drift' ? 'Drift setup · 2 minutes' : `Race setup · ${settings.laps} ${settings.laps === 1 ? 'lap' : 'laps'}`} · {TIME_PRESETS[settings.timeOfDay].label}
+            {settings.mode === 'drift' ? `Drift setup · ${driftEvent(settings.driftEvent).name}` : `Race setup · ${settings.laps} ${settings.laps === 1 ? 'lap' : 'laps'}`} · {TIME_PRESETS[settings.timeOfDay].label}
           </Button>
           <Button size="md" className="menu-icon-action" disabled={switching} onClick={() => game?.openGarage()}>
             <GiHomeGarage aria-hidden="true"/> Garage
