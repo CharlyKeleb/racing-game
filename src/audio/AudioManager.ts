@@ -1,6 +1,8 @@
 import { Howler } from 'howler'
 import { CarSound, type CarSoundState } from './CarSound'
-import { OpponentAudio } from './OpponentAudio'
+import { OpponentAudio, type RivalSoundState } from './OpponentAudio'
+import { TyreBrakeSound } from './TyreBrakeSound'
+import { DEFAULT_NOISE_PROFILE, tyreBrakeLevels, type CarNoiseProfile, type TyreBrakeInput } from './TyreBrakeModel'
 import { GarageAmbience } from './GarageAmbience'
 import { decodeWav16, type EngineBank } from './GranularEngine'
 import type { EngineBankMessage } from './engineWorklet'
@@ -23,6 +25,9 @@ export type { CarSoundState }
  */
 export class AudioManager {
   private rivals: OpponentAudio[] = []
+  private rivalNoise: CarNoiseProfile[] = []
+  /** Reused for every rival's update (no per-frame allocation). */
+  private readonly rivalState: RivalSoundState = { rpm: 0, throttle: 0, x: 0, y: 0, z: 0, recession: 0, passSpeed: 0, active: false, tyres: tyreBrakeLevels({ speed: 0, brake: 0, slip: 0, slide: 0, paved: 0, drifting: false }, DEFAULT_NOISE_PROFILE) }
   private bankCache = new Map<string, Promise<EngineBankMessage>>()
   private workletReady: Promise<void> | null = null
   private engineBank: EngineBankMessage | null = null
@@ -32,6 +37,9 @@ export class AudioManager {
   private carAudioUrl: string | null = null
   /** Firing pulses per crank revolution (flat-six 3, V8 4): pitches the synth and sub. */
   private firingPerRev = 3
+  /** The player's tyres and brakes, and what they're made of. */
+  private tyres: TyreBrakeSound | null = null
+  private noiseProfile: CarNoiseProfile = DEFAULT_NOISE_PROFILE
 
   // Synth stand-in until the recordings load.
   private synthSaw!: OscillatorNode
@@ -66,7 +74,9 @@ export class AudioManager {
    * and its firing pulses per revolution. Switching cars after unlock swaps
    * the engine: the synth covers the gap while the new recordings load.
    */
-  setCarAudio(url: string | undefined, firingPerRev = 3): void {
+  setCarAudio(url: string | undefined, firingPerRev = 3, noise: CarNoiseProfile = DEFAULT_NOISE_PROFILE): void {
+    this.noiseProfile = noise
+    this.tyres?.setProfile(noise)
     const next = url ?? null
     const changed = next !== this.carAudioUrl
     this.carAudioUrl = next
@@ -100,6 +110,8 @@ export class AudioManager {
     this.carBus = ctx.createGain()
     this.carBus.connect(this.master)
     this.sound = new CarSound(ctx, this.carBus)
+    this.tyres = new TyreBrakeSound(ctx, this.noiseProfile)
+    this.tyres.output.connect(this.carBus)
     this.ambience = new GarageAmbience(ctx, this.master)
     this.sound.setFiringPerRev(this.firingPerRev)
 
@@ -306,7 +318,7 @@ export class AudioManager {
     if (this.master) this.master.gain.value = volume * 0.9
   }
 
-  update(state: CarSoundState): void {
+  update(state: CarSoundState, tyres?: TyreBrakeInput): void {
     const ctx = this.ctx
     if (!ctx || !this.sound) return
     // Self-heal if anything else suspends the context while racing (another
@@ -325,6 +337,7 @@ export class AudioManager {
     // The sound model turns the physics rpm into the engine as heard (rev
     // inertia, shift glides, rev-match blips); pitch follows that.
     this.sound.update(state, dt)
+    if (tyres) this.tyres?.update(tyreBrakeLevels(tyres, this.noiseProfile), dt)
     const rpm = this.sound.engineRpm
     if (this.sampled) {
       this.sampled.parameters.get('rpm')!.setTargetAtTime(rpm, t, 0.01)
@@ -349,14 +362,16 @@ export class AudioManager {
   clearOpponents(): void {
     for (const rival of this.rivals) rival.dispose()
     this.rivals = []
+    this.rivalNoise = []
   }
 
-  setOpponentCars(cars: readonly { audioUrl?: string; firingPerRev: number }[]): void {
+  setOpponentCars(cars: readonly { audioUrl?: string; firingPerRev: number; noise?: CarNoiseProfile }[]): void {
     this.clearOpponents()
     const ctx = this.ctx
     if (!ctx) return
     for (const car of cars) {
-      const rival = new OpponentAudio(ctx, this.master, car.firingPerRev)
+      const rival = new OpponentAudio(ctx, this.master, car.firingPerRev, car.noise ?? DEFAULT_NOISE_PROFILE)
+      this.rivalNoise.push(car.noise ?? DEFAULT_NOISE_PROFILE)
       this.rivals.push(rival)
       const base = car.audioUrl
       if (!base) continue
@@ -379,8 +394,12 @@ export class AudioManager {
     }
   }
 
-  updateOpponent(index: number, rpm: number, throttle: number, distance: number, lateral: number, active: boolean): void {
-    this.rivals[index]?.update(rpm, throttle, distance, lateral, active)
+  /** A rival's tyres and brakes go through the same model as the player's, with its own profile. */
+  updateOpponent(index: number, state: Omit<RivalSoundState, 'tyres'>, tyres: TyreBrakeInput): void {
+    const rival = this.rivals[index]
+    if (!rival) return
+    this.rivalState.tyres = tyreBrakeLevels(tyres, this.rivalNoise[index] ?? DEFAULT_NOISE_PROFILE)
+    rival.update(Object.assign(this.rivalState, state))
   }
 
   dispose(): void {
@@ -388,6 +407,7 @@ export class AudioManager {
     this.engineBank = null
     this.bankCache.clear()
     this.sound?.dispose()
+    this.tyres?.dispose()
     this.ambience?.dispose()
     this.sampled?.disconnect()
     this.sampled?.port.close()

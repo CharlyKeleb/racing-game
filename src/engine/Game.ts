@@ -5,6 +5,8 @@ import { DriftChallenge } from '../racing/DriftChallenge'
 import RAPIER from '@dimforge/rapier3d-compat'
 import * as THREE from 'three'
 import { AudioManager, type CarSoundState } from '../audio/AudioManager'
+import type { RivalSoundState } from '../audio/OpponentAudio'
+import type { TyreBrakeInput } from '../audio/TyreBrakeModel'
 import { StagingRevs } from '../audio/StagingRevs'
 import { RaceIntroCamera, RACE_INTRO_SECONDS, INTRO_CUTS, WHIP_SECONDS, introShot } from '../camera/RaceIntroCamera'
 import { startingGrid } from '../racing/StartingGrid'
@@ -63,6 +65,29 @@ const _forward = new THREE.Vector3()
 const _listenerPosition = new THREE.Vector3()
 const _listenerRight = new THREE.Vector3()
 const _rivalOffset = new THREE.Vector3()
+const _listenerUp = new THREE.Vector3()
+const _listenerBack = new THREE.Vector3()
+const _relativeVelocity = new THREE.Vector3()
+
+/** A car's tyres and brakes for the sound model: only wheels on pavement squeal. */
+function readTyres(ctrl: Vehicle['controller'], out: TyreBrakeInput): TyreBrakeInput {
+  let slip = 0, slide = 0, paved = 0, grounded = 0
+  for (const w of ctrl.wheels) {
+    if (!w.grounded) continue
+    grounded++
+    if (w.surface !== Surface.Asphalt && w.surface !== Surface.Kerb) continue
+    paved++
+    slip = Math.max(slip, w.slip)
+    slide = Math.max(slide, w.slide)
+  }
+  out.speed = Math.abs(ctrl.forwardSpeed)
+  out.brake = ctrl.braking
+  out.slip = slip
+  out.slide = slide
+  out.paved = grounded ? paved / grounded : 0
+  out.drifting = ctrl.drift.active
+  return out
+}
 /** Seconds of driving against the race direction before the HUD says so. */
 const WRONG_WAY_DELAY = 1.2
 /** Garage turntable camera: distance (m) and lens (deg) when there's room. */
@@ -94,7 +119,10 @@ export class Game {
   private readonly input = new InputManager()
   private readonly audio = new AudioManager()
   /** Reused every frame for the audio update. */
-  private readonly soundState: CarSoundState = { rpm: 0, throttle: 0, gear: 1, slip: 0, nitro: 0, nitroActive: false, nitroPerfect: false }
+  private readonly soundState: CarSoundState = { rpm: 0, throttle: 0, gear: 1, nitro: 0, nitroActive: false, nitroPerfect: false }
+  private readonly tyreSound: TyreBrakeInput = { speed: 0, brake: 0, slip: 0, slide: 0, paved: 0, drifting: false }
+  private readonly rivalTyreSound: TyreBrakeInput = { speed: 0, brake: 0, slip: 0, slide: 0, paved: 0, drifting: false }
+  private readonly rivalSound: Omit<RivalSoundState, 'tyres'> = { rpm: 0, throttle: 0, x: 0, y: 0, z: 0, recession: 0, passSpeed: 0, active: false }
   private readonly loop: GameLoop
   private physics!: PhysicsWorld
   private track!: RaceTrack
@@ -247,7 +275,7 @@ export class Game {
     progress(0.6)
     const entry = getCar(carId)
     this.carId = entry.id
-    this.audio.setCarAudio(entry.audioUrl, entry.firingPerRev)
+    this.audio.setCarAudio(entry.audioUrl, entry.firingPerRev, entry.noise)
     const build = gameStore.getState().build
     this.baseConfig = base
     gameStore.setState({ carName: base.name })
@@ -824,7 +852,7 @@ export class Game {
     const inShowroom = phase === 'menu' || phase === 'garage'
     this.effects.group.visible = !inShowroom
     if (inShowroom) this.setShowroomPad(true)
-    this.audio.setCarAudio(entry.audioUrl, entry.firingPerRev)
+    this.audio.setCarAudio(entry.audioUrl, entry.firingPerRev, entry.noise)
     gameStore.setState({ carName: base.name })
     telemetryStore.setState({ redlineRpm: config.engine.redlineRpm })
     this.vehicle.render(1)
@@ -1112,16 +1140,13 @@ export class Game {
     this.updateOpponentAudio(phase, staging)
     const ctrl = this.vehicle.controller
     const sound = this.soundState
-    let slip = 0
-    for (const w of ctrl.wheels) slip = Math.max(slip, w.slip)
     sound.rpm = this.showroomRev?.rpm ?? (revAudible ? this.revRpm : staging ? this.playerRevs.rpm : ctrl.drivetrain.rpm)
     sound.throttle = this.showroomRev?.throttle ?? (revAudible ? (this.revHeld ? 1 : 0) : staging ? this.playerRevs.throttle : ctrl.throttlePedal)
     sound.gear = ctrl.drivetrain.gear
-    sound.slip = slip
     sound.nitro = ctrl.nitro.intensity
     sound.nitroActive = ctrl.nitro.active
     sound.nitroPerfect = ctrl.nitro.perfect
-    this.audio.update(sound)
+    this.audio.update(sound, readTyres(ctrl, this.tyreSound))
     this.renderer.render()
 
     this.fpsFrames++
@@ -1146,14 +1171,29 @@ export class Game {
     camera.updateWorldMatrix(true, false)
     _listenerPosition.setFromMatrixPosition(camera.matrixWorld)
     _listenerRight.setFromMatrixColumn(camera.matrixWorld, 0).normalize()
-    const active = phase === 'racing' || phase === 'countdown' || phase === 'intro'
+    _listenerUp.setFromMatrixColumn(camera.matrixWorld, 1).normalize()
+    _listenerBack.setFromMatrixColumn(camera.matrixWorld, 2).normalize()
+    // The camera rides with the player's car: its velocity is the listener's.
+    const lv = this.vehicle.body.linvel()
+    const active = phase === 'racing' || phase === 'countdown' || phase === 'intro' || phase === 'finished'
+    const out = this.rivalSound
     for (let i = 0; i < this.opponents.length; i++) {
       const rival = this.opponents[i].vehicle
       _rivalOffset.subVectors(rival.position, _listenerPosition)
-      // OpponentAudio expects positive-left offset; camera local +X is right.
-      const lateral = -_rivalOffset.dot(_listenerRight)
+      const distance = _rivalOffset.length() || 1
+      // In the camera's frame (+x right, +y up, +z behind), for the 3D panner.
+      out.x = _rivalOffset.dot(_listenerRight)
+      out.y = _rivalOffset.dot(_listenerUp)
+      out.z = _rivalOffset.dot(_listenerBack)
+      const rv = rival.body.linvel()
+      _relativeVelocity.set(rv.x - lv.x, rv.y - lv.y, rv.z - lv.z)
+      out.recession = _relativeVelocity.dot(_rivalOffset) / distance
+      out.passSpeed = _relativeVelocity.length()
       const revs = staging ? this.rivalRevs[i] : undefined
-      this.audio.updateOpponent(i, revs?.rpm ?? rival.controller.drivetrain.rpm, revs?.throttle ?? rival.controller.throttlePedal, _rivalOffset.length(), lateral, active)
+      out.rpm = revs?.rpm ?? rival.controller.drivetrain.rpm
+      out.throttle = revs?.throttle ?? rival.controller.throttlePedal
+      out.active = active
+      this.audio.updateOpponent(i, out, readTyres(rival.controller, this.rivalTyreSound))
     }
   }
 
