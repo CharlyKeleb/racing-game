@@ -9,6 +9,7 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "test": "vitest run",
+    "test:ai": "vitest run tests/ai.test.ts --silent=false --disableConsoleIntercept",
     "typecheck": "tsc -b",
     "build:track": "node scripts/track/build-track.mjs scripts/track/nurburgring.config.mjs && npm run derive:track",
     "derive:track": "node scripts/track/derive-from-chunks.mjs scripts/track/nurburgring.config.mjs",

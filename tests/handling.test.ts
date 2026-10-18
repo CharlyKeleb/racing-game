@@ -3,6 +3,8 @@ import { beforeAll, describe, expect, it } from 'vitest'
 import type { InputState } from '../src/input/InputManager'
 import { Surface } from '../src/vehicles/Surface'
 import { DEFAULT_VEHICLE_CONFIG, resolveVehicleConfig, type VehicleConfig } from '../src/vehicles/VehicleConfig'
+import * as THREE from 'three'
+import { peakSlipAngle } from '../src/vehicles/TirePhysics'
 import { VehicleController } from '../src/vehicles/VehicleController'
 import porsche911Json from '../public/models/cars/porsche911/vehicle-config.json'
 
@@ -60,15 +62,15 @@ function spawnCar(cfg: VehicleConfig) {
     world.step()
     return body.angvel().y * (180 / Math.PI)
   }
-  return { ctrl, step, body }
+  return { ctrl, step, body, world }
 }
 
 const drive = (steer: number): InputState => ({ throttle: 1, brake: 0, steer, handbrake: false, nitro: false })
 
 /** Accelerate in a straight line to ~120 km/h, then hold full right lock. */
-function holdTurn(cfg: VehicleConfig) {
+function holdTurn(cfg: VehicleConfig, entryKmh = 120) {
   const { ctrl, step } = spawnCar(cfg)
-  while (ctrl.forwardSpeed < 120 / 3.6) step(drive(0))
+  while (ctrl.forwardSpeed < entryKmh / 3.6) step(drive(0))
   const turn: number[] = []
   for (let i = 0; i < 120; i++) turn.push(step(drive(1)))
   const release: number[] = []
@@ -98,6 +100,24 @@ describe.each(CARS)('handling smoothness: %s', (_, cfg) => {
   it('stops rotating soon after the steering is released', () => {
     const { release } = holdTurn(cfg)
     expect(Math.abs(release[30])).toBeLessThan(2) // within 0.5 s
+  })
+})
+
+describe.each([0.55, 3])('911 turn-in with downforce coefficient %s', (downforceCoefficient) => {
+  beforeAll(() => RAPIER.init())
+
+  it('settles within one swing after a 130 km/h full-lock entry', () => {
+    const { turn, release } = holdTurn({ ...PORSCHE_911, downforceCoefficient }, 130)
+    const settled = turn.slice(40)
+    let reversals = 0
+    for (let i = 2; i < settled.length; i++) {
+      const previous = settled[i - 1] - settled[i - 2]
+      const current = settled[i] - settled[i - 1]
+      if (previous * current < 0 && Math.abs(current) > 0.05) reversals++
+    }
+    expect(reversals).toBeLessThanOrEqual(1)
+    expect(Math.max(...turn.map(Math.abs)) / Math.abs(turn.at(-1)!)).toBeLessThan(1.6)
+    expect(Math.abs(release[30])).toBeLessThan(2)
   })
 })
 
@@ -310,4 +330,38 @@ describe('Porsche 911 handling', () => {
     expect(brakeSlide(200)).toBeGreaterThan(4) // TireSmoke starts at 2.5 m/s
     expect(brakeSlide(60)).toBeLessThan(2.5)
   })
+})
+
+
+it('full keyboard lock uses less front-tire slip without losing cornering after a 100 km/h entry',async()=>{
+  await RAPIER.init()
+  const corner=(scale:number)=>{
+    const {ctrl,step,body,world}=spawnCar({...PORSCHE_911,steerPeakSlipScale:scale})
+    try {
+      while(ctrl.forwardSpeed<100/3.6)step(pedals({throttle:1}))
+      let slip=0,turn=0,angle=0,samples=0
+      for(let i=0;i<90;i++){
+        step(pedals({throttle:.5,steer:1}))
+        if(i<30)continue
+        const rotation=body.rotation(),q=new THREE.Quaternion(rotation.x,rotation.y,rotation.z,rotation.w)
+        const up=new THREE.Vector3(0,1,0).applyQuaternion(q)
+        const f=new THREE.Vector3(0,0,1).applyQuaternion(q).applyAxisAngle(up,ctrl.steerAngle)
+        const r=new THREE.Vector3(-1,0,0).applyQuaternion(q).applyAxisAngle(up,ctrl.steerAngle)
+        for(const w of ctrl.wheels.filter(w=>w.cfg.steered&&w.grounded)){
+          const v=body.velocityAtPoint(w.contactPoint)
+          const velocity=new THREE.Vector3(v.x,v.y,v.z)
+          slip+=Math.abs(Math.atan2(velocity.dot(r),Math.abs(velocity.dot(f))))
+          samples++
+        }
+        turn+=Math.abs(body.angvel().y)*Math.abs(ctrl.forwardSpeed)
+        angle+=Math.abs(ctrl.steerAngle)
+      }
+      return {slip:slip/samples,turn:turn/60,angle:angle/60}
+    } finally {world.free()}
+  }
+  const old=corner(0),limited=corner(PORSCHE_911.steerPeakSlipScale)
+  console.info(`[100 km/h entry, full lock] ${JSON.stringify({old,limited,peak:peakSlipAngle(PORSCHE_911.tires)})}`)
+  expect(limited.angle).toBeLessThan(old.angle)
+  expect(limited.slip).toBeLessThan(old.slip*.9)
+  expect(limited.turn).toBeGreaterThan(old.turn)
 })

@@ -1,3 +1,5 @@
+import { useLayoutEffect, useRef } from 'react'
+import { hudLayoutStore, measureHudPanels } from '../stores/hudLayoutStore'
 import { DriftEventHud, DriftComboHud } from './DriftHud'
 import { formatTime } from '../racing/LapTimer'
 import { useGame, useTelemetry } from './hooks'
@@ -15,9 +17,24 @@ function gearLabel(gear: number): string {
 }
 
 export function Hud() {
+  const root = useRef<HTMLDivElement>(null)
   const t = useTelemetry((s) => s)
   const drift = useGame(s => s.settings.mode === 'drift')
   const phase = useGame((s) => s.phase)
+  useLayoutEffect(() => {
+    const element = root.current!
+    const measure = () => hudLayoutStore.setState({ panels: measureHudPanels(element) })
+    const observer = new ResizeObserver(measure)
+    observer.observe(element)
+    element.querySelectorAll('[data-tag-exclusion], [data-tag-exclusion] > *').forEach(panel => observer.observe(panel))
+    window.addEventListener('resize', measure)
+    measure()
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('resize', measure)
+      hudLayoutStore.setState({ panels: [] })
+    }
+  }, [drift, t.standings.length, phase])
   // Shift light just under the redline; needles sweep once on the start countdown.
   const shift = t.gear > 0 && t.rpm >= t.redlineRpm * 0.94
   const sweep = phase === 'countdown'
@@ -25,9 +42,9 @@ export function Hud() {
   const go = phase === 'racing' && t.lap === 1 && t.totalMs < 900
 
   return (
-    <div className={`hud${t.nitroActive ? ' hud--nitro' : ''}${t.nitroPerfect ? ' hud--nitro-perfect' : ''}`}>
+    <div ref={root} className={`hud${t.nitroActive ? ' hud--nitro' : ''}${t.nitroPerfect ? ' hud--nitro-perfect' : ''}`}>
       <div className="hud-speedlines" aria-hidden="true" />
-      <div className="hud-tl">
+      <div className="hud-tl" data-tag-exclusion>
         {t.standings.length > 1 && <div className="hud-lap" aria-label="Race position"><span className="eyebrow">Position</span><b>{t.standings.find(s => s.player)?.position ?? 1}</b><span className="hud-lap__total">/{t.standings.length}</span></div>}
         {drift ? <DriftEventHud /> : <><div className="hud-lap">
           <span className="eyebrow">Lap</span>
@@ -46,7 +63,7 @@ export function Hud() {
         </div>
         </>}
       </div>
-      <div className="hud-tr">
+      <div className="hud-tr" data-tag-exclusion>
         <div className="hud-fps mono">{t.fps} FPS</div>
         {t.standings.length > 1 && <ol className="hud-field" aria-label="Race leaderboard">{t.standings.map(s => <li key={s.id} className={s.player ? 'hud-field__player' : ''}><b>{s.position}</b><span>{s.name.split(' · ')[0]}</span><small className="mono">{s.position === 1 ? 'LEADER' : s.gapMs !== null ? `+${(s.gapMs / 1000).toFixed(2)}s` : s.gapLaps > 0 ? `+${s.gapLaps} LAP` : `+${Math.round(s.gapMeters)}m`}</small></li>)}</ol>}
       </div>

@@ -129,6 +129,8 @@ export interface VehicleConfig {
   steerReturnScale: number
   /** Speed (m/s) at which the steer angle and rate are halved. Lower = calmer at speed. */
   steerFalloffSpeed: number
+  /** Peak-slip allowance added to the grip-limited steering angle. 0 keeps legacy steering. */
+  steerPeakSlipScale: number
   /** Pedal ramp, units/s: smooths digital keyboard throttle/brake into a short fade. */
   pedalRate: number
   /**
@@ -212,6 +214,7 @@ export const DEFAULT_VEHICLE_CONFIG: VehicleConfig = {
   steerSpeed: 2.6,
   steerReturnScale: 1.8,
   steerFalloffSpeed: 9,
+  steerPeakSlipScale: 0.5,
   pedalRate: 6,
   yawStability: 8,
   driftAssist: 0.3,
