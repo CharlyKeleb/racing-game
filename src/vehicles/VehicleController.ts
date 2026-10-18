@@ -61,6 +61,7 @@ function approach(value: number, target: number, step: number): number {
 export class VehicleController {
   readonly wheels: WheelState[]
   readonly drivetrain: Drivetrain
+  drafting = 0
   readonly nitro: Nitro
   readonly drift = new Drift()
   private readonly driftGuide: DriftGuide = { angle: 0, pathRate: 0 }
@@ -188,6 +189,7 @@ export class VehicleController {
         airborne: groundedCount === 0,
         drifting: this.drift.active,
         wantsBoost: input.nitro && !reversing,
+        drafting: this.drafting,
       },
       dt,
     )
@@ -412,7 +414,9 @@ export class VehicleController {
   }
 
   reset(): void {
+    this.forwardSpeed = 0
     this.steerAngle = 0
+    this.drafting = 0
     this.throttle = 0
     this.brake = 0
     this.braking = 0

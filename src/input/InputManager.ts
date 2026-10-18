@@ -17,9 +17,10 @@ export interface InputState {
 }
 
 /** Edge-triggered actions, consumed once per press. */
-export type InputAction = 'pause' | 'reset' | 'camera'
+export type InputAction = 'pause' | 'reset' | 'camera' | 'skip'
 
 const KEY_ACTIONS: Record<string, InputAction> = {
+  Enter: 'skip',
   Escape: 'pause',
   KeyP: 'pause',
   KeyR: 'reset',
@@ -61,6 +62,7 @@ export class InputManager {
       brake = Math.max(brake, pad.buttons[PAD.LT]?.value ?? 0)
       handbrake ||= !!pad.buttons[PAD.A]?.pressed
       nitro ||= !!pad.buttons[PAD.X]?.pressed || !!pad.buttons[PAD.RB]?.pressed
+      this.edge(pad, PAD.A, 'skip')
       this.edge(pad, PAD.START, 'pause')
       this.edge(pad, PAD.Y, 'camera')
       this.edge(pad, PAD.B, 'reset')

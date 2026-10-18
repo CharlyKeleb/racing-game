@@ -14,7 +14,7 @@ export interface GameMode {
 }
 
 export const GAME_MODES: GameMode[] = [
-  { id: 'quick', name: 'Quick Race', blurb: 'Laps against the clock', available: true },
+  { id: 'quick', name: 'Quick Race', blurb: 'Race for the podium', available: true },
   { id: 'timeTrial', name: 'Time Trial', blurb: 'Chase your best lap', available: false },
   { id: 'drift', name: 'Drift Challenge', blurb: 'Score the most drift points in a lap', available: false },
   { id: 'freeRoam', name: 'Free Roam', blurb: 'No timer, just drive', available: false },

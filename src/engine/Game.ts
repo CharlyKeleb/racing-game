@@ -1,13 +1,20 @@
 import RAPIER from '@dimforge/rapier3d-compat'
 import * as THREE from 'three'
 import { AudioManager, type CarSoundState } from '../audio/AudioManager'
+import { RaceIntroCamera, RACE_INTRO_SECONDS, introShot } from '../camera/RaceIntroCamera'
+import { startingGrid } from '../racing/StartingGrid'
 import { ChaseCamera, type ShowroomFraming } from '../camera/ChaseCamera'
 import { DirectionGuide } from '../effects/DirectionGuide'
+import { NitroFlames } from '../effects/NitroFlames'
 import { DrivingEffects } from '../effects/DrivingEffects'
 import { Headlights } from '../effects/Headlights'
 import { TrackProgress } from '../racing/TrackProgress'
 import { InputManager, type InputState } from '../input/InputManager'
 import { RaceManager } from '../racing/RaceManager'
+import { draftingStrength } from '../racing/Drafting'
+import { Opponent } from '../racing/Opponent'
+import { RaceStandings, type RaceEntry } from '../racing/RaceStandings'
+import type { TrafficCar } from '../racing/AiDriver'
 import { gameStore, type GamePhase, type Settings } from '../stores/gameStore'
 import { telemetryStore } from '../stores/telemetryStore'
 import { applyCarBuild, samePerformance, type CarBuild } from '../vehicles/CarBuild'
@@ -61,6 +68,7 @@ const DRIVE_IN_DIST = 12
  *   interpolate vehicle → camera → audio → render → publish telemetry
  */
 export class Game {
+  private readonly introCamera: RaceIntroCamera
   private readonly renderer: Renderer
   private readonly assets = new AssetManager()
   private readonly input = new InputManager()
@@ -74,6 +82,19 @@ export class Game {
   private vehicle!: Vehicle
   private camera!: ChaseCamera
   private race!: RaceManager
+  private opponents: Opponent[] = []
+  private readonly opponentFlames = new Map<number, NitroFlames>()
+  private opponentToken = 0
+  private roadEdges!: { left: Float32Array; right: Float32Array }
+  private standings!: RaceStandings
+  private readonly playerPose: TrafficCar = { id: 0, x: 0, z: 0, heading: 0, speed: 0 }
+  private readonly playerEntry: RaceEntry = { id: 0, name: 'You', player: true, lap: 0, checkpoint: 0, index: 0, finishMs: null }
+  private traffic: TrafficCar[] = [this.playerPose]
+  private entries: RaceEntry[] = [this.playerEntry]
+  private readonly labelPoint = new THREE.Vector3()
+  private readonly labelDirection = new THREE.Vector3()
+  private readonly labelRay = new RAPIER.Ray({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 1 })
+  private readonly racePosition = new THREE.Vector3()
   private livery!: CarLivery
   private showroom!: Showroom
   private effects!: DrivingEffects
@@ -91,6 +112,7 @@ export class Game {
   private trackVisualsDone = false
   private trackProgress = 0
   private trackLoadToken = 0
+  private raceTransition = false
   private raceQueued = false
   private raceLoadingTick: ReturnType<typeof setInterval> | null = null
   /** Bumped per car switch, so a slow load can't install over a newer pick. */
@@ -128,6 +150,7 @@ export class Game {
 
   constructor(container: HTMLElement) {
     this.renderer = new Renderer(container)
+    this.introCamera = new RaceIntroCamera(this.renderer.camera)
     this.loop = new GameLoop({
       fixedUpdate: (dt) => this.fixedUpdate(dt),
       render: (alpha, dt) => this.renderFrame(alpha, dt),
@@ -278,6 +301,7 @@ export class Game {
       onStateChange: (state) => {
         const phase: Record<typeof state, GamePhase> = {
           idle: 'menu',
+          intro: 'intro',
           countdown: 'countdown',
           racing: 'racing',
           finished: 'finished',
@@ -292,6 +316,8 @@ export class Game {
   private attachGuide(): void {
     this.guide?.dispose()
     const edges = measureRoadEdges(this.track.line, (x, z) => this.track.surfaceAt(x, z))
+    this.roadEdges = edges
+    this.standings = new RaceStandings(this.track.line, this.track.checkpoints)
     const track = this.track
     this.guide = new DirectionGuide(this.track.line, edges, {
       // Road colliders only: the terrain mesh is simplified to ~1.5 m and can sit
@@ -373,6 +399,7 @@ export class Game {
     // Keep the last garage frame visible while physics and track assets are replaced.
     this.loop.stop()
     this.clearRaceLoading()
+    this.clearOpponents()
     this.race.state = 'idle'
     this.track.dispose()
     this.effects.clear()
@@ -451,6 +478,7 @@ export class Game {
       // still a user gesture.
       this.audio.unlock(settings.masterVolume)
       this.raceQueued = true
+      this.raceTransition = true
       gameStore.getState().setPhase('loading')
       const token = this.trackLoadToken
       gameStore.setState({ loadProgress: this.trackProgress })
@@ -468,14 +496,100 @@ export class Game {
       })
       return
     }
+    void this.launchRace()
+  }
+
+  private clearOpponents(): void {
+    this.raceTransition = false
+    this.audio.clearOpponents()
+    this.opponentToken++
+    for (const flames of this.opponentFlames.values()) flames.dispose()
+    this.opponentFlames.clear()
+    for (const opponent of this.opponents) opponent.dispose()
+    this.opponents = []
+    this.traffic = [this.playerPose]
+    this.entries = [this.playerEntry]
+  }
+
+  private async launchRace(): Promise<void> {
+    this.clearOpponents()
+    const token = this.opponentToken
+    const { settings } = gameStore.getState()
+    this.raceQueued = true
+    this.raceTransition = true
+    this.race.state = 'idle'
     this.audio.unlock(settings.masterVolume)
-    this.audio.playStart()
-    this.resetCar()
-    this.effects.clear()
-    this.race.start(settings.laps)
+    gameStore.getState().setPhase('loading')
+    try {
+      const choices = selectableCars().filter(car => car.id !== this.carId)
+      const rivals = Array.from({ length: settings.opponents }, (_, i) => choices[i % choices.length])
+      const loaded = await Promise.all(rivals.map(async car => {
+        const [scene, json] = await Promise.all([
+          this.assets.loadModel(car.modelUrlLow ?? car.modelUrl),
+          this.assets.loadJson<Partial<VehicleConfig>>(car.configUrl),
+        ])
+        return { car, scene, config: resolveVehicleConfig(json ?? undefined) }
+      }))
+      if (this.disposed || token !== this.opponentToken) return
+      this.resetCar()
+      this.effects.clear()
+      this.playerEntry.finishMs = null
+      this.playerEntry.lap = 0
+      this.playerEntry.checkpoint = 0
+      this.playerEntry.index = 0
+      const grid = startingGrid(this.track.line,this.track.spawn.position,settings.opponents+1,this.roadEdges)
+      const playerSlot = grid[grid.length-1]
+      const position = new THREE.Vector3(playerSlot.x,playerSlot.y+0.6,playerSlot.z)
+      const road = this.physics.groundHeight(position.x,position.y,position.z,c=>this.track.isRoadCollider(c))
+      if (road !== null) position.y = road+0.6
+      this.vehicle.respawn({position,heading:playerSlot.heading})
+      this.progress.reset(); this.progress.update(position.x,position.z)
+      this.camera.snap()
+      this.playerEntry.x = position.x; this.playerEntry.z = position.z
+      for (let id = 1; id <= settings.opponents; id++) {
+        const slot = grid[id-1]
+        const position = new THREE.Vector3(slot.x,slot.y+0.6,slot.z)
+        const ground = this.physics.groundHeight(position.x,position.y,position.z,c=>this.track.isRoadCollider(c))
+        if (ground !== null) position.y = ground+0.6
+        const rival = loaded[id - 1]
+        const opponent = new Opponent(id, rival.scene, rival.config, this.physics.world, this.track, { position, heading: slot.heading }, settings.difficulty)
+        opponent.vehicle.lightsOn = this.environment.current.headlights
+        opponent.entry.name += ` · ${rival.car.name}`
+        const flames = new NitroFlames(rival.config)
+        opponent.vehicle.model.body.add(flames.group)
+        this.opponentFlames.set(id, flames)
+        this.opponents.push(opponent)
+        this.renderer.scene.add(opponent.vehicle.model.root)
+        this.traffic.push(opponent.pose)
+        this.entries.push(opponent.entry)
+        opponent.start(settings.laps,RACE_INTRO_SECONDS)
+      }
+      this.audio.setOpponentCars(rivals)
+      this.audio.playStart()
+      this.prepareRaceIntro()
+      this.race.start(settings.laps,RACE_INTRO_SECONDS)
+      this.publishTelemetry()
+    } catch (err) {
+      this.clearOpponents()
+      gameStore.getState().setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      if (token === this.opponentToken) this.raceTransition = false
+      this.raceQueued = false
+    }
+  }
+
+  /** Paint the cinematic before React reveals it; never expose the grid camera. */
+  private prepareRaceIntro(): void {
+    this.updateShowroom('intro')
+    this.vehicle.render(1)
+    for (const opponent of this.opponents) opponent.vehicle.render(1)
+    this.environment.follow(this.vehicle.position)
+    this.introCamera.update(0,this.vehicle.model.root,this.opponents[0]?.vehicle.model.root ?? this.vehicle.model.root,this.physics.world)
+    this.renderer.render()
   }
 
   private clearRaceLoading(): void {
+    this.raceTransition = false
     if (this.raceLoadingTick !== null) clearInterval(this.raceLoadingTick)
     this.raceLoadingTick = null
     this.raceQueued = false
@@ -662,18 +776,27 @@ export class Game {
     }
   }
 
+  skipRaceIntro(): void {
+    if (gameStore.getState().phase !== 'intro') return
+    for (const opponent of this.opponents) opponent.race.skipIntro()
+    this.race.skipIntro()
+    this.camera.snap()
+    this.publishTelemetry()
+  }
+
   togglePause(): void {
     const { phase, setPhase } = gameStore.getState()
     if (phase === 'paused') {
-      setPhase(this.race.state === 'countdown' ? 'countdown' : 'racing')
+      setPhase(this.race.state === 'intro' ? 'intro' : this.race.state === 'countdown' ? 'countdown' : 'racing')
       this.audio.resume()
-    } else if (phase === 'racing' || phase === 'countdown') {
+    } else if (phase === 'racing' || phase === 'countdown' || phase === 'intro') {
       setPhase('paused')
       this.audio.suspend()
     }
   }
 
   quitToMenu(): void {
+    this.clearOpponents()
     this.race.state = 'idle'
     // Back in the garage: room tone on, engine quiet (updateShowroom sets the scene).
     this.audio.resume()
@@ -686,6 +809,7 @@ export class Game {
     this.vehicle.respawn(this.track.spawn)
     this.camera.snap()
     this.progress?.reset()
+    this.progress?.update(this.track.spawn.position.x, this.track.spawn.position.z)
   }
 
   /** Mid-race reset (R / touch button / falling off the world): back to the last checkpoint. */
@@ -717,26 +841,60 @@ export class Game {
       if (s.phase === 'racing' || s.phase === 'countdown') s.updateSettings({ camera: s.settings.camera === 'chase' ? 'cockpit' : 'chase' })
     }
 
+    const skip = this.input.consume('skip')
+    if (skip) this.skipRaceIntro()
     const phase = gameStore.getState().phase
-    if (phase === 'paused') return
+    if (phase === 'paused' || phase === 'finished') return
     if (this.input.consume('reset') && phase === 'racing') this.resetToCheckpoint()
 
     const inMenu = phase === 'menu' || phase === 'garage' || phase === 'loading'
-    const controls = this.race.controlsEnabled && !inMenu && phase !== 'finished'
+    const controls = this.race.controlsEnabled && !inMenu
+    const p = this.vehicle.body.translation(), q = this.vehicle.body.rotation()
+    this.playerPose.x = p.x; this.playerPose.z = p.z
+    this.playerPose.heading = Math.atan2(2 * (q.w * q.y + q.x * q.z), 1 - 2 * (q.y * q.y + q.x * q.x))
+    this.playerPose.speed = this.vehicle.controller.forwardSpeed
+    for (const opponent of this.opponents) opponent.readPose()
+    this.vehicle.controller.drafting = controls ? draftingStrength(this.playerPose, this.traffic, 0) : 0
     this.vehicle.fixedUpdate(controls ? this.input.state : LOCKED_INPUT, dt)
+    for (const opponent of this.opponents) {
+      const i = opponent.driver.progress.index
+      const laneLimit = Math.max(0, Math.min(this.roadEdges.left[i], this.roadEdges.right[i]) - 2)
+      const gap = this.standings.distance(this.playerEntry) - this.standings.distance(opponent.entry)
+      if (!inMenu) opponent.drive(dt, this.traffic, gap, laneLimit)
+    }
     this.physics.step(dt)
     this.vehicle.capture()
+    for (const opponent of this.opponents) {
+      if (!inMenu) opponent.capture(dt, this.traffic)
+    }
     // Physics position, not the render-interpolated one (that lags a tick).
     if (this.vehicle.body.translation().y < this.track.killY) {
       if (phase === 'racing') this.resetToCheckpoint()
       else this.resetCar()
     }
-    this.race.update(dt, this.vehicle.position)
+    const position = this.vehicle.body.translation()
+    this.racePosition.set(position.x, position.y, position.z)
+    this.race.update(dt, this.racePosition)
+    this.playerEntry.lap = this.race.lap
+    this.playerEntry.checkpoint = this.race.lastCheckpoint
+    this.playerEntry.index = this.progress.update(position.x, position.z)
+    this.playerEntry.x = position.x
+    this.playerEntry.z = position.z
+    if (this.race.state === 'finished') {
+      this.playerEntry.finishMs = this.race.timer.totalMs
+      this.publishTelemetry()
+    }
   }
 
   private renderFrame(alpha: number, dt: number): void {
     const phase = gameStore.getState().phase
-    this.vehicle.render(phase === 'paused' ? 1 : alpha, phase === 'paused' ? 0 : dt)
+    if (phase === 'loading' && this.raceTransition) return
+    for (const opponent of this.opponents) {
+      opponent.vehicle.render(phase === 'paused' || phase === 'finished' ? 1 : alpha, phase === 'paused' || phase === 'finished' ? 0 : dt)
+      this.opponentFlames.get(opponent.id)?.update(opponent.vehicle.controller.nitro.intensity, phase === 'paused' || phase === 'finished' ? 0 : dt)
+      opponent.vehicle.model.root.visible = opponent.vehicle.position.distanceToSquared(this.vehicle.position) < 300 * 300
+    }
+    this.vehicle.render(phase === 'paused' || phase === 'finished' ? 1 : alpha, phase === 'paused' || phase === 'finished' ? 0 : dt)
     if (!gameStore.getState().carSwitching) {
       this.showroomAnchor.position.copy(this.vehicle.model.root.position)
       this.showroomAnchor.quaternion.copy(this.vehicle.model.root.quaternion)
@@ -774,8 +932,11 @@ export class Game {
         this.carFraming.height = this.showroomHeight
         this.camera.showroom(this.showroomAnchor, this.showroomYaw, dt, this.carFraming)
       }
+    } else if (phase === 'intro') {
+      this.introCamera.update(1-this.race.introRemaining/this.race.introDuration,this.vehicle.model.root,this.opponents[0]?.vehicle.model.root ?? this.vehicle.model.root,this.physics.world)
     } else if (phase !== 'paused') {
-      this.camera.update(this.vehicle.model.root, this.vehicle.speedKmh, dt, this.vehicle.controller.nitro.intensity, this.vehicle.motion)
+      const gridFraming = phase === 'countdown' ? 1 : this.camera.mode === 'chase' ? Math.max(0,1-this.race.timer.totalMs/1500) : 0
+      this.camera.update(this.vehicle.model.root, this.vehicle.speedKmh, dt, this.vehicle.controller.nitro.intensity, this.vehicle.motion,gridFraming)
       this.effects.update(this.vehicle, dt)
       this.updateGuide(dt)
     }
@@ -785,6 +946,13 @@ export class Game {
     this.track.update(this.vehicle.position, _velocity.set(v.x, v.y, v.z), dt)
     this.renderer.adapt(dt)
 
+    for (let i = 0; i < this.opponents.length; i++) {
+      const rival = this.opponents[i].vehicle
+      const dx = rival.position.x - this.vehicle.position.x, dz = rival.position.z - this.vehicle.position.z
+      const q = this.vehicle.quaternion
+      const heading = Math.atan2(2 * (q.w * q.y + q.x * q.z), 1 - 2 * (q.y * q.y + q.x * q.x))
+      this.audio.updateOpponent(i, rival.controller.drivetrain.rpm, rival.controller.throttlePedal, Math.hypot(dx, dz), dx * Math.cos(heading) - dz * Math.sin(heading), phase === 'racing' || phase === 'countdown' || phase === 'intro')
+    }
     const ctrl = this.vehicle.controller
     const sound = this.soundState
     let slip = 0
@@ -829,11 +997,38 @@ export class Game {
     _forward.set(0, 0, 1).applyQuaternion(q)
     const ctrl = this.vehicle.controller
     const t = this.race.timer
+    const standings = this.standings?.snapshot(this.entries) ?? []
+    const rivalLabels: import('../stores/telemetryStore').Telemetry['rivalLabels'] = []
+    const camera = this.renderer.camera
+    camera.updateMatrixWorld()
+    for (const opponent of this.opponents) {
+      const position = opponent.vehicle.position
+      if (position.distanceToSquared(this.vehicle.position) > 100 * 100) continue
+      this.labelPoint.copy(position); this.labelPoint.y += 2.2
+      this.labelDirection.subVectors(this.labelPoint, camera.position)
+      const distance = this.labelDirection.length()
+      if (distance < 4) continue
+      this.labelDirection.divideScalar(distance)
+      this.labelRay.origin = camera.position
+      this.labelRay.dir = this.labelDirection
+      const obstruction = this.physics.world.castRay(this.labelRay, distance, true, RAPIER.QueryFilterFlags.EXCLUDE_DYNAMIC)
+      if (obstruction && obstruction.timeOfImpact < distance - 1) continue
+      this.labelPoint.project(camera)
+      if (this.labelPoint.z < -1 || this.labelPoint.z > 1 || Math.abs(this.labelPoint.x) > 0.9 || Math.abs(this.labelPoint.y) > 0.75) continue
+      const x = (this.labelPoint.x + 1) * 50, y = (1 - this.labelPoint.y) * 50
+      if ((x > 72 && y < 30) || (x < 65 && y < 18)) continue
+      if (rivalLabels.some(label => Math.abs(label.x - x) < 10 && Math.abs(label.y - y) < 6)) continue
+      rivalLabels.push({ id: opponent.id, name: opponent.driver.profile.name, style: opponent.driver.profile.style, x, y, position: standings.find(s => s.id === opponent.id)?.position ?? opponent.id })
+    }
     telemetryStore.setState({
+      rivalLabels,
+      introShot: introShot(this.race.introDuration > 0 ? 1-this.race.introRemaining/this.race.introDuration : 0),
+      introProgress: this.race.introDuration > 0 ? 1-this.race.introRemaining/this.race.introDuration : 0,
       speedKmh: this.vehicle.speedKmh,
       rpm: ctrl.drivetrain.rpm,
       gear: ctrl.drivetrain.gear,
       nitro: ctrl.nitro.charge,
+      drafting: ctrl.drafting,
       nitroActive: ctrl.nitro.active,
       nitroReady: ctrl.nitro.charge >= this.vehicle.config.nitro.minCharge,
       driftActive: ctrl.drift.active,
@@ -857,6 +1052,8 @@ export class Game {
       trackIndex: this.progress.index,
       distanceLeft: this.distanceLeft(),
       wrongWay: this.wrongWayTime > WRONG_WAY_DELAY,
+      standings,
+      opponents: this.opponents.map(o => ({ id: o.id, x: o.vehicle.position.x, z: o.vehicle.position.z })),
     })
   }
 
@@ -912,6 +1109,7 @@ export class Game {
   }
 
   private updateShowroom(phase: GamePhase): void {
+    if (phase === 'loading' && this.raceTransition) return
     if (!this.showroom) return
     const inShowroom = phase === 'menu' || phase === 'garage'
     this.showroom.setActive(this.renderer.scene, inShowroom, [this.track.group, this.environment.group, this.effects.group, this.guide.group])
@@ -973,6 +1171,7 @@ export class Game {
     this.clearRaceLoading()
     this.loop.stop()
     this.unsubscribe()
+    this.clearOpponents()
     this.input.dispose()
     this.audio.dispose()
     this.livery?.dispose()

@@ -777,3 +777,41 @@ button.menu-track:hover,button.menu-track:focus-visible { border-color:var(--acc
 .ui-help__popover { width:min(340px,calc(100vw - 40px)); padding:20px 22px; border:1px solid #4ac9ff66; background:#101c2b; color:var(--ink); box-shadow:0 14px 70px #000b; font:500 15px/1.6 var(--font-display); text-transform:none; text-align:left; letter-spacing:.02em; }
 .ui-help__popover:popover-open { display:flex; flex-direction:column; gap:8px; }
 .ui-help__popover strong { font-style:italic; font-weight:800; font-size:19px; text-transform:uppercase; color:var(--accent-2); }
+
+.race-standings { list-style: none; padding: 0; margin: 1rem 0 1.5rem; }
+.race-standings li { display: grid; grid-template-columns: 2rem 1fr auto; gap: .75rem; align-items: center; padding: .65rem .8rem; border-bottom: 1px solid #ffffff12; }
+.race-standings__player { color: var(--accent, #f9db39); background: #ffffff06; }
+
+.hud-field { list-style: none; margin: 4px 0 0; padding: 7px 10px; min-width: 172px; background: #0c1523e8; border-left: 2px solid var(--cyan, #32b8e9); transform: skewX(-6deg); }
+.hud-field li { display: grid; grid-template-columns: 15px 1fr auto; align-items: center; gap: 9px; padding: 5px 2px; font-size: 12px; }
+.hud-field li > * { transform: skewX(6deg); }
+.hud-field small { color: #aab7c5; font-size: 10px; }
+.hud-field__player, .hud-field__player small { color: #ffdc3d; }
+.rival-labels { position: absolute; inset: 0; pointer-events: none; }
+.rival-label { position: absolute; display: flex; gap: 7px; align-items: center; transform: translate(-50%, -100%); transition: left 50ms linear, top 50ms linear; padding: 5px 9px; background: #0c1523d9; border-bottom: 2px solid #27b8eb; font-size: 12px; text-shadow: 0 1px 3px #000; }
+.rival-label > b { color: #ffdc3d; font-size: 17px; }
+.rival-label small { display: block; margin-top: 1px; color: #b4c3d1; font-size: 9px; text-transform: uppercase; letter-spacing: .06em; }
+.rival-label--2 { border-color: #ffd447; }
+.rival-label--3 { border-color: #e64f67; }
+.hud-drafting { position: absolute; bottom: 22%; left: 50%; transform: translateX(-50%) skewX(-7deg); padding: 7px 16px; background: #0c1523cf; border-left: 2px solid #32b8e9; text-align: center; text-transform: uppercase; }
+.hud-drafting span { display: block; font-size: 13px; letter-spacing: .16em; color: #53ccff; }
+.hud-drafting b { font-size: 9px; letter-spacing: .12em; color: #dbe4ef; }
+@media (max-width: 700px) { .hud-field { min-width: 120px; padding: 4px 6px; } .hud-field li { font-size: 10px; gap: 5px; padding: 3px 0; } .rival-label small { display: none; } }
+
+.race-intro { position: fixed; inset: 0; pointer-events: none; font-family: var(--font-display); }
+.race-intro__bar { position: absolute; left: 0; right: 0; height: clamp(24px,6vh,64px); background: #050910; }
+.race-intro__bar--top { top: 0; }
+.race-intro__bar--bottom { bottom: 0; }
+.race-intro__bar--bottom > div { height: 2px; background: var(--accent-2); transform-origin: left; transition: transform 50ms linear; }
+.race-intro__copy { position: absolute; left: var(--gutter); top: calc(6vh + 24px); max-width: min(680px,75vw); padding: 12px 20px; border-left: 3px solid var(--accent); background: linear-gradient(90deg,#0b1424e8,transparent); animation: intro-copy .35s ease-out both; }
+.race-intro__copy h1 { margin: 5px 0; color: #fff; font-size: clamp(24px,4.5vw,54px); font-weight: 900; font-style: italic; line-height: 1.05; text-transform: uppercase; }
+.race-intro__copy h1 i { color: var(--accent); }
+.race-intro__copy p { margin: 8px 0 0; color: #c0cedc; font-size: 13px; }
+.race-intro__grid { position: absolute; left: var(--gutter); bottom: calc(6vh + 22px); display: flex; gap: 8px; list-style: none; padding: 0; margin: 0; }
+.race-intro__grid li { display: flex; gap: 8px; padding: 9px 13px; background: #0a1221df; border-bottom: 2px solid #32b8e9; transform: skewX(-7deg); font-size: 12px; }
+.race-intro__grid .is-player { color: #ffdc3d; border-color: #ffdc3d; }
+.race-intro__skip { position: absolute; right: var(--gutter); bottom: calc(6vh + 22px); pointer-events: auto; }
+.race-intro__skip kbd { margin-left: 8px; font-size: 10px; opacity: .65; }
+@keyframes intro-copy { from { opacity: 0; translate: -12px 0; } to { opacity: 1; translate: 0 0; } }
+@media (max-width: 700px) { .race-intro__grid { gap: 4px; bottom: calc(6vh + 70px); } .race-intro__grid li { padding: 6px 8px; font-size: 10px; } .race-intro__copy { max-width: calc(100vw - 50px); } }
+@media (prefers-reduced-motion: reduce) { .race-intro__copy { animation: none; } }

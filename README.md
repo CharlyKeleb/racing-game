@@ -52,9 +52,13 @@ placeholder car with the same node names and physics.
 
 - [Architecture](docs/ARCHITECTURE.md): layers, frame lifecycle, vehicle model,
   conventions and roadmap
+- [AI racers](docs/AI_RACERS.md): difficulty, rival personalities, drafting,
+  overtaking, nitro strategy and race awareness
 - [Asset pipeline](docs/ASSET_PIPELINE.md): the GLB and `vehicle-config.json`
   contract for cars and tracks
 - [Track streaming](docs/TRACK_STREAMING.md): the Nürburgring pipeline,
   streaming runtime and mobile performance budgets
 - [Prepare a car with Blender MCP](docs/blender/PREPARE_CAR_WITH_BLENDER_MCP.md):
   hand this to Claude to turn the McLaren `.blend` into a game-ready GLB
+
+Track selection images: see [Adding and updating race previews](docs/TRACK_PREVIEWS.md).

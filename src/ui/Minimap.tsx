@@ -17,6 +17,7 @@ const ROUTE_POINTS = 120
  * change at telemetry rate (20 Hz).
  */
 export function Minimap() {
+  const opponents = useTelemetry((s) => s.opponents)
   const data = useGame((s) => s.minimap)
   const carX = useTelemetry((s) => s.carX)
   const carZ = useTelemetry((s) => s.carZ)
@@ -61,6 +62,7 @@ export function Minimap() {
           <path className="minimap__edge" d={outline.d} vectorEffect="non-scaling-stroke" />
           <path className="minimap__track" d={outline.d} vectorEffect="non-scaling-stroke" />
           <path className="minimap__route" d={route} vectorEffect="non-scaling-stroke" />
+          {opponents.map(o => <circle key={o.id} cx={o.x} cy={o.z} r={10} fill={['#27b8eb', '#ffd447', '#e64f67'][(o.id - 1) % 3]} stroke="#101820" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />)}
           <line className="minimap__start" {...outline.start} vectorEffect="non-scaling-stroke" />
         </g>
         <g className="minimap__car" transform={`translate(${CAR_X} ${CAR_Y})`}>

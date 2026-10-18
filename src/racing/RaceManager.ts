@@ -3,7 +3,7 @@ import type { Checkpoint } from '../world/Track'
 import { CheckpointManager } from './CheckpointManager'
 import { LapTimer } from './LapTimer'
 
-export type RaceState = 'idle' | 'countdown' | 'racing' | 'finished'
+export type RaceState = 'idle' | 'intro' | 'countdown' | 'racing' | 'finished'
 
 export interface RaceEvents {
   onStateChange(state: RaceState): void
@@ -18,6 +18,8 @@ export class RaceManager {
   /** 1-based current lap while racing. */
   lap = 0
   countdown = 0
+  introRemaining = 0
+  introDuration = 0
   totalLaps: number
   readonly timer = new LapTimer()
   private readonly checkpoints: CheckpointManager
@@ -39,16 +41,28 @@ export class RaceManager {
     return this.state === 'racing' || this.state === 'finished'
   }
 
-  start(totalLaps: number): void {
+  start(totalLaps: number, introSeconds = 0): void {
     this.totalLaps = totalLaps
     this.timer.reset()
     this.checkpoints.reset()
     this.lap = 0
     this.countdown = COUNTDOWN_SEC
+    this.introRemaining = this.introDuration = Math.max(0,introSeconds)
+    this.setState(this.introRemaining > 0 ? 'intro' : 'countdown')
+  }
+
+  skipIntro(): void {
+    if (this.state !== 'intro') return
+    this.introRemaining = 0
     this.setState('countdown')
   }
 
   update(dt: number, carPosition: THREE.Vector3): void {
+    if (this.state === 'intro') {
+      this.introRemaining = Math.max(0,this.introRemaining-dt)
+      if (this.introRemaining < 0.000001) this.skipIntro()
+      return
+    }
     if (this.state === 'countdown') {
       this.countdown -= dt
       if (this.countdown <= 0) {

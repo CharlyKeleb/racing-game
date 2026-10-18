@@ -97,7 +97,7 @@ export class ChaseCamera {
    * @param boost nitro intensity: 0..1, up to ~1.6 in a perfect boost (capped at 1.3 here).
    * @param motion the car's smoothed acceleration and velocity, for surge, bank and drift framing.
    */
-  update(target: THREE.Object3D, speedKmh: number, dt: number, boost = 0, motion?: VehicleMotion): void {
+  update(target: THREE.Object3D, speedKmh: number, dt: number, boost = 0, motion?: VehicleMotion, gridFraming = 0): void {
     if (this.camera.near !== NEAR) {
       this.camera.near = NEAR
       this.camera.updateProjectionMatrix()
@@ -117,7 +117,7 @@ export class ChaseCamera {
       0,
     )
 
-    if (this.mode === 'cockpit') {
+    if (this.mode === 'cockpit' && gridFraming === 0) {
       _desired.set(0.35, 1.05, 0.1).applyQuaternion(target.quaternion).add(target.position)
       this.camera.position.copy(_desired)
       _look.copy(_desired).addScaledVector(_fwd, 10)
@@ -141,10 +141,10 @@ export class ChaseCamera {
           if (t > 0 && _vdir.dot(_fwd) > 0) _fwd.lerp(_vdir, t).normalize()
         }
       }
-      const dist = this.distance + speedT * this.speedPullBack + this.kick * this.nitroPullBack + surge
+      const dist = this.distance + gridFraming * 2.5 + speedT * this.speedPullBack + this.kick * this.nitroPullBack + surge
       _desired.copy(target.position).addScaledVector(_fwd, -dist)
-      _desired.y += this.height - this.kick * 0.15
-      _look.copy(target.position).addScaledVector(_fwd, this.lookAhead)
+      _desired.y += this.height + gridFraming * 1.1 - this.kick * 0.15
+      _look.copy(target.position).addScaledVector(_fwd, this.lookAhead + gridFraming * 3)
       _look.y += this.lookHeight
 
       _desired.sub(target.position)
@@ -167,7 +167,7 @@ export class ChaseCamera {
     }
 
     // Kick is already smoothed, so it is added directly: fast in, slow out.
-    const fov = this.baseFov + this.maxFovBoost * speedT * speedT
+    const fov = this.baseFov + gridFraming * 4 + this.maxFovBoost * speedT * speedT
     const speedFov = THREE.MathUtils.lerp(this.camera.fov - this.appliedKick, fov, damp(4, dt))
     this.appliedKick = this.nitroFovKick * this.kick
     const next = speedFov + this.appliedKick
@@ -222,6 +222,7 @@ export class ChaseCamera {
   }
 
   snap(): void {
+    this.kick = this.appliedKick = 0
     this.initialised = false
   }
 }

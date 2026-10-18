@@ -23,6 +23,7 @@ export function Hud() {
     <div className={`hud${t.nitroActive ? ' hud--nitro' : ''}${t.nitroPerfect ? ' hud--nitro-perfect' : ''}`}>
       <div className="hud-speedlines" aria-hidden="true" />
       <div className="hud-tl">
+        {t.standings.length > 1 && <div className="hud-lap" aria-label="Race position"><span className="eyebrow">Position</span><b>{t.standings.find(s => s.player)?.position ?? 1}</b><span className="hud-lap__total">/{t.standings.length}</span></div>}
         <div className="hud-lap">
           <span className="eyebrow">Lap</span>
           <b>{Math.max(t.lap, 1)}</b>
@@ -41,11 +42,14 @@ export function Hud() {
       </div>
       <div className="hud-tr">
         <div className="hud-fps mono">{t.fps} FPS</div>
+        {t.standings.length > 1 && <ol className="hud-field" aria-label="Race leaderboard">{t.standings.map(s => <li key={s.id} className={s.player ? 'hud-field__player' : ''}><b>{s.position}</b><span>{s.name.split(' · ')[0]}</span><small className="mono">{s.position === 1 ? 'LEADER' : s.gapMs !== null ? `+${(s.gapMs / 1000).toFixed(2)}s` : s.gapLaps > 0 ? `+${s.gapLaps} LAP` : `+${Math.round(s.gapMeters)}m`}</small></li>)}</ol>}
       </div>
       <div className="hud-bl">
         <Minimap />
       </div>
 
+      <div className="rival-labels" aria-hidden="true">{t.rivalLabels.map(label => <div key={label.id} className={`rival-label rival-label--${label.id}`} style={{ left: `${label.x}%`, top: `${label.y}%` }}><b>{label.position}</b><span>{label.name}<small>{label.style === 'power' ? 'Straight-line specialist' : label.style === 'drift' ? 'Corner attacker' : 'Precision driver'}</small></span></div>)}</div>
+      {t.drafting > 0.15 && phase === 'racing' && <div className="hud-drafting"><span>Slipstream</span><b>Building nitro</b></div>}
       {t.wrongWay && <div className="hud-wrongway">Wrong way</div>}
 
       {t.driftActive ? (

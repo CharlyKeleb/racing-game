@@ -1,5 +1,6 @@
 import { Howler } from 'howler'
 import { CarSound, type CarSoundState } from './CarSound'
+import { OpponentAudio } from './OpponentAudio'
 import { GarageAmbience } from './GarageAmbience'
 import { decodeWav16, type EngineBank } from './GranularEngine'
 import type { EngineBankMessage } from './engineWorklet'
@@ -21,6 +22,10 @@ export type { CarSoundState }
  * Howler owns the global volume/unlock so one-shot SFX share the same mixer.
  */
 export class AudioManager {
+  private rivals: OpponentAudio[] = []
+  private bankCache = new Map<string, Promise<EngineBankMessage>>()
+  private workletReady: Promise<void> | null = null
+  private engineBank: EngineBankMessage | null = null
   private ctx: AudioContext | null = null
   private master!: GainNode
   private sound: CarSound | null = null
@@ -66,6 +71,7 @@ export class AudioManager {
     this.firingPerRev = firingPerRev
     this.sound?.setFiringPerRev(firingPerRev)
     if (!changed || !this.ctx || !this.sound) return
+    this.engineBank = null
     this.sampled?.disconnect()
     this.sampled?.port.close()
     this.sampled = null
@@ -129,7 +135,7 @@ export class AudioManager {
         fetchBuffer('engine-bank.json'),
         fetchBuffer('ignition.mp3').catch(() => null),
         fetchBuffer('lift-off.mp3').catch(() => null),
-        ctx.audioWorklet.addModule(engineWorkletUrl),
+        this.workletReady ??= ctx.audioWorklet.addModule(engineWorkletUrl),
       ])
       const bank = JSON.parse(new TextDecoder().decode(manifest)) as EngineBank
       // Parsed by hand: decodeAudioData would resample and shift the pitch marks.
@@ -142,12 +148,14 @@ export class AudioManager {
 
       const node = new AudioWorkletNode(ctx, 'granular-engine', { numberOfInputs: 0, outputChannelCount: [1] })
       const msg: EngineBankMessage = { pcm, bank }
-      node.port.postMessage(msg, [pcm.buffer])
+      node.port.postMessage(msg)
       // The car may have changed while this loaded.
       if (this.carAudioUrl !== base) {
         node.port.close()
         return
       }
+      this.engineBank = msg
+      this.bankCache.set(base, Promise.resolve(msg))
       node.connect(sound.engineIn)
       this.sampled = node
       // The synth keeps running silently: it's the stand-in again if the car changes.
@@ -237,7 +245,47 @@ export class AudioManager {
     void this.ctx?.resume()
   }
 
+  clearOpponents(): void {
+    for (const rival of this.rivals) rival.dispose()
+    this.rivals = []
+  }
+
+  setOpponentCars(cars: readonly { audioUrl?: string; firingPerRev: number }[]): void {
+    this.clearOpponents()
+    const ctx = this.ctx
+    if (!ctx) return
+    for (const car of cars) {
+      const rival = new OpponentAudio(ctx, this.master, car.firingPerRev)
+      this.rivals.push(rival)
+      const base = car.audioUrl
+      if (!base) continue
+      let bank = this.bankCache.get(base)
+      if (!bank && base === this.carAudioUrl && this.engineBank) bank = Promise.resolve(this.engineBank)
+      if (!bank) {
+        bank = (async () => {
+          const [wav, manifest] = await Promise.all([
+            fetch(base + 'engine-bank.wav').then(r => { if (!r.ok) throw new Error('Engine recording unavailable'); return r.arrayBuffer() }),
+            fetch(base + 'engine-bank.json').then(r => { if (!r.ok) throw new Error('Engine bank unavailable'); return r.json() as Promise<EngineBank> }),
+            this.workletReady ??= ctx.audioWorklet.addModule(engineWorkletUrl),
+          ])
+          return { pcm: decodeWav16(wav).pcm, bank: manifest }
+        })()
+        this.bankCache.set(base, bank)
+      }
+      void bank.then(recording => {
+        if (this.rivals.includes(rival)) rival.setBank(recording)
+      }).catch(() => this.bankCache.delete(base))
+    }
+  }
+
+  updateOpponent(index: number, rpm: number, throttle: number, distance: number, lateral: number, active: boolean): void {
+    this.rivals[index]?.update(rpm, throttle, distance, lateral, active)
+  }
+
   dispose(): void {
+    this.clearOpponents()
+    this.engineBank = null
+    this.bankCache.clear()
     this.sound?.dispose()
     this.ambience?.dispose()
     this.sampled?.disconnect()

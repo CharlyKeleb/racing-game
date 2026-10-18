@@ -14,6 +14,8 @@ export interface NitroInput {
   drifting?: boolean
   /** Boost button held. */
   wantsBoost: boolean
+  /** Aligned slipstream strength, 0..1; requires moving traffic and grounded tires. */
+  drafting?: number
 }
 
 /**
@@ -155,5 +157,5 @@ export function fillRate(input: NitroInput, cfg: NitroConfig): number {
   if (!input.grounded) return 0
   const drift = input.drifting ? cfg.driftFillRate : 0
   const over = (input.slip - cfg.slipThreshold) / (1 - cfg.slipThreshold)
-  return Math.max(drift, over > 0 ? cfg.fillRate * Math.min(1, over) : 0)
+  return Math.max(Math.max(0, Math.min(1, input.drafting ?? 0)) * 0.10, drift, over > 0 ? cfg.fillRate * Math.min(1, over) : 0)
 }

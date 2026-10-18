@@ -2,6 +2,7 @@ import { createStore } from 'zustand/vanilla'
 import { defaultQuality, isMobile } from '../engine/device'
 import { DEFAULT_BUILD, sanitizeBuild, type CarBuild } from '../vehicles/CarBuild'
 import { selectableCars } from '../vehicles/carRegistry'
+import { isAiDifficulty, type AiDifficulty } from '../racing/AiProfiles'
 import { isTimeOfDay, type TimeOfDay } from '../world/timeOfDay'
 
 /**
@@ -9,7 +10,7 @@ import { isTimeOfDay, type TimeOfDay } from '../world/timeOfDay'
  * Vanilla store so the engine can read/write it without importing React.
  */
 
-export type GamePhase = 'boot' | 'menu' | 'garage' | 'loading' | 'countdown' | 'racing' | 'paused' | 'finished'
+export type GamePhase = 'boot' | 'menu' | 'garage' | 'loading' | 'intro' | 'countdown' | 'racing' | 'paused' | 'finished'
 export type QualityPreset = 'low' | 'medium' | 'high'
 export type CameraMode = 'chase' | 'cockpit'
 
@@ -18,6 +19,8 @@ export interface Settings {
   postfx: boolean
   masterVolume: number
   camera: CameraMode
+  difficulty: AiDifficulty
+  opponents: number
   laps: number
   /** Track id from world/tracks.ts. */
   track: string
@@ -65,6 +68,8 @@ const defaultSettings: Settings = {
   postfx: !isMobile(),
   masterVolume: 0.9,
   camera: 'chase',
+  difficulty: 'challenging',
+  opponents: 3,
   laps: 3,
   track: 'nurburgring',
   car: 'porsche911',
@@ -76,6 +81,8 @@ function loadSettings(): Settings {
     const raw = localStorage.getItem(SETTINGS_KEY)
     if (!raw) return defaultSettings
     const merged: Settings = { ...defaultSettings, ...JSON.parse(raw) }
+    if (!isAiDifficulty(merged.difficulty)) merged.difficulty = 'challenging'
+    merged.opponents = [0, 1, 3].includes(merged.opponents) ? merged.opponents : 3
     if (!isTimeOfDay(merged.timeOfDay)) merged.timeOfDay = defaultSettings.timeOfDay
     if (!selectableCars().some((c) => c.id === merged.car)) merged.car = defaultSettings.car
     return merged

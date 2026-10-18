@@ -1,3 +1,4 @@
+import type { Standing } from '../racing/RaceStandings'
 import { createStore } from 'zustand/vanilla'
 
 /**
@@ -5,11 +6,17 @@ import { createStore } from 'zustand/vanilla'
  * (see Game.publishTelemetry) so React never re-renders at physics rate.
  */
 export interface Telemetry {
+  introShot: number
+  introProgress: number
+  rivalLabels: { id: number; name: string; style: string; x: number; y: number; position: number }[]
+  opponents: { id: number; x: number; z: number }[]
+  standings: Standing[]
   speedKmh: number
   rpm: number
   redlineRpm: number
   gear: number
   /** Nitro tank, 0..1. */
+  drafting: number
   nitro: number
   nitroActive: boolean
   /** Enough in the tank to start a boost. */
@@ -47,10 +54,16 @@ export interface Telemetry {
 }
 
 export const initialTelemetry: Telemetry = {
+  introShot: 0,
+  introProgress: 0,
+  rivalLabels: [],
+  opponents: [],
+  standings: [],
   speedKmh: 0,
   rpm: 0,
   redlineRpm: 8000,
   gear: 1,
+  drafting: 0,
   nitro: 0,
   nitroActive: false,
   nitroReady: false,
