@@ -371,6 +371,7 @@ export class Game {
       // Road colliders only: the terrain mesh is simplified to ~1.5 m and can sit
       // above the asphalt, which left arrows hovering in the air.
       roadHeight: (x, y, z) => this.physics.groundHeight(x, y, z, (c) => track.isRoadCollider(c)),
+      groundHeight: (x, y, z) => this.physics.groundHeight(x, y, z),
       paved: (x, z) => {
         const s = track.surfaceAt(x, z)
         return s === Surface.Asphalt || s === Surface.Kerb
