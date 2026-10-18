@@ -239,6 +239,24 @@ export class AudioManager {
     src.stop(t + 0.2)
   }
 
+  /** A small rising interval for a bank/transition, falling for a broken chain. */
+  playDriftCue(kind: 'bank' | 'link' | 'bust'): void {
+    const ctx = this.ctx
+    if (!ctx || this.paused) return
+    const frequencies = kind === 'bust' ? [260, 160] : kind === 'bank' ? [660, 880, 1320] : [880, 1100]
+    frequencies.forEach((frequency, i) => {
+      const time = ctx.currentTime + i * .075
+      const tone = ctx.createOscillator(), gain = ctx.createGain()
+      tone.type = 'sine'; tone.frequency.value = frequency
+      gain.gain.setValueAtTime(.0001,time)
+      gain.gain.exponentialRampToValueAtTime(.12,time+.008)
+      gain.gain.exponentialRampToValueAtTime(.0001,time+.2)
+      tone.connect(gain).connect(this.master)
+      tone.onended = () => { tone.disconnect(); gain.disconnect() }
+      tone.start(time); tone.stop(time+.22)
+    })
+  }
+
   /** Start gantry: a short tone per red light, a long high one at lights out. */
   playStartLight(go: boolean): void {
     const ctx = this.ctx
