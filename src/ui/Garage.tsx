@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { GiPaintBrush, GiCarWheel, GiAutoRepair, GiCheckeredFlag } from 'react-icons/gi'
+import { useEffect, useState } from 'react'
 import {
   CALIPER_PRESETS,
   PAINT_PRESETS,
@@ -11,8 +12,10 @@ import {
 } from '../vehicles/CarBuild'
 import { useGameInstance } from './GameContext'
 import { useGame } from './hooks'
+import { CarPicker } from './CarPicker'
 import { Button, Panel, ScreenHeader, Segmented } from './kit'
 import { CarCard } from './MainMenu'
+import { OrbitLayer } from './OrbitLayer'
 
 type Tab = 'paint' | 'wheels' | 'performance'
 const TABS: [Tab, string][] = [
@@ -21,12 +24,15 @@ const TABS: [Tab, string][] = [
   ['performance', 'Upgrades'],
 ]
 
+const tabIcons = { paint: GiPaintBrush, wheels: GiCarWheel, performance: GiAutoRepair }
+
 export function Garage() {
   const game = useGameInstance()
   const build = useGame((s) => s.build)
   const update = useGame((s) => s.updateBuild)
   const reset = useGame((s) => s.resetBuild)
   const [tab, setTab] = useState<Tab>('paint')
+  const switching = useGame((s) => s.carSwitching)
 
   // Wheels tab zooms the camera onto a wheel; everything else frames the whole car.
   useEffect(() => {
@@ -36,16 +42,18 @@ export function Garage() {
 
   return (
     <div className="screen screen--garage">
-      <DragToRotate onRotate={(d) => game?.rotateShowroom(d)} />
+      <OrbitLayer />
       <ScreenHeader title="Garage" onBack={() => game?.closeGarage()} />
 
       <div className="garage-left">
         <nav className="garage-tabs" role="tablist" aria-label="Customise">
-          {TABS.map(([id, text]) => (
+          {TABS.map(([id, text]) => {
+            const Icon = tabIcons[id]
+            return (
             <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? 'on' : ''} onClick={() => setTab(id)}>
-              <span>{text}</span>
+              <span><Icon aria-hidden="true" focusable="false"/>{text}</span>
             </button>
-          ))}
+          )})}
         </nav>
         <Panel className="garage-options">
           {tab === 'paint' && <PaintTab build={build} update={update} />}
@@ -57,10 +65,12 @@ export function Garage() {
         </Panel>
       </div>
 
+      <CarPicker className="garage-carpicker" />
+
       <div className="garage-right">
         {tab !== 'wheels' && <CarCard />}
-        <Button size="lg" variant="primary" onClick={() => game?.startRace()}>
-          Race
+        <Button size="lg" variant="primary" className="menu-icon-action" disabled={switching} onClick={() => game?.startRace()}>
+          <GiCheckeredFlag aria-hidden="true"/> Race
         </Button>
       </div>
     </div>
@@ -206,26 +216,5 @@ function Swatches({
         </label>
       </div>
     </div>
-  )
-}
-
-/** Full-screen layer behind the panels: drag horizontally to spin the car. */
-function DragToRotate({ onRotate }: { onRotate(deltaRadians: number): void }) {
-  const last = useRef<number | null>(null)
-  return (
-    <div
-      className="drag-layer"
-      onPointerDown={(e) => {
-        last.current = e.clientX
-        e.currentTarget.setPointerCapture(e.pointerId)
-      }}
-      onPointerMove={(e) => {
-        if (last.current === null) return
-        onRotate(-(e.clientX - last.current) * 0.008)
-        last.current = e.clientX
-      }}
-      onPointerUp={() => (last.current = null)}
-      onPointerCancel={() => (last.current = null)}
-    />
   )
 }

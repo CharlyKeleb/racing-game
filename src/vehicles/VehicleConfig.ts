@@ -1,3 +1,5 @@
+import { DEFAULT_DRIFT, type DriftConfig } from './Drift'
+
 /**
  * Data contract between the asset pipeline (Blender MCP → vehicle-config.json)
  * and the runtime vehicle. Every car ships one of these next to its GLB.
@@ -55,6 +57,10 @@ export interface EngineConfig {
   efficiency: number
   shiftUpRpm: number
   shiftDownRpm: number
+  /** Engine braking at the redline off-throttle, Nm (default 12% of peak torque). */
+  engineBrakeTorque?: number
+  /** Optional: highest rpm a downshift under braking may land at (default shiftUpRpm − 500). */
+  brakeDownshiftRpm?: number
   shiftTimeSec: number
 }
 
@@ -75,6 +81,22 @@ export interface NitroConfig {
   topSpeedBonus: number
   /** Boost ramp in/out, units/s. */
   rampRate: number
+  /** Tank fraction gained per second while all four wheels are off the ground. */
+  airFillRate: number
+  /** Tank fraction gained per second during a drift. */
+  driftFillRate: number
+  /** Seconds after release before a burn ends, so a quick re-tap keeps it going. */
+  releaseGraceSec: number
+  /** Perfect nitro: the timing window opens this long into a burn, seconds… */
+  perfectWindowStart: number
+  /** …and stays open this long. */
+  perfectWindowLength: number
+  /** How long a perfect boost lasts, seconds. */
+  perfectDurationSec: number
+  /** Boost intensity during a perfect boost (1 = normal nitro): scales thrust and top speed. */
+  perfectBoost: number
+  /** Tank drain multiplier during a perfect boost. */
+  perfectDrainScale: number
 }
 
 export interface VehicleConfig {
@@ -115,10 +137,27 @@ export interface VehicleConfig {
    * or over-rotating. 0 = off; ~6 feels assisted; handbrake bypasses it.
    */
   yawStability: number
+  /**
+   * Fraction of `yawStability` kept while the driver countersteers a slide,
+   * 0..1. Lower = drifts are easier to hold; 1 = the assist straightens every slide.
+   */
+  driftAssist: number
+  /** Body slip angle (rad) where the assist comes back in full to stop a spin. */
+  maxDriftAngle: number
+  /** Aero drag, N per (m/s)²: ½·ρ·Cd·A (Cd 0.30 × 2.0 m² ≈ 0.37). */
   dragCoefficient: number
+  /** Downforce, N per (m/s)² of forward speed. Negative = lift. */
   downforceCoefficient: number
+  /** Share of downforce on the front axle (aero balance), 0..1. */
+  downforceFrontShare: number
   nitro: NitroConfig
-  /** Exhaust tips in car-local space, for nitro flames. Derived from the chassis when absent. */
+  /** Drift entries and how loose the rear goes (see Drift.ts). */
+  drift: DriftConfig
+  /**
+   * Centres of the exhaust tips' outlets in car-local space, for nitro flames.
+   * Measure them from the model (the chrome tip's rear face). Derived from the
+   * chassis box when absent, which is only a rough guess.
+   */
   exhausts?: [number, number, number][]
 }
 
@@ -175,8 +214,12 @@ export const DEFAULT_VEHICLE_CONFIG: VehicleConfig = {
   steerFalloffSpeed: 9,
   pedalRate: 6,
   yawStability: 8,
+  driftAssist: 0.3,
+  maxDriftAngle: 0.7,
   dragCoefficient: 0.46,
   downforceCoefficient: 1.6,
+  downforceFrontShare: 0.42,
+  drift: DEFAULT_DRIFT,
   nitro: {
     durationSec: 4,
     fillRate: 0.25,
@@ -186,6 +229,14 @@ export const DEFAULT_VEHICLE_CONFIG: VehicleConfig = {
     force: 6500,
     topSpeedBonus: 0.15,
     rampRate: 5,
+    airFillRate: 0.3,
+    driftFillRate: 0.3,
+    releaseGraceSec: 0.25,
+    perfectWindowStart: 0.8,
+    perfectWindowLength: 0.4,
+    perfectDurationSec: 1.5,
+    perfectBoost: 1.6,
+    perfectDrainScale: 1.5,
   },
 }
 
@@ -200,6 +251,7 @@ export function resolveVehicleConfig(partial: Partial<VehicleConfig> | undefined
     tires: { ...d.tires, ...partial.tires },
     engine: { ...d.engine, ...partial.engine },
     nitro: { ...d.nitro, ...partial.nitro },
+    drift: { ...d.drift, ...partial.drift },
     wheels: partial.wheels ?? d.wheels,
   }
 }

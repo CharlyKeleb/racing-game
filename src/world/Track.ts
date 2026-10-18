@@ -1,7 +1,10 @@
 import RAPIER from '@dimforge/rapier3d-compat'
 import * as THREE from 'three'
 import type { SpawnPoint } from '../vehicles/Vehicle'
-import type { TrackDefinition } from './tracks'
+import type { Surface } from '../vehicles/Surface'
+import type { RaceTrack, ViewDistance } from './RaceTrack'
+import { SurfaceMap } from './SurfaceMap'
+import type { ProceduralTrackDefinition } from './tracks'
 
 export interface Checkpoint {
   index: number
@@ -13,6 +16,8 @@ export interface Checkpoint {
 }
 
 const SAMPLES = 600
+/** Kerb ribbon width either side of the road, meters (see buildKerbs). */
+const KERB_WIDTH = 1.2
 const GROUND_SIZE = 1200
 
 /**
@@ -20,14 +25,17 @@ const GROUND_SIZE = 1200
  * ribbon, kerbs, scenery and checkpoint gates. The road is flat on y = 0 for
  * now; elevation comes with authored Blender tracks.
  */
-export class Track {
+export class Track implements RaceTrack {
   readonly group = new THREE.Group()
+  readonly killY = -50
   readonly curve: THREE.CatmullRomCurve3
   readonly checkpoints: Checkpoint[]
-  readonly definition: TrackDefinition
+  readonly line: THREE.Vector3[]
+  readonly definition: ProceduralTrackDefinition
   private readonly disposables: { dispose(): void }[] = []
+  private readonly surfaces: SurfaceMap
 
-  constructor(def: TrackDefinition, world: RAPIER.World) {
+  constructor(def: ProceduralTrackDefinition, world: RAPIER.World) {
     this.definition = def
     this.curve = new THREE.CatmullRomCurve3(
       def.controlPoints.map(([x, z]) => new THREE.Vector3(x, 0, z)),
@@ -35,14 +43,47 @@ export class Track {
       'centripetal',
     )
 
-    // Physics: a single large flat ground. Road and grass share it; grip
-    // differences per surface are a later feature (collider user data).
+    // Physics: a single large flat ground. Road and grass share it; grip per
+    // surface comes from surfaceAt().
     const ground = world.createRigidBody(RAPIER.RigidBodyDesc.fixed())
     world.createCollider(RAPIER.ColliderDesc.cuboid(GROUND_SIZE / 2, 1, GROUND_SIZE / 2).setTranslation(0, -1, 0).setFriction(1), ground)
 
     this.group.add(this.buildGround(), this.buildRoad(def.roadWidth), this.buildKerbs(def.roadWidth), this.buildScenery(def.roadWidth))
     this.checkpoints = this.buildCheckpoints(def)
+    this.line = this.curve.getSpacedPoints(Math.round(this.curve.getLength() / 4)).slice(0, -1)
     this.group.add(this.buildStartLine(def.roadWidth))
+    this.surfaces = SurfaceMap.fromRibbon(this.curve.getSpacedPoints(SAMPLES), def.roadWidth / 2, KERB_WIDTH)
+  }
+
+  surfaceAt(x: number, z: number): Surface {
+    return this.surfaces.at(x, z)
+  }
+
+  get name(): string {
+    return this.definition.name
+  }
+
+  get id(): string {
+    return this.definition.id
+  }
+
+  respawnAt(index: number): SpawnPoint {
+    if (index === 0) return this.spawn
+    const cp = this.checkpoints[index] ?? this.checkpoints[0]
+    return { position: cp.position.clone().setY(0.6), heading: Math.atan2(cp.tangent.x, cp.tangent.z) }
+  }
+
+  update(): void {}
+
+  /** One flat ground collider: it's all road as far as arrows are concerned. */
+  isRoadCollider(): boolean {
+    return true
+  }
+
+  setQuality(): void {}
+
+  viewDistance(): ViewDistance {
+    return { fogNear: 250, fogFar: 900 }
   }
 
   get spawn(): SpawnPoint {
@@ -110,8 +151,8 @@ export class Track {
     const tex = this.track(this.kerbTexture())
     const mat = this.track(new THREE.MeshStandardMaterial({ map: tex, roughness: 0.7 }))
     const g = new THREE.Group()
-    g.add(new THREE.Mesh(this.ribbon(width / 2, width / 2 + 1.2, 0.015, 4), mat))
-    g.add(new THREE.Mesh(this.ribbon(-width / 2 - 1.2, -width / 2, 0.015, 4), mat))
+    g.add(new THREE.Mesh(this.ribbon(width / 2, width / 2 + KERB_WIDTH, 0.015, 4), mat))
+    g.add(new THREE.Mesh(this.ribbon(-width / 2 - KERB_WIDTH, -width / 2, 0.015, 4), mat))
     g.children.forEach((m) => (m.receiveShadow = true))
     return g
   }
@@ -150,7 +191,7 @@ export class Track {
     return g
   }
 
-  private buildCheckpoints(def: TrackDefinition): Checkpoint[] {
+  private buildCheckpoints(def: ProceduralTrackDefinition): Checkpoint[] {
     return Array.from({ length: def.checkpointCount }, (_, i) => {
       const u = i / def.checkpointCount
       return {

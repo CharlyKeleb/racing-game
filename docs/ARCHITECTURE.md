@@ -140,8 +140,21 @@ tick:
    power oversteer. The handbrake scales rear grip down for drifts.
 7. Apply tire impulses slightly above the contact patch to reduce body roll.
 
-Then **aero**: quadratic drag and speed² downforce. The steering angle is
-smoothed and shrinks with speed.
+Each wheel also looks up the **surface** under its contact patch
+(`RaceTrack.surfaceAt` → `Surface.ts`). Grass and gravel traps scale grip down,
+and loose surfaces add heavy rolling drag. The tire model reports `slide`, the
+speed the contact patch actually skids at: past the peak slip angle, locked by
+the handbrake, or spinning under power. ABS braking and grippy cornering read
+zero. Skid marks and smoke key off `slide`, not the friction-circle usage.
+
+Then **aero**: quadratic drag through the centre of mass, and speed² downforce
+split over the axles by `downforceFrontShare`. The steering angle is smoothed and
+shrinks with speed.
+
+The **stability assist** trims yaw beyond what the steering asks for. When the
+car is sideways and the driver countersteers, it backs off to `driftAssist`, so
+a slide can be held on throttle and opposite lock. Past `maxDriftAngle` it comes
+back in full to catch a spin.
 
 The automatic gearbox shifts up at `shiftUpRpm` and down at `shiftDownRpm`.
 Holding brake at a standstill (total speed < 1 m/s) engages reverse, and the
@@ -166,16 +179,18 @@ src/
 ├── engine/      Game (composition root), GameLoop, Renderer, PhysicsWorld, AssetManager
 ├── vehicles/    VehicleConfig (data contract), Vehicle, VehicleController,
 │                Suspension, TirePhysics, Drivetrain, CarModel (GLB rigging), carRegistry
-├── world/       Track (spline → road, kerbs, scenery, checkpoints), Environment (sky, sun, fog), tracks
+├── world/       RaceTrack (interface), Track (procedural), StreamedTrack (chunked GLB streaming),
+│                streaming/ChunkPlanner (pure LOD planning), Environment (sky, sun, fog), tracks
 ├── camera/      ChaseCamera (chase + cockpit, speed FOV)
-├── racing/      RaceManager, CheckpointManager, LapTimer
+├── racing/      RaceManager, CheckpointManager, LapTimer, AiDriver, AiProfiles,
+│                Overtaking, Drafting, RaceStandings
 ├── input/       InputManager (keyboard + gamepad → InputState)
 ├── audio/       AudioManager (procedural engine + tire squeal)
 ├── effects/     PostFX (bloom, SMAA, tone mapping)
 ├── stores/      gameStore, telemetryStore
 └── ui/          React overlay: MainMenu, Settings, Hud, PauseMenu, Results
 public/models/cars/<id>/   <id>.glb + vehicle-config.json   (from the Blender MCP pipeline)
-public/models/tracks/      authored track GLBs (later)
+public/models/tracks/<id>/ streamed track packages from scripts/track/build-track.mjs
 public/audio/              recorded engine loops / SFX (later)
 tests/                     Vitest: physics + racing rules + loop
 docs/                      this file, ASSET_PIPELINE.md, blender/ prompts
@@ -211,13 +226,16 @@ The game runs before any authored asset exists:
 - [ ] Performance pass: stable 60 FPS on a mid-range laptop
 
 ### Milestone 2: A beautiful circuit
-- Authored track GLB (road mesh as trimesh collider, barriers, `checkpoint_*` empties)
-- Surface types (asphalt/kerb/grass grip via collider user data)
-- HDRI environment, time-of-day presets, baked lighting for the track
-- Barrier collisions, camera shake, reset-to-last-checkpoint
+- [x] Nürburgring GP streamed from a chunked GLB package, see [Track streaming](TRACK_STREAMING.md)
+- [x] Trimesh collision (road, run-off, barriers, terrain), reset-to-last-checkpoint, kill floor
+- [x] Mobile: quality presets, far-LOD merging, car LOD, dynamic resolution, touch controls
+- [ ] Surface types (asphalt/kerb/grass grip via collider user data)
+- [x] Time-of-day presets (noon, golden hour, overcast, night with headlights) with a sky-baked HDR environment (#20)
+- [ ] Baked lighting for the track
+- [ ] Camera shake on barrier hits; minimap from the gate positions
 
 ### Milestone 3: Racing
-- AI opponents on a racing line (waypoints + PID steering, rubber-banding)
+- [x] AI opponents using player vehicle physics, curvature speed planning, PID steering, traffic avoidance, bounded catch-up and checkpoint standings (see [AI racers](AI_RACERS.md))
 - Ghost car (record `InputState` per tick and replay it, deterministic by design)
 - Garage scene and car selection (`carRegistry`)
 - Touch controls

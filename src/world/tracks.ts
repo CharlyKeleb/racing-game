@@ -1,19 +1,29 @@
 /**
- * Track definitions. The first track is procedural (spline → road ribbon) so
- * we can drive before any Blender track exists. Authored tracks later add a
- * `modelUrl` whose GLB follows the track contract in docs/ASSET_PIPELINE.md.
+ * Track definitions. Procedural tracks are a spline → road ribbon built at
+ * runtime; streamed tracks come from scripts/track/build-track.mjs (a chunked
+ * GLB package with a track.json manifest, see docs/TRACK_STREAMING.md).
  */
-export interface TrackDefinition {
+export type TrackDefinition = ProceduralTrackDefinition | StreamedTrackDefinition
+
+export interface StreamedTrackDefinition {
+  kind: 'streamed'
+  id: string
+  name: string
+  manifestUrl: string
+}
+
+export interface ProceduralTrackDefinition {
+  kind: 'procedural'
   id: string
   name: string
   /** Closed Catmull-Rom control points on the XZ plane, meters. */
   controlPoints: [number, number][]
   roadWidth: number
   checkpointCount: number
-  modelUrl?: string
 }
 
-export const TEST_CIRCUIT: TrackDefinition = {
+export const TEST_CIRCUIT: ProceduralTrackDefinition = {
+  kind: 'procedural',
   id: 'test-circuit',
   name: 'Papaya Test Circuit',
   controlPoints: [
@@ -34,4 +44,22 @@ export const TEST_CIRCUIT: TrackDefinition = {
   checkpointCount: 12,
 }
 
-export const TRACKS: TrackDefinition[] = [TEST_CIRCUIT]
+export const NURBURGRING: StreamedTrackDefinition = {
+  kind: 'streamed',
+  id: 'nurburgring',
+  name: 'Nürburgring GP',
+  manifestUrl: '/models/tracks/nurburgring/track.json',
+}
+
+export const MARINA_BAY: StreamedTrackDefinition = {
+  kind: 'streamed',
+  id: 'singapore',
+  name: 'Marina Bay',
+  manifestUrl: '/models/tracks/singapore/track.json',
+}
+
+export const TRACKS: TrackDefinition[] = [NURBURGRING, MARINA_BAY, TEST_CIRCUIT]
+
+export function getTrack(id: string): TrackDefinition {
+  return TRACKS.find((t) => t.id === id) ?? TRACKS[0]
+}

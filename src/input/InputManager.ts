@@ -17,9 +17,10 @@ export interface InputState {
 }
 
 /** Edge-triggered actions, consumed once per press. */
-export type InputAction = 'pause' | 'reset' | 'camera'
+export type InputAction = 'pause' | 'reset' | 'camera' | 'skip'
 
 const KEY_ACTIONS: Record<string, InputAction> = {
+  Enter: 'skip',
   Escape: 'pause',
   KeyP: 'pause',
   KeyR: 'reset',
@@ -35,6 +36,8 @@ export class InputManager {
   private readonly keys = new Set<string>()
   private readonly pending = new Set<InputAction>()
   private readonly prevPadButtons: boolean[] = []
+  /** On-screen touch controls, merged with keyboard and gamepad every poll. */
+  private readonly touch: InputState = { throttle: 0, brake: 0, steer: 0, handbrake: false, nitro: false }
 
   constructor() {
     window.addEventListener('keydown', this.onKeyDown)
@@ -59,16 +62,34 @@ export class InputManager {
       brake = Math.max(brake, pad.buttons[PAD.LT]?.value ?? 0)
       handbrake ||= !!pad.buttons[PAD.A]?.pressed
       nitro ||= !!pad.buttons[PAD.X]?.pressed || !!pad.buttons[PAD.RB]?.pressed
+      this.edge(pad, PAD.A, 'skip')
       this.edge(pad, PAD.START, 'pause')
       this.edge(pad, PAD.Y, 'camera')
       this.edge(pad, PAD.B, 'reset')
     }
+
+    const t = this.touch
+    throttle = Math.max(throttle, t.throttle)
+    brake = Math.max(brake, t.brake)
+    if (t.steer !== 0) steer = t.steer
+    handbrake ||= t.handbrake
+    nitro ||= t.nitro
 
     this.state.throttle = throttle
     this.state.brake = brake
     this.state.steer = Math.max(-1, Math.min(1, steer))
     this.state.handbrake = handbrake
     this.state.nitro = nitro
+  }
+
+  /** Feed from the touch overlay (via Game.setTouchInput). */
+  setTouch(patch: Partial<InputState>): void {
+    Object.assign(this.touch, patch)
+  }
+
+  /** Queue an edge action from a UI button (pause, reset, camera). */
+  trigger(action: InputAction): void {
+    this.pending.add(action)
   }
 
   /** Returns true once per press. */
@@ -96,6 +117,7 @@ export class InputManager {
 
   private onBlur = (): void => {
     this.keys.clear()
+    Object.assign(this.touch, { throttle: 0, brake: 0, steer: 0, handbrake: false, nitro: false })
   }
 
   dispose(): void {

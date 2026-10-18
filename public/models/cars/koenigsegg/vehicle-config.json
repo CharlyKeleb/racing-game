@@ -1,0 +1,50 @@
+{
+  "id": "koenigsegg",
+  "name": "Koenigsegg One:1",
+  "massKg": 1360,
+  "chassisHalfExtents": [0.95, 0.38, 2.15],
+  "chassisCenter": [0, 0.6, 0.1],
+  "centerOfMass": [0, 0.32, -0.25],
+  "wheels": [
+    { "id": "FL", "position": [0.887, 0.636, 1.356], "radius": 0.315, "width": 0.278, "steered": true, "driven": false, "handbrake": false },
+    { "id": "FR", "position": [-0.887, 0.636, 1.356], "radius": 0.315, "width": 0.278, "steered": true, "driven": false, "handbrake": false },
+    { "id": "RL", "position": [0.874, 0.662, -1.355], "radius": 0.343, "width": 0.303, "steered": false, "driven": true, "handbrake": true },
+    { "id": "RR", "position": [-0.874, 0.662, -1.355], "radius": 0.343, "width": 0.303, "steered": false, "driven": true, "handbrake": true }
+  ],
+  "engine": {
+    "idleRpm": 1000,
+    "redlineRpm": 8250,
+    "torqueCurve": [
+      [1000, 520],
+      [2000, 820],
+      [3000, 1120],
+      [4000, 1300],
+      [6000, 1371],
+      [7500, 1273],
+      [8250, 1090]
+    ],
+    "gearRatios": [-3.0, 3.0, 2.05, 1.55, 1.24, 1.02, 0.86, 0.73],
+    "finalDrive": 2.85,
+    "efficiency": 0.86,
+    "shiftUpRpm": 7900,
+    "shiftDownRpm": 3800,
+    "shiftTimeSec": 0.07
+  },
+  "exhausts": [[0.11, 0.3, -2.11], [-0.11, 0.3, -2.11]],
+  "tires": {
+    "grip": 1.8,
+    "corneringStiffness": 10.5,
+    "shape": 1.75,
+    "handbrakeGripScale": 0.4,
+    "rollingResistance": 0.012,
+    "tractionControl": true
+  },
+  "brakeForce": 36000,
+  "steerFalloffSpeed": 10,
+  "yawStability": 7,
+  "driftAssist": 0.2,
+  "maxDriftAngle": 0.6,
+  "dragCoefficient": 0.44,
+  "downforceCoefficient": 0.9,
+  "downforceFrontShare": 0.4
+}

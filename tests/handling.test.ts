@@ -1,8 +1,10 @@
 import RAPIER from '@dimforge/rapier3d-compat'
 import { beforeAll, describe, expect, it } from 'vitest'
 import type { InputState } from '../src/input/InputManager'
-import { DEFAULT_VEHICLE_CONFIG, type VehicleConfig } from '../src/vehicles/VehicleConfig'
+import { Surface } from '../src/vehicles/Surface'
+import { DEFAULT_VEHICLE_CONFIG, resolveVehicleConfig, type VehicleConfig } from '../src/vehicles/VehicleConfig'
 import { VehicleController } from '../src/vehicles/VehicleController'
+import porsche911Json from '../public/models/cars/porsche911/vehicle-config.json'
 
 /**
  * Drives the real raycast car on a flat Rapier ground with keyboard-style
@@ -11,6 +13,24 @@ import { VehicleController } from '../src/vehicles/VehicleController'
  */
 
 const DT = 1 / 60
+
+/** The shipped 911, resolved over the defaults exactly as the game loads it. */
+const PORSCHE_911 = resolveVehicleConfig(porsche911Json as Partial<VehicleConfig>)
+const CARS: [string, VehicleConfig][] = [
+  ['default (McLaren)', DEFAULT_VEHICLE_CONFIG],
+  ['Porsche 911', PORSCHE_911],
+]
+
+/** Body slip angle, degrees: how far the velocity points away from the nose (XZ plane). */
+function slipAngle(body: RAPIER.RigidBody): number {
+  const v = body.linvel()
+  const q = body.rotation()
+  const fx = 2 * (q.x * q.z + q.w * q.y)
+  const fz = 1 - 2 * (q.x * q.x + q.y * q.y)
+  return (Math.atan2(Math.abs(v.x * fz - v.z * fx), Math.abs(v.x * fx + v.z * fz)) * 180) / Math.PI
+}
+
+const pedals = (p: Partial<InputState>): InputState => ({ throttle: 0, brake: 0, steer: 0, handbrake: false, nitro: false, ...p })
 
 function spawnCar(cfg: VehicleConfig) {
   const world = new RAPIER.World({ x: 0, y: -9.81, z: 0 })
@@ -40,7 +60,7 @@ function spawnCar(cfg: VehicleConfig) {
     world.step()
     return body.angvel().y * (180 / Math.PI)
   }
-  return { ctrl, step }
+  return { ctrl, step, body }
 }
 
 const drive = (steer: number): InputState => ({ throttle: 1, brake: 0, steer, handbrake: false, nitro: false })
@@ -56,11 +76,11 @@ function holdTurn(cfg: VehicleConfig) {
   return { turn, release }
 }
 
-describe('handling smoothness', () => {
+describe.each(CARS)('handling smoothness: %s', (_, cfg) => {
   beforeAll(() => RAPIER.init())
 
   it('settles into a held turn without yaw wobble', () => {
-    const { turn } = holdTurn(DEFAULT_VEHICLE_CONFIG)
+    const { turn } = holdTurn(cfg)
     // After turn-in, yaw rate should decay monotonically toward a steady value.
     const settled = turn.slice(40)
     let reversals = 0
@@ -76,9 +96,13 @@ describe('handling smoothness', () => {
   })
 
   it('stops rotating soon after the steering is released', () => {
-    const { release } = holdTurn(DEFAULT_VEHICLE_CONFIG)
+    const { release } = holdTurn(cfg)
     expect(Math.abs(release[30])).toBeLessThan(2) // within 0.5 s
   })
+})
+
+describe('handling', () => {
+  beforeAll(() => RAPIER.init())
 
   it('drives forward again after reversing', () => {
     const { ctrl, step } = spawnCar(DEFAULT_VEHICLE_CONFIG)
@@ -98,5 +122,192 @@ describe('handling smoothness', () => {
     const raw = holdTurn({ ...DEFAULT_VEHICLE_CONFIG, yawStability: 0 })
     const residual = (r: number[]) => Math.abs(r[30])
     expect(residual(assisted.release)).toBeLessThan(residual(raw.release))
+  })
+
+  it('a guided drift settles at a steady angle and keeps its speed (NFS/Asphalt style)', () => {
+    const { ctrl, step, body } = spawnCar(DEFAULT_VEHICLE_CONFIG)
+    while (ctrl.forwardSpeed < 110 / 3.6) step(drive(0))
+    const slip = () => {
+      const v = body.linvel()
+      const q = body.rotation()
+      const fx = 2 * (q.x * q.z + q.w * q.y)
+      const fz = 1 - 2 * (q.x * q.x + q.y * q.y)
+      return (Math.atan2(Math.abs(v.x * fz - v.z * fx), Math.abs(v.x * fx + v.z * fz)) * 180) / Math.PI
+    }
+    // Asphalt's drift: tap the brake while turning, then hold the turn on the throttle.
+    for (let i = 0; i < 6; i++) step({ throttle: 0, brake: 0, steer: 1, handbrake: false, nitro: false })
+    for (let i = 0; i < 9; i++) step({ throttle: 0, brake: 1, steer: 1, handbrake: false, nitro: false })
+    const angles: number[] = []
+    for (let i = 0; i < 150; i++) {
+      step({ throttle: 1, brake: 0, steer: 1, handbrake: false, nitro: false })
+      if (i >= 60) angles.push(slip())
+    }
+    expect(ctrl.drift.active).toBe(true)
+    const mean = angles.reduce((a, b) => a + b, 0) / angles.length
+    expect(mean).toBeGreaterThan(25) // properly sideways…
+    expect(mean).toBeLessThan(45)
+    expect(Math.max(...angles) - Math.min(...angles)).toBeLessThan(6) // …and steady, not see-sawing
+    expect(ctrl.forwardSpeed * 3.6).toBeGreaterThan(80) // keeps its pace through the drift
+    // Straightening up ends it and the car gathers itself.
+    for (let i = 0; i < 90; i++) step(drive(0))
+    expect(ctrl.drift.active).toBe(false)
+    expect(slip()).toBeLessThan(10)
+  })
+
+  it('a gravel trap brings the car to a stop far sooner than tarmac', () => {
+    const coastDistance = (surface: Surface) => {
+      const { ctrl, step } = spawnCar(DEFAULT_VEHICLE_CONFIG)
+      while (ctrl.forwardSpeed < 100 / 3.6) step(drive(0))
+      ctrl.surfaceAt = () => surface
+      let d = 0
+      for (let i = 0; i < 60 * 8 && ctrl.forwardSpeed > 1; i++) {
+        step({ throttle: 0, brake: 0, steer: 0, handbrake: false, nitro: false })
+        d += ctrl.forwardSpeed * DT
+      }
+      return { d, speed: ctrl.forwardSpeed }
+    }
+    const sand = coastDistance(Surface.Sand)
+    const road = coastDistance(Surface.Asphalt)
+    expect(sand.speed).toBeLessThan(1) // stopped within 8 s
+    expect(sand.d).toBeLessThan(90)
+    expect(road.d).toBeGreaterThan(sand.d * 2)
+  })
+})
+
+/**
+ * The 911 Carrera 4S: rear-engined AWD. It should feel planted — no snap on
+ * power or on lift-off — yet rotate into a holdable slide on the handbrake.
+ */
+describe('Porsche 911 handling', () => {
+  beforeAll(() => RAPIER.init())
+
+  /** Most sideways the car gets over 2 s of full throttle out of a 60 km/h corner. */
+  const powerExitSlip = (cfg: VehicleConfig) => {
+    const { ctrl, step, body } = spawnCar(cfg)
+    while (ctrl.forwardSpeed < 60 / 3.6) step(pedals({ throttle: 1 }))
+    let max = 0
+    for (let i = 0; i < 120; i++) {
+      step(pedals({ throttle: 1, steer: 0.6 }))
+      max = Math.max(max, slipAngle(body))
+    }
+    return max
+  }
+
+  it('stays planted on power out of a corner', () => {
+    expect(powerExitSlip(PORSCHE_911)).toBeLessThan(8)
+  })
+
+  it('stays planted across the AWD split range (frontDriveShare 0.25–0.45)', () => {
+    for (const frontDriveShare of [0.25, 0.35, 0.45]) {
+      expect(powerExitSlip({ ...PORSCHE_911, frontDriveShare })).toBeLessThan(8)
+    }
+  })
+
+  it("doesn't snap round when lifting off mid-corner", () => {
+    const { ctrl, step, body } = spawnCar(PORSCHE_911)
+    while (ctrl.forwardSpeed < 120 / 3.6) step(pedals({ throttle: 1 }))
+    for (let i = 0; i < 60; i++) step(pedals({ throttle: 0.5, steer: 0.7 }))
+    const before = slipAngle(body)
+    let max = 0
+    for (let i = 0; i < 60; i++) {
+      step(pedals({ steer: 0.7 }))
+      max = Math.max(max, slipAngle(body))
+    }
+    expect(max - before).toBeLessThan(2)
+  })
+
+  it('drifts on the handbrake, holds it on opposite lock, then recovers', () => {
+    const { ctrl, step, body } = spawnCar(PORSCHE_911)
+    while (ctrl.forwardSpeed < 90 / 3.6) step(pedals({ throttle: 1 }))
+    for (let i = 0; i < 40; i++) step(pedals({ steer: 1, handbrake: true }))
+    expect(slipAngle(body)).toBeGreaterThan(12)
+    for (let i = 0; i < 40; i++) step(pedals({ throttle: 0.7, steer: -0.5 }))
+    // Half opposite lock shallows the drift (toward ~15°) without dropping it straight away.
+    expect(slipAngle(body)).toBeGreaterThan(10)
+    let t = 0
+    while (slipAngle(body) > 3 && t < 240) {
+      step(pedals({ throttle: 0.4 }))
+      t++
+    }
+    // Straightens up once the driver lets it. The drift now holds ~34° on opposite
+    // lock (the assist used to pull it back to ~20°), and unwinding that on full
+    // grip takes ~1.6 s of plain tire physics.
+    expect(t / 60).toBeLessThan(1.8)
+  })
+
+  /** Peak body slip (deg) over `frames` of `input` after reaching `kmh` in a straight line. */
+  const slideAfter = (kmh: number, setup: [number, Partial<InputState>][], frames: number, input: Partial<InputState>) => {
+    const { ctrl, step, body } = spawnCar(PORSCHE_911)
+    while (ctrl.forwardSpeed < kmh / 3.6) step(pedals({ throttle: 1 }))
+    for (const [n, p] of setup) for (let i = 0; i < n; i++) step(pedals(p))
+    let max = 0
+    for (let i = 0; i < frames; i++) {
+      step(pedals(input))
+      max = Math.max(max, slipAngle(body))
+    }
+    return { max, end: slipAngle(body), ctrl }
+  }
+
+  it("stays gripped on a fast full-lock turn-in: no drift unless asked for", () => {
+    const { max } = slideAfter(160, [], 90, { throttle: 1, steer: 1 })
+    expect(max).toBeLessThan(8)
+  })
+
+  it('stays gripped braking then turning in hard (keyboard: full lock)', () => {
+    const { max } = slideAfter(110, [[10, { brake: 1 }], [2, {}]], 90, { throttle: 0.8, steer: 1 })
+    expect(max).toBeLessThan(8)
+  })
+
+  it('with autoEntries on, a brake-tap entry drifts and the assist still catches a spin', () => {
+    const cfg = { ...PORSCHE_911, drift: { ...PORSCHE_911.drift, autoEntries: true } }
+    const { ctrl, step, body } = spawnCar(cfg)
+    while (ctrl.forwardSpeed < 110 / 3.6) step(pedals({ throttle: 1 }))
+    for (let i = 0; i < 10; i++) step(pedals({ brake: 1 }))
+    for (let i = 0; i < 2; i++) step(pedals({}))
+    let max = 0
+    for (let i = 0; i < 90; i++) {
+      step(pedals({ throttle: 0.8, steer: 1 }))
+      max = Math.max(max, slipAngle(body))
+    }
+    expect(max).toBeGreaterThan(12)
+    expect(max).toBeLessThan(60)
+  })
+
+  it('stays gripped turning in at the same speed without an entry', () => {
+    const { max } = slideAfter(110, [], 90, { throttle: 0.8, steer: 1 })
+    expect(max).toBeLessThan(8)
+  })
+
+  it('accelerates and brakes like the real car', () => {
+    const { ctrl, step } = spawnCar(PORSCHE_911)
+    let t = 0
+    while (ctrl.forwardSpeed < 100 / 3.6) {
+      step(pedals({ throttle: 1 }))
+      t++
+    }
+    expect(t / 60).toBeGreaterThan(3) // Carrera 4S: 0–100 km/h in 3.6 s
+    expect(t / 60).toBeLessThan(4.2)
+    let stop = 0
+    while (ctrl.forwardSpeed > 0.5) {
+      step(pedals({ brake: 1 }))
+      stop++
+    }
+    expect(stop / 60).toBeLessThan(2.8) // ~1.1 g
+  })
+
+  it('smokes the tires braking hard from high speed, not from low speed', () => {
+    /** Peak tire slide (m/s) in the first second of full braking from `kmh`. */
+    const brakeSlide = (kmh: number) => {
+      const { ctrl, step } = spawnCar(PORSCHE_911)
+      while (ctrl.forwardSpeed < kmh / 3.6) step(pedals({ throttle: 1 }))
+      let max = 0
+      for (let i = 0; i < 60; i++) {
+        step(pedals({ brake: 1 }))
+        for (const w of ctrl.wheels) max = Math.max(max, w.slide)
+      }
+      return max
+    }
+    expect(brakeSlide(200)).toBeGreaterThan(4) // TireSmoke starts at 2.5 m/s
+    expect(brakeSlide(60)).toBeLessThan(2.5)
   })
 })

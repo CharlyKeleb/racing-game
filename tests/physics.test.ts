@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { Drivetrain, torqueAt } from '../src/vehicles/Drivetrain'
 import { Suspension } from '../src/vehicles/Suspension'
-import { computeTireForces } from '../src/vehicles/TirePhysics'
+import { Surface, SURFACE_PROPS } from '../src/vehicles/Surface'
+import { computeTireForces, peakSlipAngle } from '../src/vehicles/TirePhysics'
 import { DEFAULT_VEHICLE_CONFIG as cfg } from '../src/vehicles/VehicleConfig'
 
 describe('torqueAt', () => {
@@ -83,7 +84,69 @@ describe('computeTireForces', () => {
   })
 
   it('is inert with no load', () => {
-    expect(computeTireForces({ ...base, load: 0, vLong: 10, vLat: 1 }, cfg.tires)).toEqual({ longitudinal: 0, lateral: 0, slip: 0 })
+    expect(computeTireForces({ ...base, load: 0, vLong: 10, vLat: 1 }, cfg.tires)).toEqual({ longitudinal: 0, lateral: 0, slip: 0, slide: 0 })
+  })
+})
+
+describe('tire slide (skid marks / smoke)', () => {
+  const base = { load: 3500, longitudinalForce: 0, handbrake: false, massShare: 355, dt: 1 / 60 }
+  const peak = peakSlipAngle(cfg.tires)
+
+  it('is zero in ordinary grippy cornering below the peak slip angle', () => {
+    const vLat = 30 * Math.tan(peak * 0.8)
+    const out = computeTireForces({ ...base, vLong: 30, vLat }, cfg.tires)
+    expect(out.slip).toBeGreaterThan(0.6) // working hard...
+    expect(out.slide).toBe(0) // ...but not sliding
+  })
+
+  it('grows once the tire is past the peak', () => {
+    const out = computeTireForces({ ...base, vLong: 30, vLat: 30 * Math.tan(peak * 2.5) }, cfg.tires)
+    expect(out.slide).toBeGreaterThan(5)
+  })
+
+  it('stays zero braking within the grip limit', () => {
+    const out = computeTireForces({ ...base, vLong: 55, vLat: 0, longitudinalForce: -0.8 * base.load * cfg.tires.grip }, cfg.tires)
+    expect(out.slide).toBe(0)
+  })
+
+  it('scrubs (smokes) braking past the limit at high speed, more the faster you go', () => {
+    const hard = { ...base, vLat: 0, longitudinalForce: -20000 }
+    const fast = computeTireForces({ ...hard, vLong: 55 }, cfg.tires) // ~200 km/h
+    const slow = computeTireForces({ ...hard, vLong: 14 }, cfg.tires) // ~50 km/h
+    expect(fast.slide).toBeGreaterThan(6) // well past TireSmoke's 2.5 m/s start
+    expect(slow.slide).toBeLessThan(2.5)
+    expect(fast.slide).toBeLessThan(55) // ABS: scrubbing, not a locked wheel
+  })
+
+  it('is the full skid speed with the wheel locked by the handbrake', () => {
+    const out = computeTireForces({ ...base, vLong: 20, vLat: 3, handbrake: true }, cfg.tires)
+    expect(out.slide).toBeCloseTo(Math.hypot(20, 3))
+  })
+
+  it('shows wheelspin when drive force exceeds grip', () => {
+    const out = computeTireForces({ ...base, vLong: 2, vLat: 0, longitudinalForce: 12000 }, cfg.tires)
+    expect(out.slide).toBeGreaterThan(2)
+  })
+})
+
+describe('surfaces', () => {
+  const base = { load: 3500, longitudinalForce: 0, handbrake: false, massShare: 355, dt: 1 / 60 }
+
+  it('sand has less grip than asphalt', () => {
+    const vLat = 4
+    const road = computeTireForces({ ...base, vLong: 30, vLat }, cfg.tires)
+    const sand = SURFACE_PROPS[Surface.Sand]
+    const trap = computeTireForces({ ...base, vLong: 30, vLat, surfaceGrip: sand.grip, surfaceDrag: sand.drag }, cfg.tires)
+    expect(Math.abs(trap.lateral)).toBeLessThan(Math.abs(road.lateral) * 0.6)
+  })
+
+  it('sand drags a rolling car to a stop but never pushes it backward', () => {
+    const sand = SURFACE_PROPS[Surface.Sand]
+    const rolling = computeTireForces({ ...base, vLong: 20, vLat: 0, surfaceGrip: sand.grip, surfaceDrag: sand.drag }, cfg.tires)
+    expect(rolling.longitudinal).toBeLessThan(-0.25 * base.load)
+    const creeping = computeTireForces({ ...base, vLong: 0.01, vLat: 0, surfaceGrip: sand.grip, surfaceDrag: sand.drag }, cfg.tires)
+    // Never more than it takes to stop the wheel's share of mass this tick.
+    expect(Math.abs(creeping.longitudinal)).toBeLessThanOrEqual((0.01 * base.massShare) / base.dt + 1e-9)
   })
 })
 
@@ -95,5 +158,45 @@ describe('traction control', () => {
     const raw = computeTireForces(input, { ...cfg.tires, tractionControl: false })
     expect(Math.abs(tc.lateral)).toBeGreaterThan(Math.abs(raw.lateral))
     expect(Math.hypot(tc.longitudinal, tc.lateral)).toBeLessThanOrEqual(input.load * cfg.tires.grip + 1e-6)
+  })
+})
+
+describe('Drivetrain: braking downshifts', () => {
+  const brakeRpm = cfg.engine.shiftUpRpm - 500
+  const radius = 0.36
+  const speedFor = (gear: number, rpm: number) => (rpm / ((cfg.engine.gearRatios[gear] * cfg.engine.finalDrive * 60) / (2 * Math.PI))) * radius
+
+  it('drops a gear early under braking, landing below the brake-downshift rpm', () => {
+    const d = new Drivetrain(cfg.engine)
+    d.gear = 4
+    // 4th at 4500 rpm: a coasting box would hold it (above shiftDownRpm)…
+    const v = speedFor(4, 4500)
+    d.update(v, radius, 0, 0, 1 / 60, 0)
+    expect(d.gear).toBe(4)
+    // …but on the brakes it drops to 3rd straight away, revs still in range.
+    d.update(v, radius, 0, 0, 1 / 60, 1)
+    expect(d.gear).toBe(3)
+    d.update(v, radius, 0, 0, 1 / 60, 1)
+    expect(d.rpm).toBeLessThan(brakeRpm + 1)
+  })
+
+  it('never over-revs a braking downshift and waits for the shift time between gears', () => {
+    const d = new Drivetrain(cfg.engine)
+    d.gear = 3
+    const fast = speedFor(3, 7000) // 2nd would be way past the brake-downshift point
+    d.update(fast, radius, 0, 0, 1 / 60, 1)
+    expect(d.gear).toBe(3)
+    const v = speedFor(3, 3000)
+    d.update(v, radius, 0, 0, 1 / 60, 1)
+    expect(d.gear).toBe(2)
+    d.update(v, radius, 0, 0, 1 / 60, 1) // still inside the shift time
+    expect(d.gear).toBe(2)
+  })
+
+  it('braking with the throttle held (left-foot braking) keeps the normal shift points', () => {
+    const d = new Drivetrain(cfg.engine)
+    d.gear = 4
+    d.update(speedFor(4, 4500), radius, 1, 0, 1 / 60, 1)
+    expect(d.gear).toBe(4)
   })
 })

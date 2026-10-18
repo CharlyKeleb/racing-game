@@ -78,14 +78,90 @@ both the axle centers and the computed mount points.
 *above* the wheels. Keep its bottom above the ground clearance so the box
 doesn't scrape. The wheels carry the car, not the box.
 
-## Track contract (Milestone 2)
+## Preparing a car without Blender
 
-- `Road` mesh is used as a Rapier trimesh collider. Keep it under ~50k triangles.
-- `Barrier_*` meshes become trimesh colliders.
-- `checkpoint_00…NN` empties are placed along the racing line, with +Z facing the
-  direction of travel. `checkpoint_00` is the start/finish line.
-- `spawn_00…` empties mark grid positions.
-- Visual-only meshes are named anything else.
+`scripts/cars/prepare-car.mjs` applies the same car contract with
+gltf-transform, from a per-car spec such as `scripts/cars/koenigsegg.config.mjs`:
+
+```bash
+node scripts/cars/prepare-car.mjs scripts/cars/koenigsegg.config.mjs ~/Downloads/koenigsegg_one_pro.glb
+```
+
+The script:
+1. Bakes the node transforms.
+2. Applies `rotateY` (to put the nose at +Z) and `scale`, then grounds the tyres and centres the wheelbase.
+3. Splits the four wheels out of shared tyre, rim and brake meshes. Parts are matched by node or material name. Brake parts are split per piece: round pieces centred on the axle (discs) go on the wheel, and off-centre pieces (calipers) go on `Chassis` with a `caliper` material.
+4. Splits a lights mesh into `headlight` and `taillight` materials.
+5. Renames materials for the livery (`paint`, `rim`) and fixes alpha modes.
+6. Decimates to budget and re-encodes textures as WebP.
+7. Writes `<id>.glb` and `<id>_low.glb` (meshopt).
+
+It prints the axle centres, radii, widths and bounds that `vehicle-config.json` needs.
+Wheel mounts sit at axle height plus `restLength` (0.32 m). Then add the car to
+`src/vehicles/carRegistry.ts` with its `firingPerRev`, its `stats`, and
+`selectable: true`, so it appears in the garage's ‹ › car picker.
+
+## Track contract
+
+Tracks don't need hand-authored names: `scripts/track/build-track.mjs`
+classifies meshes by **material name** with per-track regex rules, then chunks,
+simplifies and compresses them for streaming. See
+[Track streaming](TRACK_STREAMING.md) for the pipeline, the `track.json`
+manifest and how to add a track.
+
+## Engine audio
+
+Each car can ship its own recordings in `public/audio/<id>/`. Point the car's
+`audioUrl` in `carRegistry.ts` at that folder. Without it, the car falls back
+to the procedural engine.
+
+| File | What |
+|---|---|
+| `engine-bank.wav` + `.json` | Steady segments of the real engine at a few rpm, plus a pitch mark on every firing pulse (16-bit WAV, Git LFS) |
+| `ignition.mp3` | One-shot played at race start; the engine loop fades in after it |
+| `lift-off.mp3` | Exhaust burble on lifting off the throttle above ~4200 rpm |
+| `CREDITS.md` | Source and license of every recording |
+
+`GranularEngine` replays one Hann-windowed grain of the recording per firing
+pulse, spaced at the target rpm (PSOLA). That way 4–5 short real segments
+between idle and ~3000 rpm cover the whole rev range without the chipmunk
+effect of speeding up a loop.
+
+To build a bank:
+1. Find recordings with a free-to-ship license (CC0 or CC BY).
+2. Find stretches where the rpm is nearly steady: idle, or the top of a rev blip.
+3. List them in a spec, `scripts/audio/<id>.json`, with the engine's firing
+   pulses per rev (flat-six 3, V8 4). Then run
+   `python3 scripts/audio/make_engine_bank.py scripts/audio/<id>.json <wav dir> public/audio/<id>`.
+
+`tests/engineAudio.test.ts` checks that the bank plays at the requested rpm.
+
+## Garage
+
+The menu and garage screens use the NFS 2015 workshop
+(`~/Downloads/garage_nfs_2015.glb`, 11.5 MB). Rebuild it with:
+
+```bash
+npm run build:garage
+```
+
+`scripts/garage/build-garage.mjs` does the following:
+
+- Scales the model ×10 into metres.
+- Probes the whole floor with 256 rays at bonnet and camera height, so thin
+  poles count. It parks the car where a ±50° camera arc has the most room
+  (7.3 m or more), puts the origin there with the floor at y = 0, and turns the
+  room so that arc sits on the menu camera's front three-quarter angle.
+- Marks every material unlit (`KHR_materials_unlit`), because the lighting is
+  baked into the textures. The `Lights_D` glow sheet is drawn additive.
+- Writes WebP textures in two tiers: `garage_high.glb` (≤2048 px, 3.1 MB) and
+  `garage_low.glb` (≤1024 px, 1.1 MB).
+- Writes `garage.json` with wall clearance in 32 directions. The menu camera
+  pulls in, and widens its lens, before a wall or pillar could block the car.
+
+At runtime, `Showroom` lights only the car: an environment map baked from the
+room itself, a key light, two rims, a contact shadow and a warm floor pool.
+Medium and High add a radially faded floor reflection.
 
 ## Licensing
 

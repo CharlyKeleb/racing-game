@@ -15,10 +15,20 @@ const CFG: NitroConfig = {
   force: 5000,
   topSpeedBonus: 0.2,
   rampRate: 5,
+  airFillRate: 0.4,
+  driftFillRate: 0.3,
+  releaseGraceSec: 0.25,
+  perfectWindowStart: 0.8,
+  perfectWindowLength: 0.4,
+  perfectDurationSec: 1.5,
+  perfectBoost: 1.6,
+  perfectDrainScale: 1.5,
 }
 
-const drifting: NitroInput = { slip: 1, speed: 30, grounded: true, wantsBoost: false }
-const cruising: NitroInput = { slip: 0.2, speed: 30, grounded: true, wantsBoost: false }
+const drifting: NitroInput = { slip: 1, speed: 30, grounded: true, airborne: false, wantsBoost: false }
+const cruising: NitroInput = { slip: 0.2, speed: 30, grounded: true, airborne: false, wantsBoost: false }
+const flying: NitroInput = { slip: 0, speed: 30, grounded: false, airborne: true, wantsBoost: false }
+const held = (i: NitroInput): NitroInput => ({ ...i, wantsBoost: true })
 
 function run(n: Nitro, input: NitroInput, seconds: number) {
   for (let i = 0; i < Math.round(seconds / DT); i++) n.update(input, DT)
@@ -62,12 +72,14 @@ describe('Nitro', () => {
     expect(n.charge).toBe(0)
   })
 
-  it('stops when released and does not fill while boosting', () => {
+  it('stops once released past the grace period, and does not fill while boosting', () => {
     const n = new Nitro(CFG)
     n.charge = 1
     run(n, { ...drifting, wantsBoost: true }, 1)
     expect(n.charge).toBeCloseTo(1 - 1 / CFG.durationSec, 2)
-    n.update(drifting, DT)
+    run(n, drifting, CFG.releaseGraceSec - 0.05)
+    expect(n.active).toBe(true)
+    run(n, drifting, 0.1)
     expect(n.active).toBe(false)
   })
 
@@ -82,9 +94,91 @@ describe('Nitro', () => {
     expect(n.force).toBe(CFG.force)
     // Drag scaled by 1/(1+b)² lifts the drag-limited top speed by b.
     expect(1 / Math.sqrt(n.dragScale)).toBeCloseTo(1 + CFG.topSpeedBonus)
-    run(n, cruising, 1 / CFG.rampRate)
+    run(n, cruising, CFG.releaseGraceSec + 0.02 + 1 / CFG.rampRate)
     expect(n.intensity).toBe(0)
     expect(n.dragScale).toBe(1)
+  })
+
+  it('fills from drifting, even with little tire slip', () => {
+    expect(fillRate({ ...cruising, drifting: true }, CFG)).toBe(CFG.driftFillRate)
+    expect(fillRate({ ...drifting, drifting: true }, CFG)).toBe(Math.max(CFG.fillRate, CFG.driftFillRate))
+    expect(fillRate({ ...cruising, drifting: true, speed: 5 }, CFG)).toBe(0)
+  })
+
+  it('fills from airtime, but not when slow', () => {
+    expect(fillRate(flying, CFG)).toBe(CFG.airFillRate)
+    expect(fillRate({ ...flying, speed: 5 }, CFG)).toBe(0)
+    const n = new Nitro(CFG)
+    run(n, flying, 1)
+    expect(n.charge).toBeCloseTo(CFG.airFillRate, 2)
+  })
+
+  /** Holds the button from a full tank for `seconds`, then taps (release 2 ticks, press). */
+  function burnThenTap(seconds: number) {
+    const n = new Nitro(CFG)
+    n.charge = 1
+    run(n, held(cruising), seconds)
+    run(n, cruising, 2 * DT)
+    n.update(held(cruising), DT)
+    return n
+  }
+
+  it('opens a perfect window partway into the burn', () => {
+    const n = new Nitro(CFG)
+    n.charge = 1
+    run(n, held(cruising), CFG.perfectWindowStart - 0.1)
+    expect(n.windowOpen).toBe(false)
+    expect(n.windowCue).toBeGreaterThan(0.5)
+    run(n, held(cruising), 0.2)
+    expect(n.windowOpen).toBe(true)
+    run(n, held(cruising), CFG.perfectWindowLength)
+    expect(n.windowOpen).toBe(false)
+  })
+
+  it('a tap inside the window fires a stronger, hungrier perfect boost', () => {
+    const n = burnThenTap(CFG.perfectWindowStart + 0.1)
+    expect(n.active).toBe(true)
+    expect(n.perfect).toBe(true)
+    expect(n.windowOpen).toBe(false)
+    run(n, held(cruising), 0.5)
+    expect(n.intensity).toBeCloseTo(CFG.perfectBoost)
+    expect(n.force).toBeCloseTo(CFG.force * CFG.perfectBoost)
+    // Drains perfectDrainScale times faster than a normal burn.
+    const before = n.charge
+    run(n, held(cruising), 0.5)
+    expect(before - n.charge).toBeCloseTo((0.5 * CFG.perfectDrainScale) / CFG.durationSec, 2)
+    // Then falls back to a normal boost while still held.
+    run(n, held(cruising), CFG.perfectDurationSec - 1 + 0.05)
+    expect(n.perfect).toBe(false)
+    expect(n.active).toBe(true)
+    run(n, held(cruising), 1 / CFG.rampRate)
+    expect(n.intensity).toBeCloseTo(1)
+  })
+
+  it('a tap outside the window misses, and there is one try per burn', () => {
+    const early = burnThenTap(0.3)
+    expect(early.perfect).toBe(false)
+    expect(early.missed).toBe(true)
+    expect(early.active).toBe(true) // the re-tap within the grace kept the burn
+    run(early, held(cruising), CFG.perfectWindowStart)
+    expect(early.windowOpen).toBe(false)
+    run(early, cruising, 2 * DT)
+    early.update(held(cruising), DT)
+    expect(early.perfect).toBe(false)
+
+    const late = burnThenTap(CFG.perfectWindowStart + CFG.perfectWindowLength + 0.2)
+    expect(late.perfect).toBe(false)
+    expect(late.missed).toBe(true)
+  })
+
+  it('a new burn gets a fresh perfect window', () => {
+    const n = burnThenTap(0.3)
+    expect(n.missed).toBe(true)
+    run(n, cruising, CFG.releaseGraceSec + 0.1)
+    expect(n.active).toBe(false)
+    run(n, held(cruising), CFG.perfectWindowStart + 0.1)
+    expect(n.missed).toBe(false)
+    expect(n.windowOpen).toBe(true)
   })
 
   it('reset empties the tank', () => {
@@ -92,7 +186,7 @@ describe('Nitro', () => {
     n.charge = 1
     run(n, { ...cruising, wantsBoost: true }, 0.5)
     n.reset()
-    expect([n.charge, n.active, n.intensity]).toEqual([0, false, 0])
+    expect([n.charge, n.active, n.intensity, n.perfect, n.missed]).toEqual([0, false, 0, false, false])
   })
 })
 

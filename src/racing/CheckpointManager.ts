@@ -36,6 +36,12 @@ export class CheckpointManager {
     return wasFinish ? 'lap' : 'checkpoint'
   }
 
+  /** Index of the last checkpoint passed (0 = start line) — where a reset puts the car. */
+  get last(): number {
+    const n = this.checkpoints.length
+    return (this.next - 1 + n) % n
+  }
+
   /** Progress 0..1 around the lap, for minimaps and AI later. */
   get progress(): number {
     const n = this.checkpoints.length

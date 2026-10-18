@@ -1,3 +1,5 @@
+import { Help } from './Help'
+import { optionHelp } from './optionHelp'
 import type { ButtonHTMLAttributes, ReactNode } from 'react'
 import type { CarClass } from '../vehicles/CarBuild'
 
@@ -29,6 +31,17 @@ export function Panel({ title, className = '', children }: { title?: ReactNode; 
       {title && <h2 className="ui-panel__title">{title}</h2>}
       {children}
     </section>
+  )
+}
+
+/** Slanted chevron button, for stepping through options (cars, tracks). */
+export function Chevron({ dir, label, disabled, onClick }: { dir: 'left' | 'right'; label: string; disabled?: boolean; onClick(): void }) {
+  return (
+    <button className={`ui-chevron ui-chevron--${dir}`} onClick={onClick} disabled={disabled} aria-label={label}>
+      <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">
+        <path d={dir === 'left' ? 'M15 4 7 12l8 8' : 'm9 4 8 8-8 8'} fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="square" />
+      </svg>
+    </button>
   )
 }
 
@@ -107,15 +120,17 @@ export function Segmented<T extends string | number>({
   value,
   options,
   onPick,
+  help = false,
 }: {
   label: string
   value: T
   options: [T, string][]
   onPick(v: T): void
+  help?: boolean
 }) {
   return (
     <div className="ui-field">
-      <span className="ui-field__label">{label}</span>
+      <span className="ui-field__label">{label}{help && optionHelp[label] && <Help label={label}>{optionHelp[label]}</Help>}</span>
       <div className="ui-segmented" role="radiogroup" aria-label={label}>
         {options.map(([v, text]) => (
           <button

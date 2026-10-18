@@ -1,5 +1,9 @@
 import * as THREE from 'three'
 import type { CameraMode } from '../stores/gameStore'
+import type { VehicleMotion } from '../vehicles/Vehicle'
+
+/** Race camera near plane (m). The showroom pushes it out; update() restores it. */
+const NEAR = 0.1
 
 const _desired = new THREE.Vector3()
 const _look = new THREE.Vector3()
@@ -7,6 +11,7 @@ const _fwd = new THREE.Vector3()
 const _side = new THREE.Vector3()
 const _focus = new THREE.Vector3()
 const _shake = new THREE.Vector3()
+const _vdir = new THREE.Vector3()
 
 /** Where the showroom camera looks and from how far; see ChaseCamera.showroom. */
 export interface ShowroomFraming {
@@ -32,20 +37,51 @@ export class ChaseCamera {
   mode: CameraMode = 'chase'
   private readonly camera: THREE.PerspectiveCamera
   private readonly lookTarget = new THREE.Vector3()
-  /** Chase position before shake, so the shake never feeds back into the smoothing. */
-  private readonly chasePos = new THREE.Vector3()
+  /**
+   * Camera and aim point relative to the car, smoothed. Smoothing the offset
+   * (not the world position) keeps the camera from trailing further behind
+   * the faster the car goes, while turns and bumps still swing it softly.
+   */
+  private readonly chaseOffset = new THREE.Vector3()
+  private readonly lookOffset = new THREE.Vector3()
   private initialised = false
 
-  distance = 6.5
-  height = 2.1
-  baseFov = 60
+  /**
+   * Framed like Need for Speed (2015): low and close, the car's rear filling
+   * the lower middle of the screen with the horizon just above its roof.
+   * Distance is from the car's centre, so ~2.4 m behind the bumper.
+   */
+  distance = 5.0
+  height = 1.5
+  /**
+   * Extra chase distance at top speed, meters. Zero: the car stays big on
+   * screen at any speed, and the FOV widening sells the speed instead.
+   */
+  speedPullBack = 0
+  /** Aim point: this far ahead of the car's centre and this high, so the camera looks down the road, not at the roof. */
+  lookAhead = 9
+  lookHeight = 0.7
+  baseFov = 58
   maxFovBoost = 18
+  /**
+   * Weight you can feel: meters the camera drops back per m/s² of
+   * acceleration (the car surges away) or closes in under braking (the car
+   * dives toward the lens), and its limits.
+   */
+  surge = 0.05
+  maxSurgeBack = 0.6
+  maxSurgeIn = 0.35
+  /** Camera bank into a corner, radians per m/s² of lateral acceleration, and its limit. */
+  bank = 0.0022
+  maxBank = 0.035
+  /** In a slide the camera swings toward the direction of travel by up to this share, so you see the car sideways. */
+  driftFraming = 0.55
   /** Extra degrees of FOV at full nitro. */
-  nitroFovKick = 14
+  nitroFovKick = 9
   /** Extra chase distance at full nitro, meters (the car surges away from the lens). */
-  nitroPullBack = 1.4
+  nitroPullBack = 0.7
   /** Camera shake amplitude at top speed and at full nitro, meters. */
-  speedShake = 0.025
+  speedShake = 0.03
   nitroShake = 0.05
 
   private time = 0
@@ -57,10 +93,18 @@ export class ChaseCamera {
     this.camera = camera
   }
 
-  /** @param boost nitro intensity, 0..1. */
-  update(target: THREE.Object3D, speedKmh: number, dt: number, boost = 0): void {
+  /**
+   * @param boost nitro intensity: 0..1, up to ~1.6 in a perfect boost (capped at 1.3 here).
+   * @param motion the car's smoothed acceleration and velocity, for surge, bank and drift framing.
+   */
+  update(target: THREE.Object3D, speedKmh: number, dt: number, boost = 0, motion?: VehicleMotion, gridFraming = 0): void {
+    if (this.camera.near !== NEAR) {
+      this.camera.near = NEAR
+      this.camera.updateProjectionMatrix()
+    }
     const speedT = Math.min(speedKmh / 300, 1)
     this.time += dt
+    boost = Math.min(boost, 1.3)
     this.kick += (boost - this.kick) * damp(boost > this.kick ? 10 : 2.5, dt)
     _fwd.set(0, 0, 1).applyQuaternion(target.quaternion)
 
@@ -73,7 +117,7 @@ export class ChaseCamera {
       0,
     )
 
-    if (this.mode === 'cockpit') {
+    if (this.mode === 'cockpit' && gridFraming === 0) {
       _desired.set(0.35, 1.05, 0.1).applyQuaternion(target.quaternion).add(target.position)
       this.camera.position.copy(_desired)
       _look.copy(_desired).addScaledVector(_fwd, 10)
@@ -84,28 +128,46 @@ export class ChaseCamera {
       // Flatten forward so pitching over bumps doesn't swing the camera.
       _fwd.y = 0
       _fwd.normalize()
-      const dist = this.distance + speedT * 1.8 + this.kick * this.nitroPullBack
+      let surge = 0
+      if (motion) {
+        surge = THREE.MathUtils.clamp(motion.accelLong * this.surge, -this.maxSurgeIn, this.maxSurgeBack)
+        // Sliding: swing the chase direction toward where the car is actually going.
+        _vdir.set(motion.velocity.x, 0, motion.velocity.z)
+        const v = _vdir.length()
+        if (v > 5) {
+          _vdir.divideScalar(v)
+          const slip = Math.acos(THREE.MathUtils.clamp(_vdir.dot(_fwd), -1, 1))
+          const t = Math.min(1, slip / 0.6) * this.driftFraming
+          if (t > 0 && _vdir.dot(_fwd) > 0) _fwd.lerp(_vdir, t).normalize()
+        }
+      }
+      const dist = this.distance + gridFraming * 2.5 + speedT * this.speedPullBack + this.kick * this.nitroPullBack + surge
       _desired.copy(target.position).addScaledVector(_fwd, -dist)
-      _desired.y += this.height - this.kick * 0.25
-      _look.copy(target.position).addScaledVector(_fwd, 3)
-      _look.y += 0.8
+      _desired.y += this.height + gridFraming * 1.1 - this.kick * 0.15
+      _look.copy(target.position).addScaledVector(_fwd, this.lookAhead + gridFraming * 3)
+      _look.y += this.lookHeight
 
+      _desired.sub(target.position)
+      _look.sub(target.position)
       if (!this.initialised) {
-        this.chasePos.copy(_desired)
-        this.lookTarget.copy(_look)
+        this.chaseOffset.copy(_desired)
+        this.lookOffset.copy(_look)
         this.initialised = true
       }
-      this.chasePos.lerp(_desired, damp(6, dt))
-      this.camera.position.copy(this.chasePos)
-      this.lookTarget.lerp(_look, damp(12, dt))
+      this.chaseOffset.lerp(_desired, damp(6, dt))
+      this.lookOffset.lerp(_look, damp(12, dt))
+      this.camera.position.copy(target.position).add(this.chaseOffset)
+      this.lookTarget.copy(target.position).add(this.lookOffset)
       this.camera.lookAt(this.lookTarget)
       // Shake in camera space after aiming, so it jitters the view, not the chase.
       this.camera.translateX(_shake.x)
       this.camera.translateY(_shake.y)
+      // Bank into the corner a little, like a head leaning with the g-force.
+      if (motion) this.camera.rotateZ(THREE.MathUtils.clamp(motion.accelLat * this.bank, -this.maxBank, this.maxBank))
     }
 
     // Kick is already smoothed, so it is added directly: fast in, slow out.
-    const fov = this.baseFov + this.maxFovBoost * speedT * speedT
+    const fov = this.baseFov + gridFraming * 4 + this.maxFovBoost * speedT * speedT
     const speedFov = THREE.MathUtils.lerp(this.camera.fov - this.appliedKick, fov, damp(4, dt))
     this.appliedKick = this.nitroFovKick * this.kick
     const next = speedFov + this.appliedKick
@@ -134,16 +196,33 @@ export class ChaseCamera {
     this.camera.position.lerp(_desired, k)
     this.lookTarget.lerp(_look, k)
     this.camera.lookAt(this.lookTarget)
+    // Clip away anything hugging the lens (pillars, shelving the orbit passes
+    // beside); the subject is always further than this.
+    const near = THREE.MathUtils.clamp(framing.distance - 2.2, NEAR, 1.6)
+    let dirty = Math.abs(this.camera.near - near) > 0.01
+    if (dirty) this.camera.near = near
     if (Math.abs(this.camera.fov - framing.fov) > 0.01) {
       this.camera.fov = THREE.MathUtils.lerp(this.camera.fov, framing.fov, damp(4, dt))
-      this.camera.updateProjectionMatrix()
+      dirty = true
     }
+    if (dirty) this.camera.updateProjectionMatrix()
     // Hand back to the chase cam without a swoop from the turntable.
     this.initialised = false
     this.kick = this.appliedKick = 0
   }
 
+  /** Move the garage between track origins without changing the view relative to the car. */
+  relocateShowroom(from: THREE.Object3D, to: THREE.Object3D): void {
+    from.updateMatrix()
+    to.updateMatrix()
+    const transform = to.matrix.clone().multiply(from.matrix.clone().invert())
+    this.camera.position.applyMatrix4(transform)
+    this.lookTarget.applyMatrix4(transform)
+    this.camera.lookAt(this.lookTarget)
+  }
+
   snap(): void {
+    this.kick = this.appliedKick = 0
     this.initialised = false
   }
 }

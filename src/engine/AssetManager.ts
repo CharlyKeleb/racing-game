@@ -2,6 +2,16 @@ import * as THREE from 'three'
 import { GLTFLoader, type GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js'
 
+// Decode meshopt buffers on worker threads so streamed track chunks don't
+// stall the main thread mid-race.
+let workersStarted = false
+function startDecoderWorkers(): void {
+  if (workersStarted || typeof Worker === 'undefined') return
+  workersStarted = true
+  // oxlint-disable-next-line react-hooks/rules-of-hooks -- a meshopt API, not a React hook
+  MeshoptDecoder.useWorkers(Math.min(2, Math.max(1, (navigator.hardwareConcurrency ?? 2) - 1)))
+}
+
 /**
  * Caches and loads runtime assets. GLBs are expected to come out of the
  * Blender MCP pipeline (docs/ASSET_PIPELINE.md), optionally meshopt-compressed
@@ -14,6 +24,12 @@ export class AssetManager {
   constructor() {
     this.gltfLoader = new GLTFLoader()
     this.gltfLoader.setMeshoptDecoder(MeshoptDecoder)
+    startDecoderWorkers()
+  }
+
+  /** Uncached load, for streamed content the caller owns and disposes. */
+  loadGltf(url: string): Promise<GLTF> {
+    return this.gltfLoader.loadAsync(url)
   }
 
   /** Returns a fresh clone so callers can mutate their copy freely. */
@@ -34,6 +50,17 @@ export class AssetManager {
       const res = await fetch(url)
       if (!res.ok || !res.headers.get('content-type')?.includes('json')) return null
       return (await res.json()) as T
+    } catch {
+      return null
+    }
+  }
+
+  /** Raw bytes, or null when missing. */
+  async loadBinary(url: string): Promise<Uint8Array | null> {
+    try {
+      const res = await fetch(url)
+      if (!res.ok || res.headers.get('content-type')?.includes('text/html')) return null
+      return new Uint8Array(await res.arrayBuffer())
     } catch {
       return null
     }

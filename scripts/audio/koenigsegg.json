@@ -1,0 +1,27 @@
+{
+  "comment": "Koenigsegg Regera onboard acceleration at Goodwood 2018, by Mr JWW (CC BY 3.0), used with approval as the One:1 stand-in. Source: https://commons.wikimedia.org/wiki/File:Regera_Goodwood_2018.ogg . Convert the original to 44100 Hz mono PCM16 as regera.wav. RPMs are pitch estimates, not measured telemetry; idle and upper revs are pitch-shifted from the available acceleration layers.",
+  "firingPerRev": 4,
+  "segments": [
+    [
+      "low",
+      "regera.wav",
+      0.6,
+      0.88,
+      1800
+    ],
+    [
+      "mid",
+      "regera.wav",
+      1.2,
+      1.65,
+      2050
+    ],
+    [
+      "high",
+      "regera.wav",
+      1.75,
+      2.05,
+      2100
+    ]
+  ]
+}
