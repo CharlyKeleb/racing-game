@@ -44,6 +44,8 @@ const _vh = new THREE.Vector3()
 const _fh = new THREE.Vector3()
 const _cross = new THREE.Vector3()
 const _carve = new THREE.Vector3()
+/** Extra yaw the stability assist allows at full brake, as a share of the grip limit. */
+const TRAIL_BRAKE_ROTATION = 0.35
 /** Body slip angle (rad) above which a countersteered slide counts as a drift. */
 const DRIFT_MIN_ANGLE = 0.1
 const _ray = new RAPIER.Ray({ x: 0, y: 0, z: 0 }, { x: 0, y: -1, z: 0 })
@@ -333,7 +335,8 @@ export class VehicleController {
 
   /**
    * ESC-style yaw trim. The bicycle model gives the yaw rate the steering asks
-   * for (v·tanδ/L), capped by what the tires can hold (μg/v). Rotation beyond
+   * for (v·tanδ/L), capped by what the tires can hold (μg/v, with extra room
+   * on the brakes for trail-brake rotation). Rotation beyond
    * that, or against it, is damped back; understeer is left alone.
    *
    * Drifts: once the car is travelling sideways and the driver countersteers,
@@ -347,7 +350,12 @@ export class VehicleController {
     if (rate <= 0 || handbrake || speed < 3) return
     const yaw = this.body.angvel()
     const yawRate = yaw.x * _up.x + yaw.y * _up.y + yaw.z * _up.z
-    const gripLimit = (cfg.tires.grip * 9.81 * 1.15) / speed
+    // The 15% headroom over tire grip also covers what downforce adds (≤ ~12% at 200 km/h
+    // on the shipped cars). Don't scale this with downforce: the cap is what catches the
+    // turn-in yaw overshoot, and raising it lets a held turn wobble (see handling tests).
+    // Braking into a corner rotates a real car (weight shifts onto the nose), so let it
+    // turn in tighter on the brakes instead of trimming that rotation away.
+    const gripLimit = (cfg.tires.grip * 9.81 * (1.15 + TRAIL_BRAKE_ROTATION * this.brake)) / speed
     const wanted = (this.forwardSpeed * Math.tan(this.steerAngle)) / this.wheelbase
     const target = Math.max(-gripLimit, Math.min(gripLimit, wanted))
     const excess = yawRate - Math.max(Math.min(0, target), Math.min(Math.max(0, target), yawRate))

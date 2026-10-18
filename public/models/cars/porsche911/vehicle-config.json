@@ -32,18 +32,19 @@
   "frontDriveShare": 0.35,
   "exhausts": [[0.475, 0.26, -2.215], [-0.475, 0.26, -2.215]],
   "tires": {
-    "grip": 1.2,
+    "grip": 1.7,
     "corneringStiffness": 10,
     "shape": 1.75,
     "handbrakeGripScale": 0.4,
     "rollingResistance": 0.013,
     "tractionControl": true
   },
+  "brakeForce": 31000,
   "steerFalloffSpeed": 10,
   "yawStability": 7,
   "driftAssist": 0.22,
   "maxDriftAngle": 0.6,
   "dragCoefficient": 0.37,
-  "downforceCoefficient": 0.06,
+  "downforceCoefficient": 0.55,
   "downforceFrontShare": 0.35
 }
