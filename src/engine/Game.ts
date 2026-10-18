@@ -937,7 +937,8 @@ export class Game {
   // ── Loop ───────────────────────────────────────────────────────────────
 
   private fixedUpdate(dt: number): void {
-    this.input.poll()
+    const inputPhase = gameStore.getState().phase
+    this.input.poll(['menu', 'garage', 'paused', 'finished', 'loading', 'boot'].includes(inputPhase))
     if (this.input.consume('pause')) this.togglePause()
     // Camera toggle (C / gamepad Y / touch button) only while driving: a stray
     // key press in a menu used to flip every later race into the cockpit view.

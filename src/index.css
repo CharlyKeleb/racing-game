@@ -918,3 +918,6 @@ button.menu-track:hover,button.menu-track:focus-visible { border-color:var(--acc
 .drift-setup-summary{display:grid;gap:6px;padding:14px 16px;background:#19c3ff08;border-left:2px solid var(--accent-2);margin:4px 0 22px}.drift-setup-summary strong{font-family:var(--font-display);font-size:22px;font-weight:900;font-style:normal;text-transform:uppercase;letter-spacing:.03em}.drift-setup-summary span{font-size:11px;color:var(--accent)}.drift-setup-summary small{font-size:12px;line-height:1.5;color:var(--muted)}
 
 .track-select__list:focus-visible { outline:2px solid var(--accent-2); outline-offset:-3px; }
+
+/* Programmatic controller focus needs the same visible cue as keyboard focus. */
+.controller-input .overlay :focus { outline: 3px solid var(--yellow, #ffe14a); outline-offset: 4px; }

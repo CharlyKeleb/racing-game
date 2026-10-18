@@ -1,3 +1,4 @@
+import { ControllerNavigation } from './ui/ControllerNavigation'
 import { useEffect, useRef, useState } from 'react'
 import { Game } from './engine/Game'
 import { gameStore } from './stores/gameStore'
@@ -34,6 +35,7 @@ export default function App() {
 
   return (
     <GameContext.Provider value={game}>
+      <ControllerNavigation phase={phase} />
       <div className="viewport" ref={containerRef} />
       <div className={touch ? "overlay overlay--touch" : "overlay"}>
         {error && (

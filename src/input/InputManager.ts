@@ -1,3 +1,5 @@
+import { PAD, readGamepad, stick } from './gamepad'
+
 /**
  * Merges keyboard and gamepad into one device-agnostic InputState.
  * Gameplay code only ever reads InputState — never raw devices — so touch
@@ -27,15 +29,13 @@ const KEY_ACTIONS: Record<string, InputAction> = {
   KeyC: 'camera',
 }
 
-const GAMEPAD_DEADZONE = 0.12
-/** Standard mapping button indices. */
-const PAD = { A: 0, B: 1, X: 2, Y: 3, RB: 5, LT: 6, RT: 7, START: 9 } as const
-
 export class InputManager {
   readonly state: InputState = { throttle: 0, brake: 0, steer: 0, handbrake: false, nitro: false }
   private readonly keys = new Set<string>()
   private readonly pending = new Set<InputAction>()
   private readonly prevPadButtons: boolean[] = []
+  private padIdentity = ''
+  private focused = true
   /** On-screen touch controls, merged with keyboard and gamepad every poll. */
   private readonly touch: InputState = { throttle: 0, brake: 0, steer: 0, handbrake: false, nitro: false }
 
@@ -43,10 +43,12 @@ export class InputManager {
     window.addEventListener('keydown', this.onKeyDown)
     window.addEventListener('keyup', this.onKeyUp)
     window.addEventListener('blur', this.onBlur)
+    window.addEventListener('focus', this.onFocus)
   }
 
   /** Call once per fixed tick before gameplay reads `state`. */
-  poll(): void {
+  poll(menu = false): void {
+    if (!this.focused) return
     const k = this.keys
     let throttle = k.has('KeyW') || k.has('ArrowUp') ? 1 : 0
     let brake = k.has('KeyS') || k.has('ArrowDown') ? 1 : 0
@@ -54,18 +56,25 @@ export class InputManager {
     let handbrake = k.has('Space')
     let nitro = k.has('ShiftLeft') || k.has('ShiftRight')
 
-    const pad = navigator.getGamepads?.().find((p) => p?.connected)
+    const pad = readGamepad()
+    const identity = pad ? `${pad.index}:${pad.id}` : ''
+    if (identity !== this.padIdentity) {
+      this.padIdentity = identity
+      // A held action on connection must be released before it can fire.
+      this.prevPadButtons.length = 0
+      pad?.buttons.forEach((button, i) => { this.prevPadButtons[i] = button.pressed })
+    }
     if (pad) {
-      const axis = pad.axes[0] ?? 0
-      if (Math.abs(axis) > GAMEPAD_DEADZONE) steer = axis
+      const axis = stick(pad.axes[0])
+      if (axis !== 0) steer = axis
       throttle = Math.max(throttle, pad.buttons[PAD.RT]?.value ?? 0)
       brake = Math.max(brake, pad.buttons[PAD.LT]?.value ?? 0)
       handbrake ||= !!pad.buttons[PAD.A]?.pressed
       nitro ||= !!pad.buttons[PAD.X]?.pressed || !!pad.buttons[PAD.RB]?.pressed
-      this.edge(pad, PAD.A, 'skip')
+      this.edge(pad, PAD.A, 'skip', !menu)
       this.edge(pad, PAD.START, 'pause')
-      this.edge(pad, PAD.Y, 'camera')
-      this.edge(pad, PAD.B, 'reset')
+      this.edge(pad, PAD.Y, 'camera', !menu)
+      this.edge(pad, PAD.B, 'reset', !menu)
     }
 
     const t = this.touch
@@ -97,9 +106,9 @@ export class InputManager {
     return this.pending.delete(action)
   }
 
-  private edge(pad: Gamepad, index: number, action: InputAction): void {
+  private edge(pad: Gamepad, index: number, action: InputAction, enabled = true): void {
     const pressed = !!pad.buttons[index]?.pressed
-    if (pressed && !this.prevPadButtons[index]) this.pending.add(action)
+    if (enabled && pressed && !this.prevPadButtons[index]) this.pending.add(action)
     this.prevPadButtons[index] = pressed
   }
 
@@ -116,13 +125,22 @@ export class InputManager {
   }
 
   private onBlur = (): void => {
+    this.focused = false
     this.keys.clear()
+    this.pending.clear()
+    Object.assign(this.state, { throttle: 0, brake: 0, steer: 0, handbrake: false, nitro: false })
     Object.assign(this.touch, { throttle: 0, brake: 0, steer: 0, handbrake: false, nitro: false })
+  }
+
+  private onFocus = (): void => {
+    this.focused = true
+    this.padIdentity = ''
   }
 
   dispose(): void {
     window.removeEventListener('keydown', this.onKeyDown)
     window.removeEventListener('keyup', this.onKeyUp)
     window.removeEventListener('blur', this.onBlur)
+    window.removeEventListener('focus', this.onFocus)
   }
 }

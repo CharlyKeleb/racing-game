@@ -31,7 +31,13 @@ On phones and tablets, on-screen touch controls appear: drag to steer on the
 left; Gas, Brake, N₂O and Drift are on the right.
 
 Gamepads are supported: RT throttle, LT brake, left stick steer, A handbrake,
-Y camera, B reset and Start pause.
+X or RB nitro, Y camera, B reset and Start pause/resume. PlayStation equivalents
+are R2/L2, left stick, Cross, Square or R1, Triangle, Circle and Options.
+Use the D-pad or left stick to move through menus, A/Cross to select, and
+B/Circle to go back. Left/right adjusts a focused volume slider. Connect by
+USB or Bluetooth and press a button while the game is focused; Settings →
+Controls shows connection status and bindings. Requires a controller exposed
+by the browser with the standard Gamepad API mapping.
 
 Until `public/models/cars/mclaren/mclaren.glb` exists, the game drives a
 placeholder car with the same node names and physics.
