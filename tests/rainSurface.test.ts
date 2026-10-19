@@ -1,3 +1,6 @@
+import { splashHeight, SPLASH_GRAVITY } from '../src/effects/RainImpactPhysics'
+import { sampleCarRain, CarRain } from '../src/effects/CarRain'
+import type { CarModel } from '../src/vehicles/CarModel'
 import * as THREE from 'three'
 import { describe, expect, it } from 'vitest'
 import { RainSurface } from '../src/effects/RainSurface'
@@ -83,4 +86,48 @@ it('keeps weather changes off props and restores owned road shader hooks on disp
   wet.dispose()
   expect(road.onBeforeCompile).toBe(roadHook)
   field.dispose()
+})
+
+
+it('anchors car splashes to actual upper body geometry in body-local coordinates', () => {
+  const root = new THREE.Group(), body = new THREE.Group()
+  root.add(body)
+  const material = new THREE.MeshPhysicalMaterial({ name: 'livery_paint', roughness: .7, clearcoat: 0 })
+  const chassis = new THREE.Mesh(new THREE.BoxGeometry(2, 1, 4), material)
+  chassis.position.y = .5; body.add(chassis)
+  root.position.set(20, 5, -12); root.rotation.y = .7
+  const model = { root, body, wheels: {} } as CarModel
+  const anchors = sampleCarRain(model, 40)
+  expect(anchors.positions.length).toBeGreaterThan(60)
+  for (let i = 0; i < anchors.positions.length; i += 3) {
+    expect(anchors.positions[i + 1]).toBeCloseTo(1)
+    expect(anchors.normals[i + 1]).toBeCloseTo(1)
+  }
+  const field = new RainSurface(), rain = new CarRain(model, field.uniforms)
+  rain.update(model, 1)
+  expect(material.roughness).toBe(.18)
+  expect(material.clearcoat).toBe(1)
+  expect(rain.impacts.mesh.visible).toBe(true)
+  // Changing the transform does not re-sample or upload the anchors.
+  const attribute = rain.impacts.mesh.geometry.getAttribute('aAnchor')
+  root.position.x += 100
+  rain.update(model, 1)
+  expect(rain.impacts.mesh.geometry.getAttribute('aAnchor')).toBe(attribute)
+  rain.update(model, 0)
+  expect(material.roughness).toBe(.7)
+  expect(material.clearcoat).toBe(0)
+  expect(rain.impacts.mesh.visible).toBe(false)
+  rain.dispose(); field.dispose()
+})
+
+
+it('splash droplets rise, fall under gravity and land at the expected flight time', () => {
+  const launch = 1.4
+  const apex = launch / SPLASH_GRAVITY
+  const landing = 2 * launch / SPLASH_GRAVITY
+  expect(splashHeight(launch, 0)).toBe(0)
+  expect(splashHeight(launch, apex)).toBeCloseTo(launch * launch / (2 * SPLASH_GRAVITY))
+  expect(splashHeight(launch, apex * 1.5)).toBeLessThan(splashHeight(launch, apex))
+  expect(splashHeight(launch, landing)).toBeCloseTo(0)
+  expect(splashHeight(launch, landing + .01)).toBeLessThan(0)
 })

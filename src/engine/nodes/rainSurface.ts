@@ -1,6 +1,8 @@
+import { SPLASH_GRAVITY, SPLASH_LIFT_MIN, SPLASH_LIFT_RANGE, SPLASH_AIR_DRAG } from '../../effects/RainImpactPhysics'
+import type { CarRainAnchors } from '../../effects/CarRain'
 import * as THREE from 'three/webgpu'
 import {
-  abs, attribute, cameraPosition, cameraViewMatrix, cos, cross, float, floor, fract, length, max, min, mix, mod, normalMap, normalView,
+  abs, attribute, cameraPosition, cameraViewMatrix, cameraWorldMatrix, cos, exp, cross, float, floor, fract, length, max, min, mix, mod, normalMap, normalView,
   normalize, positionGeometry, positionWorld, reference, sin, smoothstep, step, texture, uniform, uv, varying, vec2, vec3, vec4,
 } from 'three/tsl'
 import type { RainSurfaceUniforms } from '../../effects/RainSurface'
@@ -24,7 +26,7 @@ export function rainClearance(surface: RainSurfaceUniforms, world: THREE.Node<'v
   return mix(float(100), world.y.sub(surfaceHeight(surface, world.xz)), ready)
 }
 
-export function rainImpactMaterial(surface: RainSurfaceUniforms) {
+export function rainImpactMaterial(surface: RainSurfaceUniforms, anchors?: CarRainAnchors) {
   const material = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false, side: THREE.DoubleSide })
   const seed = attribute('aSeed', 'vec4')
   const bounds = uniform(surface.uRainBounds.value)
@@ -32,26 +34,41 @@ export function rainImpactMaterial(surface: RainSurfaceUniforms) {
   const wet = reference('value', 'float', surface.uRainWet)
   const ready = reference('value', 'float', surface.uRainReady)
   const xz = bounds.xz.add(mod(seed.xy.mul(32).sub(bounds.xz).add(16), 32)).sub(16)
-  const age = fract(time.mul(seed.w.add(1.4)).add(seed.z))
+  const period = anchors ? seed.w.mul(.15).add(.42) : seed.w.mul(.3).add(.55)
   const h = surfaceHeight(surface, xz)
-  const normal = normalize(vec3(
+  const groundNormal = normalize(vec3(
     surfaceHeight(surface, xz.sub(vec2(.22, 0))).sub(surfaceHeight(surface, xz.add(vec2(.22, 0)))),
     .44,
     surfaceHeight(surface, xz.sub(vec2(0, .22))).sub(surfaceHeight(surface, xz.add(vec2(0, .22)))),
   ))
-  const center = vec3(xz.x, h, xz.y)
-  const toCamera = cameraPosition.sub(center)
-  const tangent = normalize(cross(normal, normalize(toCamera).add(vec3(.001, 0, 0))))
-  const width = age.mul(.18).add(.05)
-  const height = sin(age.mul(Math.PI)).mul(.07).add(.025)
-  material.positionNode = center.add(normal.mul(.012)).add(tangent.mul(positionGeometry.x).mul(width)).add(normal.mul(positionGeometry.y.add(.5)).mul(height))
-  const fade = varying(float(1).sub(age).pow(2).mul(wet).mul(ready).mul(smoothstep(.2, 1, normal.y))
-    .mul(float(1).sub(smoothstep(9, 18, length(toCamera)))), 'vImpactFade')
-  const p = uv()
-  const x = abs(p.x.sub(.5)).mul(2)
-  const crown = abs(sin(p.x.mul(15.708))).pow(3).mul(.65).add(.18)
-  material.colorNode = vec3(.55, .61, .64)
-  material.opacityNode = float(1).sub(smoothstep(.04, .16, abs(p.y.sub(crown)))).mul(float(1).sub(x.mul(x))).mul(fade).mul(.32)
+  const center = anchors ? uniform(anchors.matrix.value).mul(vec4(attribute('aAnchor', 'vec3'), 1)).xyz : vec3(xz.x, h, xz.y)
+  const normal = anchors ? normalize(uniform(anchors.matrix.value).mul(vec4(attribute('aImpactNormal', 'vec3'), 0)).xyz) : groundNormal
+  const clock = time.div(period).add(seed.z)
+  const seconds = fract(clock).mul(period)
+  const cycle = floor(clock)
+  const random = fract(sin(cycle.mul(19.13).add(seed.w.mul(711.7))).mul(43758.5453))
+  const angle = random.mul(Math.PI * 2)
+  const tangent = normalize(cross(normal, vec3(0, 0, 1)))
+  const radial = tangent.mul(cos(angle)).add(cross(normal, tangent).mul(sin(angle)))
+  const lift = seed.w.mul(SPLASH_LIFT_RANGE).add(SPLASH_LIFT_MIN)
+  const launch = normal.mul(lift).add(radial.mul(random.mul(.7).add(.25)))
+  let displacement = launch.mul(seconds).add(vec3(0, seconds.mul(seconds).mul(-SPLASH_GRAVITY * .5), 0))
+  if (anchors) {
+    const dragTime = float(1).sub(exp(seconds.mul(-SPLASH_AIR_DRAG))).div(SPLASH_AIR_DRAG).sub(seconds)
+    displacement = displacement.add(uniform(anchors.velocity.value).mul(dragTime))
+  }
+  const world = center.add(normal.mul(.006)).add(displacement)
+  const diameter = seed.w.mul(.008).add(.008)
+  material.positionNode = world.add(cameraWorldMatrix.mul(vec4(positionGeometry.xy.mul(diameter), 0, 0)).xyz)
+  const above = displacement.dot(normal)
+  let opacity = step(.001, above).mul(wet).mul(ready).mul(smoothstep(.2, 1, normal.y))
+    .mul(float(1).sub(smoothstep(10, 22, length(cameraPosition.sub(world)))))
+  if (anchors) opacity = opacity.mul(step(surfaceHeight(surface, center.xz).sub(.18), center.y.add(.05)))
+  else opacity = opacity.mul(step(surfaceHeight(surface, world.xz).add(.005), world.y))
+  const fade = varying(opacity, 'vImpactFade')
+  const p = uv().sub(.5).mul(2)
+  material.colorNode = vec3(.78, .84, .88)
+  material.opacityNode = float(1).sub(smoothstep(.25, 1, length(p))).mul(fade).mul(.75)
   material.alphaTest = .005
   return material
 }

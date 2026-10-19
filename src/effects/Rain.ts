@@ -4,7 +4,7 @@ import { backend } from '../engine/backend'
 import type { QualityPreset } from '../stores/gameStore'
 
 /** Streaks drawn per preset (the box around the camera is the same; density changes). */
-export const RAIN_STREAKS: Record<QualityPreset, number> = { low: 2200, medium: 4600, high: 7600 }
+export const RAIN_STREAKS: Record<QualityPreset, number> = { low: 3000, medium: 7000, high: 11000 }
 const MAX_STREAKS = RAIN_STREAKS.high
 /** The box of rain that travels with the camera, metres (x, y, z). */
 export const RAIN_BOX = new THREE.Vector3(44, 24, 44)
@@ -13,7 +13,7 @@ export const RAIN_FALL = new THREE.Vector3(1.2, -9.5, 0.6)
 /** Streak length per m/s of apparent speed: a short photographic exposure. */
 export const RAIN_EXPOSURE = 0.01
 /** Streak width, metres. */
-export const RAIN_WIDTH = 0.0018
+export const RAIN_WIDTH = 0.0032
 
 const vertexShader = /* glsl */ `
   varying float vRainClearance;
@@ -41,15 +41,15 @@ const vertexShader = /* glsl */ `
     float exposure = ${RAIN_EXPOSURE.toFixed(4)} * (0.55 + aSeed.w * 0.7);
     vec3 along = motion / speed * min(speed * exposure, 0.65);
     vec3 mid = drop + along * position.y;
-    vec3 crossAxis = cross(along, mid - cameraPosition);
+    vec3 crossAxis = cross(mid - cameraPosition, along);
     vec3 side = crossAxis / max(length(crossAxis), 0.00001);
     // Subpixel distant drops use a wider, fainter footprint to avoid shimmer.
-    float width = max(${RAIN_WIDTH.toFixed(4)} * (0.65 + aSeed.w * 0.7), dist * 0.00012);
+    float width = max(${RAIN_WIDTH.toFixed(4)} * (0.65 + aSeed.w * 0.7), dist * 0.00018);
     vec3 world = mid + side * width * position.x * 2.0;
     float nearFade = smoothstep(0.8, 2.5, dist);
     float farFade = 1.0 - smoothstep(12.0, 22.0, dist);
-    vAlpha = nearFade * farFade * (0.07 + 0.15 * aSeed.w) * min(1.0, 0.002 / width);
-    vBrightness = 0.55 + 0.25 * aSeed.y;
+    vAlpha = nearFade * farFade * (0.16 + 0.3 * aSeed.w) * min(1.0, 0.0032 / width);
+    vBrightness = 0.75 + 0.25 * aSeed.y;
     vRainClearance = uRainReady > .5 ? world.y-rainHeight(world.xz) : 100.;
     vec4 mvPosition = viewMatrix * vec4(world, 1.0);
     gl_Position = projectionMatrix * mvPosition;
@@ -71,7 +71,7 @@ const fragmentShader = /* glsl */ `
     float a = across * along * vAlpha;
     if (vRainClearance < .025) discard;
     if (a < 0.004) discard;
-    gl_FragColor = vec4(vec3(0.64, 0.69, 0.73) * vBrightness, a);
+    gl_FragColor = vec4(vec3(0.82, 0.87, 0.92) * vBrightness, a);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
     #include <fog_fragment>
@@ -130,6 +130,7 @@ export class Rain {
         },
         vertexShader,
         fragmentShader,
+        side: THREE.DoubleSide,
         transparent: true,
         depthWrite: false,
         fog: true,

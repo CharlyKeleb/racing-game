@@ -49,3 +49,10 @@ describe('rain lifecycle and camera motion', () => {
     rain.dispose()
   })
 })
+
+
+it('keeps camera-facing rain visible when billboard orientation changes', () => {
+  const rain = new Rain()
+  expect((rain.mesh.material as THREE.Material).side).toBe(THREE.DoubleSide)
+  rain.dispose()
+})

@@ -1,3 +1,9 @@
+import { AssetManager } from '../engine/AssetManager'
+import { rigCarModel, type CarModel } from '../vehicles/CarModel'
+import { CarLivery } from '../vehicles/CarLivery'
+import { DEFAULT_BUILD } from '../vehicles/CarBuild'
+import type { VehicleConfig } from '../vehicles/VehicleConfig'
+import { CarRain } from '../effects/CarRain'
 /** Isolated visual/height-readback regression fixture: npm run dev → /src/dev/rain-preview.html. */
 import * as THREE from 'three'
 import { backend } from '../engine/backend'
@@ -42,6 +48,23 @@ async function run() {
   const roads = new WetRoads(field.uniforms)
   const rain = new Rain(field.uniforms)
   scene.add(impacts.mesh, rain.mesh)
+  let car: CarModel | undefined, carRain: CarRain | undefined
+  if (new URLSearchParams(location.search).get('car') === '1') {
+    const assets = new AssetManager()
+    const [model, config] = await Promise.all([
+      assets.loadModel('/models/cars/porsche911/porsche911.glb'),
+      fetch('/models/cars/porsche911/vehicle-config.json').then(response => response.json() as Promise<VehicleConfig>),
+    ])
+    car = rigCarModel(model, config)
+    for (const wheel of config.wheels) car.wheels[wheel.id].pivot.position.set(...wheel.position)
+    new CarLivery(car).apply(DEFAULT_BUILD)
+    car.root.position.set(3, .3, 3)
+    scene.add(car.root)
+    carRain = new CarRain(car, field.uniforms)
+    scene.add(carRain.impacts.mesh)
+    camera.position.set(4.4, 2.2, -2.2)
+    camera.lookAt(3, .9, 3)
+  }
   const status = document.querySelector<HTMLOutputElement>('#status')!
   const checkbox = document.querySelector<HTMLInputElement>('#wet')!
   let lastTime = performance.now()
@@ -87,6 +110,7 @@ async function run() {
     roads.update(track, wet, dt)
     rain.update(camera, wet, dt)
     impacts.mesh.visible = wet > 0
+    if (car && carRain) carRain.update(car, wet, dt)
     renderer.render(scene, camera)
     if (++frames > 50 && !checked) {
       checked = true

@@ -1,3 +1,4 @@
+import { CarRain } from '../effects/CarRain'
 import { RainSurface } from '../effects/RainSurface'
 import { RainImpacts } from '../effects/RainImpacts'
 import { WetRoads } from '../effects/WetRoads'
@@ -197,6 +198,7 @@ export class Game {
   private readonly hazeCars: Vehicle[] = []
   /** Rain (#53): streaks around the camera, spray off every car, drops on the lens in cockpit view. Built in init(). */
   private rainSurface!: RainSurface
+  private carRain!: CarRain
   private rainImpacts!: RainImpacts
   private wetRoads!: WetRoads
   private rain!: Rain
@@ -363,6 +365,9 @@ export class Game {
     scene.add(this.rainImpacts.mesh)
     this.rainSurface.setQuality(settings.quality)
     this.rainImpacts.setQuality(settings.quality)
+    this.carRain = new CarRain(model, this.rainSurface.uniforms)
+    this.carRain.setQuality(settings.quality)
+    scene.add(this.carRain.impacts.mesh)
     this.rain = new Rain(this.rainSurface.uniforms)
     scene.add(this.rain.mesh)
     this.rainSpray = new RainSpray()
@@ -906,6 +911,7 @@ export class Game {
   private installCar(entry: CarEntry, base: VehicleConfig, model: CarModel): void {
     const scene = this.renderer.scene
     const old = this.vehicle
+    this.carRain.dispose()
     this.effects.dispose()
     this.headlights.dispose()
     this.livery.dispose()
@@ -923,6 +929,9 @@ export class Game {
     this.livery = new CarLivery(model)
     this.livery.apply(build)
     scene.add(model.root)
+    this.carRain = new CarRain(model, this.rainSurface.uniforms)
+    this.carRain.setQuality(gameStore.getState().settings.quality)
+    scene.add(this.carRain.impacts.mesh)
     this.headlights = new Headlights(model, config)
     this.headlights.setOn(this.environment.current.headlights)
     this.effects = new DrivingEffects(this.vehicle)
@@ -1293,6 +1302,7 @@ export class Game {
     this.rainSurface.update(this.renderer.renderer, this.renderer.scene, this.track.group, camera, wet, dt)
     this.wetRoads.update(this.track.group, wet, dt)
     this.rainImpacts.mesh.visible = wet > 0 && this.rainSurface.uniforms.uRainReady.value > 0
+    this.carRain.update(this.vehicle.model, wet, dt)
     this.rain.update(camera, wet, dt)
     this.rainSpray.update(this.hazeCars, camera.position, wet, dt)
     // Exhaust heat haze and lens drops share the distortion buffer (post FX only).
@@ -1781,6 +1791,7 @@ export class Game {
     this.rain?.setQuality(s.quality)
     this.rainSurface?.setQuality(s.quality)
     this.rainImpacts?.setQuality(s.quality)
+    this.carRain?.setQuality(s.quality)
     // Before the time of day: rain re-bakes the environment, applyTimeOfDay pushes it to the scene.
     this.environment?.setRain(s.weather === 'rain')
     this.applyTimeOfDay(s.timeOfDay)
@@ -1819,6 +1830,7 @@ export class Game {
     this.sparks?.dispose()
     this.haze?.dispose()
     this.wetRoads?.dispose()
+    this.carRain?.dispose()
     this.rainImpacts?.dispose()
     this.rainSurface?.dispose()
     this.rain?.dispose()
