@@ -19,6 +19,8 @@ export function initRapier(): Promise<void> {
 export class PhysicsWorld {
   readonly rapier: Rapier = RAPIER
   readonly world: RAPIER.World
+  /** Contact force events (car bodies hitting things), drained after each step. */
+  private readonly events = new RAPIER.EventQueue(true)
 
   constructor() {
     this.world = new RAPIER.World({ x: 0, y: -9.81, z: 0 })
@@ -39,10 +41,24 @@ export class PhysicsWorld {
 
   step(dt: number): void {
     this.world.timestep = dt
-    this.world.step()
+    this.world.step(this.events)
+  }
+
+  /**
+   * Every contact force event since the last step: the two colliders' handles,
+   * the total force (N) and its direction. Only colliders with
+   * CONTACT_FORCE_EVENTS (car bodies, see Vehicle) report.
+   */
+  drainContactForces(fn: (a: number, b: number, force: number, dirX: number, dirY: number, dirZ: number) => void): void {
+    this.events.drainContactForceEvents((e) => {
+      const d = e.maxForceDirection()
+      fn(e.collider1(), e.collider2(), e.totalForceMagnitude(), d.x, d.y, d.z)
+    })
+    this.events.drainCollisionEvents(() => {})
   }
 
   dispose(): void {
+    this.events.free()
     this.world.free()
   }
 }

@@ -1,8 +1,6 @@
 import { CarSoundModel, type CarSoundInput } from './CarSoundModel'
 
 export interface CarSoundState extends CarSoundInput {
-  /** Max tire slip, 0..1 (squeal). */
-  slip: number
   /** Nitro intensity, 0..~1.6. */
   nitro: number
 }
@@ -22,7 +20,7 @@ const MAKEUP = 1.7
  *   engine ─┬─ intake: the clean recording, low-pass opening with throttle (leads the mix)
  *           └─ exhaust: drive → gentle soft clip → boom (110 Hz) + rasp (2.4 kHz) EQ
  *   + sub rumble (flat-six half order), faint turbo whistle and whoosh,
- *     overrun crackles, blow-off, shift "bwap", nitro whoosh and rush, tire squeal
+ *     overrun crackles, blow-off, shift "bwap", nitro whoosh and rush
  *   → glue compressor → make-up gain → limiter → out
  *
  * The recording stays in front ("pure"): the synthetic layers only colour it.
@@ -49,7 +47,6 @@ export class CarSound {
   private readonly whistleGain: GainNode
   private readonly whooshGain: GainNode
   private readonly nitroRushGain: GainNode
-  private readonly squealGain: GainNode
   private readonly sources: AudioScheduledSourceNode[] = []
 
   private firingPerRev = 3
@@ -111,11 +108,9 @@ export class CarSound {
     this.whooshGain = gain(ctx, 0)
     this.loopNoise(0.3).connect(biquad(ctx, 'bandpass', 3600, 0.8, 0)).connect(this.whooshGain).connect(this.bus)
 
-    // Nitro rush and tire squeal: looping noise, band-passed.
+    // Nitro rush: looping noise, band-passed. (Tyres and brakes: TyreBrakeSound.)
     this.nitroRushGain = gain(ctx, 0)
     this.loopNoise(0.9).connect(biquad(ctx, 'bandpass', 1700, 0.6, 0)).connect(this.nitroRushGain).connect(this.bus)
-    this.squealGain = gain(ctx, 0)
-    this.loopNoise(1.4).connect(biquad(ctx, 'bandpass', 1800, 6, 0)).connect(this.squealGain).connect(this.bus)
 
     this.sub.start()
     this.whistle.start()
@@ -180,7 +175,6 @@ export class CarSound {
     set(this.whooshGain.gain, 0.03 * m.spool, t, 0.06)
 
     set(this.nitroRushGain.gain, 0.07 * Math.min(s.nitro, 1.6), t, 0.08)
-    set(this.squealGain.gain, Math.min(Math.max(0, s.slip - 0.75) * 4, 1) * 0.2, t, 0.05)
 
     if (m.blowOff > 0) this.blowOffAt(t, m.blowOff)
     if (m.shiftUp) this.upshiftAt(t, rpmT)

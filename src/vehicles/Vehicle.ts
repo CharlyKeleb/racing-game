@@ -60,6 +60,14 @@ export class Vehicle {
   readonly controller: VehicleController
   readonly model: CarModel
   readonly body: RAPIER.RigidBody
+  /** The chassis box: only touches things in a hit (the wheels are raycasts). */
+  readonly chassis: RAPIER.Collider
+  readonly massKg: number
+  /**
+   * Physics ticks left in which hits are ignored: a respawn drops the car onto
+   * the road, and landing (or spawning against something) isn't a crash.
+   */
+  quietTicks = 0
 
   // Physics state at the previous and current tick, for render interpolation.
   private readonly prevPos = new THREE.Vector3()
@@ -110,10 +118,16 @@ export class Vehicle {
     this.body = world.createRigidBody(bodyDesc)
 
     const [cx, cy, cz] = config.chassisCenter
-    world.createCollider(
-      RAPIER.ColliderDesc.cuboid(hx, hy, hz).setTranslation(cx, cy, cz).setDensity(0).setFriction(0.2).setRestitution(0.1),
+    // The wheels are raycasts, so this box only touches things in a real hit
+    // (another car, a wall, the ground when bottoming out): it reports the
+    // contact force for the crash sounds. 1.5 g filters out brushing contacts.
+    this.chassis = world.createCollider(
+      RAPIER.ColliderDesc.cuboid(hx, hy, hz).setTranslation(cx, cy, cz).setDensity(0).setFriction(0.2).setRestitution(0.1)
+        .setActiveEvents(RAPIER.ActiveEvents.CONTACT_FORCE_EVENTS)
+        .setContactForceEventThreshold(m * 9.81 * 1.5),
       this.body,
     )
+    this.massKg = m
 
     this.controller = new VehicleController(config, this.body, world)
     model.root.traverse((o) => {
@@ -157,6 +171,7 @@ export class Vehicle {
   }
 
   fixedUpdate(input: InputState, dt: number): void {
+    if (this.quietTicks > 0) this.quietTicks--
     this.controller.update(input, dt)
   }
 
@@ -249,6 +264,7 @@ export class Vehicle {
   }
 
   respawn(spawn: SpawnPoint): void {
+    this.quietTicks = 30
     const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), spawn.heading)
     this.body.setTranslation(spawn.position, true)
     this.body.setRotation(q, true)

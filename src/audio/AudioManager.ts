@@ -1,7 +1,13 @@
 import { Howler } from 'howler'
 import { CarSound, type CarSoundState } from './CarSound'
-import { OpponentAudio } from './OpponentAudio'
+import { OpponentAudio, type RivalSoundState } from './OpponentAudio'
+import { TyreBrakeSound } from './TyreBrakeSound'
+import { ImpactSound } from './ImpactSound'
+import type { ImpactKind } from './ImpactModel'
+import { DEFAULT_NOISE_PROFILE, tyreBrakeLevels, type CarNoiseProfile, type TyreBrakeInput } from './TyreBrakeModel'
 import { GarageAmbience } from './GarageAmbience'
+import { MenuMusic } from './MenuMusic'
+import { MUSIC_TRACKS, musicTrack } from './musicTracks'
 import { decodeWav16, type EngineBank } from './GranularEngine'
 import type { EngineBankMessage } from './engineWorklet'
 import engineWorkletUrl from './engineWorklet.ts?worker&url'
@@ -23,15 +29,27 @@ export type { CarSoundState }
  */
 export class AudioManager {
   private rivals: OpponentAudio[] = []
+  private rivalNoise: CarNoiseProfile[] = []
+  /** Reused for every rival's update (no per-frame allocation). */
+  private readonly rivalState: RivalSoundState = { rpm: 0, throttle: 0, x: 0, y: 0, z: 0, recession: 0, passSpeed: 0, active: false, tyres: tyreBrakeLevels({ speed: 0, brake: 0, slip: 0, slide: 0, paved: 0, drifting: false, kerb: 0 }, DEFAULT_NOISE_PROFILE) }
   private bankCache = new Map<string, Promise<EngineBankMessage>>()
   private workletReady: Promise<void> | null = null
   private engineBank: EngineBankMessage | null = null
   private ctx: AudioContext | null = null
   private master!: GainNode
+  /** Last stage before the speakers (see unlock). */
+  private limiter: DynamicsCompressorNode | null = null
   private sound: CarSound | null = null
   private carAudioUrl: string | null = null
   /** Firing pulses per crank revolution (flat-six 3, V8 4): pitches the synth and sub. */
   private firingPerRev = 3
+  /** The player's tyres and brakes, and what they're made of. */
+  private tyres: TyreBrakeSound | null = null
+  private impacts: ImpactSound | null = null
+  /** Dips the player's engine and tyres under a crash. */
+  private duck!: GainNode
+  private fxBus!: GainNode
+  private noiseProfile: CarNoiseProfile = DEFAULT_NOISE_PROFILE
 
   // Synth stand-in until the recordings load.
   private synthSaw!: OscillatorNode
@@ -45,6 +63,12 @@ export class AudioManager {
   /** The car's sound runs through this, so the menu can hold the engine quiet. */
   private carBus!: GainNode
   private ambience: GarageAmbience | null = null
+  /** Menu/garage soundtrack; created on unlock with the rest of the graph. */
+  private music: MenuMusic | null = null
+  private musicTrackId: string = MUSIC_TRACKS[0].id
+  private musicEnabled = true
+  /** Audible playback state for the UI; false while autoplay is blocked or muted. */
+  onMenuMusicState: ((playing: boolean) => void) | null = null
   /** 'menu' = garage room tone, engine held quiet (except a swap's rev); 'race' = engine up, room tone out. */
   private scene: 'menu' | 'race' = 'menu'
   private menuEngine = false
@@ -66,7 +90,9 @@ export class AudioManager {
    * and its firing pulses per revolution. Switching cars after unlock swaps
    * the engine: the synth covers the gap while the new recordings load.
    */
-  setCarAudio(url: string | undefined, firingPerRev = 3): void {
+  setCarAudio(url: string | undefined, firingPerRev = 3, noise: CarNoiseProfile = DEFAULT_NOISE_PROFILE): void {
+    this.noiseProfile = noise
+    this.tyres?.setProfile(noise)
     const next = url ?? null
     const changed = next !== this.carAudioUrl
     this.carAudioUrl = next
@@ -88,6 +114,8 @@ export class AudioManager {
     this.paused = false
     if (this.ctx) {
       void this.ctx.resume()
+      // A blocked first play left the element paused; this gesture unblocks it.
+      this.music?.retry()
       return
     }
     const ctx = Howler.ctx ?? new AudioContext()
@@ -95,12 +123,34 @@ export class AudioManager {
     void ctx.resume()
 
     this.master = ctx.createGain()
-    this.master.connect(ctx.destination)
+    // Brickwall limiter on the whole mix: a crash on top of the engine and the
+    // rivals peaked ~7 dB over full scale (measured) and would clip.
+    const limiter = (this.limiter = ctx.createDynamicsCompressor())
+    limiter.threshold.value = -1.5
+    limiter.knee.value = 0
+    limiter.ratio.value = 20
+    limiter.attack.value = 0.001
+    limiter.release.value = 0.12
+    this.master.connect(limiter).connect(ctx.destination)
     this.setVolume(volume)
     this.carBus = ctx.createGain()
-    this.carBus.connect(this.master)
+    // Engine and tyres duck under a crash (see impact), so the hit cuts
+    // through instead of being squashed into the engine by the limiter.
+    this.duck = ctx.createGain()
+    this.carBus.connect(this.duck).connect(this.master)
+    // The player's crashes bypass the car bus: they mustn't duck themselves,
+    // and the menu holding the engine quiet mustn't mute them.
+    this.fxBus = ctx.createGain()
+    this.fxBus.connect(this.master)
     this.sound = new CarSound(ctx, this.carBus)
+    this.tyres = new TyreBrakeSound(ctx, this.noiseProfile)
+    this.tyres.output.connect(this.carBus)
+    this.impacts = new ImpactSound(ctx, this.fxBus)
     this.ambience = new GarageAmbience(ctx, this.master)
+    this.music = new MenuMusic(ctx, this.master, (playing) => this.onMenuMusicState?.(playing))
+    this.music.setTrack(musicTrack(this.musicTrackId))
+    this.music.setEnabled(this.musicEnabled)
+    this.music.setActive(this.scene === 'menu')
     this.sound.setFiringPerRev(this.firingPerRev)
 
     this.synthGain = ctx.createGain()
@@ -278,9 +328,22 @@ export class AudioManager {
     tone.stop(t + length + 0.02)
   }
 
+  /** Menu soundtrack selection and on/off; safe before unlock, applied when the graph exists. */
+  setMenuMusic(trackId: string, enabled: boolean): void {
+    this.musicTrackId = musicTrack(trackId).id
+    this.musicEnabled = enabled
+    if (!this.music) return
+    // Pause before swapping while muted so a track change can never blip.
+    if (!enabled) this.music.setEnabled(false)
+    this.music.setTrack(musicTrack(this.musicTrackId))
+    this.music.setEnabled(enabled)
+    this.music.setActive(this.scene === 'menu')
+  }
+
   /** Menu/garage vs. on track: sets the room tone and whether the engine is heard. */
   setScene(scene: 'menu' | 'race'): void {
     this.scene = scene
+    this.music?.setActive(scene === 'menu')
     this.applyMix()
   }
 
@@ -306,7 +369,7 @@ export class AudioManager {
     if (this.master) this.master.gain.value = volume * 0.9
   }
 
-  update(state: CarSoundState): void {
+  update(state: CarSoundState, tyres?: TyreBrakeInput): void {
     const ctx = this.ctx
     if (!ctx || !this.sound) return
     // Self-heal if anything else suspends the context while racing (another
@@ -325,6 +388,7 @@ export class AudioManager {
     // The sound model turns the physics rpm into the engine as heard (rev
     // inertia, shift glides, rev-match blips); pitch follows that.
     this.sound.update(state, dt)
+    if (tyres) this.tyres?.update(tyreBrakeLevels(tyres, this.noiseProfile), dt)
     const rpm = this.sound.engineRpm
     if (this.sampled) {
       this.sampled.parameters.get('rpm')!.setTargetAtTime(rpm, t, 0.01)
@@ -349,14 +413,16 @@ export class AudioManager {
   clearOpponents(): void {
     for (const rival of this.rivals) rival.dispose()
     this.rivals = []
+    this.rivalNoise = []
   }
 
-  setOpponentCars(cars: readonly { audioUrl?: string; firingPerRev: number }[]): void {
+  setOpponentCars(cars: readonly { audioUrl?: string; firingPerRev: number; noise?: CarNoiseProfile }[]): void {
     this.clearOpponents()
     const ctx = this.ctx
     if (!ctx) return
     for (const car of cars) {
-      const rival = new OpponentAudio(ctx, this.master, car.firingPerRev)
+      const rival = new OpponentAudio(ctx, this.master, car.firingPerRev, car.noise ?? DEFAULT_NOISE_PROFILE)
+      this.rivalNoise.push(car.noise ?? DEFAULT_NOISE_PROFILE)
       this.rivals.push(rival)
       const base = car.audioUrl
       if (!base) continue
@@ -379,19 +445,53 @@ export class AudioManager {
     }
   }
 
-  updateOpponent(index: number, rpm: number, throttle: number, distance: number, lateral: number, active: boolean): void {
-    this.rivals[index]?.update(rpm, throttle, distance, lateral, active)
+  /** A rival's tyres and brakes go through the same model as the player's, with its own profile. */
+  updateOpponent(index: number, state: Omit<RivalSoundState, 'tyres'>, tyres: TyreBrakeInput): void {
+    const rival = this.rivals[index]
+    if (!rival) return
+    this.rivalState.tyres = tyreBrakeLevels(tyres, this.rivalNoise[index] ?? DEFAULT_NOISE_PROFILE)
+    rival.update(Object.assign(this.rivalState, state))
+  }
+
+  /** A hit on a car: `car` -1 is the player, otherwise the rival's index (heard where it is). */
+  impact(car: number, kind: ImpactKind, strength: number): void {
+    if (this.paused || strength <= 0) return
+    ;(car < 0 ? this.impacts : this.rivals[car]?.impacts)?.hit(kind, strength)
+    const ctx = this.ctx
+    // Your own hit (not a curb thunk): the engine drops away, up to ~14 dB
+    // on a big one, holds for a quarter second and comes back over half a
+    // second, so the crash owns the moment.
+    if (car < 0 && kind !== 'curb' && ctx && this.duck) {
+      const t = ctx.currentTime
+      const g = this.duck.gain
+      g.cancelScheduledValues(t)
+      g.setValueAtTime(g.value, t)
+      g.linearRampToValueAtTime(1 - 0.8 * strength, t + 0.012)
+      g.setTargetAtTime(1, t + 0.1 + 0.15 * strength, 0.2)
+    }
+  }
+
+  /** Grinding along a wall, 0..1, for the player (-1) or a rival; follow every frame. */
+  scrape(car: number, level: number, slidingSpeed: number): void {
+    ;(car < 0 ? this.impacts : this.rivals[car]?.impacts)?.scrape(level, slidingSpeed)
   }
 
   dispose(): void {
     this.clearOpponents()
+    this.impacts?.dispose()
     this.engineBank = null
     this.bankCache.clear()
     this.sound?.dispose()
+    this.tyres?.dispose()
     this.ambience?.dispose()
+    this.music?.dispose()
+    this.music = null
     this.sampled?.disconnect()
     this.sampled?.port.close()
     this.master?.disconnect()
+    this.limiter?.disconnect()
+    this.duck?.disconnect()
+    this.fxBus?.disconnect()
     if (this.ctx && this.ctx !== Howler.ctx) void this.ctx.close()
     this.ctx = null
   }
