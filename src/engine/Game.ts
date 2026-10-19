@@ -15,6 +15,7 @@ import { startingGrid } from '../racing/StartingGrid'
 import { ChaseCamera, type ShowroomFraming } from '../camera/ChaseCamera'
 import { DirectionGuide } from '../effects/DirectionGuide'
 import { NitroFlames } from '../effects/NitroFlames'
+import { Sparks, type SparkContact } from '../effects/Sparks'
 import { DrivingEffects } from '../effects/DrivingEffects'
 import { Headlights } from '../effects/Headlights'
 import { TrackProgress } from '../racing/TrackProgress'
@@ -70,6 +71,12 @@ const _rivalOffset = new THREE.Vector3()
 const _listenerUp = new THREE.Vector3()
 const _listenerBack = new THREE.Vector3()
 const _relativeVelocity = new THREE.Vector3()
+const _sparkPoint = new THREE.Vector3()
+const _sparkNormal = new THREE.Vector3()
+const _sparkOrigin = new THREE.Vector3()
+const _sparkQuat = new THREE.Quaternion()
+/** Chassis contacts closer than this (m; negative = penetrating) are touching, not just predicted. */
+const SPARK_CONTACT_DIST = 0.02
 
 interface CarHits {
   car: number
@@ -174,6 +181,11 @@ export class Game {
   private livery!: CarLivery
   private showroom!: Showroom
   private effects!: DrivingEffects
+  /** Wall-scrape, crash and bottoming-out sparks for every car (#52). */
+  private readonly sparks = new Sparks()
+  private readonly sparkContact: SparkContact = { x: 0, y: 0, z: 0, nx: 0, ny: 0, nz: 0, vx: 0, vy: 0, vz: 0, dv: 0, groundY: 0 }
+  /** Change in speed per car from contact forces this tick (the spark burst size). */
+  private readonly tickHit = new Float32Array(16)
   private headlights!: Headlights
   private guide!: DirectionGuide
   private progress!: TrackProgress
@@ -308,6 +320,7 @@ export class Game {
     this.headlights = new Headlights(model, config)
     this.effects = new DrivingEffects(this.vehicle)
     scene.add(this.effects.group)
+    scene.add(this.sparks.mesh)
 
     const spawn = this.track.spawn
     this.showroom.placeAt(spawn.position, spawn.heading)
@@ -513,6 +526,7 @@ export class Game {
     this.race.state = 'idle'
     this.track.dispose()
     this.effects.clear()
+    this.sparks.clear()
     try {
       this.track = await this.loadTrack(id)
     } catch (err) {
@@ -652,7 +666,9 @@ export class Game {
       if (this.disposed || token !== this.opponentToken) return
       this.resetCar()
       this.effects.clear()
-        this.standings?.reset()
+      this.sparks.clear()
+    this.sparks.clear()
+      this.standings?.reset()
       this.playerEntry.finishMs = null
       this.playerEntry.lap = 0
       this.playerEntry.checkpoint = 0
@@ -932,6 +948,7 @@ export class Game {
     this.audio.resume()
     this.resetCar()
     this.effects.clear()
+    this.sparks.clear()
     gameStore.getState().setPhase('menu')
   }
 
@@ -1019,6 +1036,7 @@ export class Game {
     }
     this.physics.step(dt)
     this.collectHits(dt)
+    this.emitSparks(dt)
     this.vehicle.capture()
     for (const opponent of this.opponents) {
       if (!inMenu) opponent.capture(dt, this.traffic, this.recoverSpawn)
@@ -1143,6 +1161,7 @@ export class Game {
       this.camera.driftFraming = gameStore.getState().settings.mode === 'drift' ? .82 : .55
       this.camera.update(this.vehicle.model.root, this.vehicle.speedKmh, dt, this.vehicle.controller.nitro.intensity, this.vehicle.motion,gridFraming)
       this.effects.update(this.vehicle, dt)
+      this.sparks.update(dt)
       this.updateGuide(dt)
     }
     if (this.rivalTags.length > 0) this.updateRivalTags(phase === 'countdown' || phase === 'racing', dt)
@@ -1195,11 +1214,76 @@ export class Game {
   private collectHits(dt: number): void {
     const cars = this.opponents.length + 1
     while (this.carHits.length < cars) this.carHits.push({ car: 0, wall: 0, ground: 0, touching: false })
+    this.tickHit.fill(0)
     this.physics.drainContactForces((a, b, force, _dx, dy) => {
       const sa = this.carSlot(a), sb = this.carSlot(b)
       if (sa >= 0) this.recordHit(sa, sb >= 0, force, dy, dt)
       if (sb >= 0) this.recordHit(sb, sa >= 0, force, dy, dt)
     })
+  }
+
+  /**
+   * Sparks where a car's chassis touches a wall, another car or the road
+   * (bottoming out), from Rapier's contact manifolds: world-space solver
+   * points, the normal and the impulse. Plus the underside striking the road
+   * when a wheel's suspension slams into its bump stop at speed.
+   */
+  private emitSparks(dt: number): void {
+    const world = this.physics.world
+    const camera = this.renderer.camera.position
+    for (let slot = 0; slot <= this.opponents.length; slot++) {
+      const vehicle = slot === 0 ? this.vehicle : this.opponents[slot - 1].vehicle
+      if (vehicle.quietTicks > 0) continue
+      const p = vehicle.body.translation()
+      // Nobody sees sparks from a rival a long way off.
+      if (slot > 0 && (p.x - camera.x) ** 2 + (p.z - camera.z) ** 2 > 150 * 150) continue
+      const v = vehicle.body.linvel()
+      const c = this.sparkContact
+      c.vx = v.x; c.vy = v.y; c.vz = v.z
+      const chassis = vehicle.chassis
+      const ct = chassis.translation(), cq = chassis.rotation()
+      let hit = slot < this.tickHit.length ? this.tickHit[slot] : 0
+      world.contactPairsWith(chassis, other => {
+        world.contactPair(chassis, other, (manifold, flipped) => {
+          // The deepest touching point, on the chassis side (the manifold's
+          // "1" side unless flipped), in the chassis collider's frame.
+          let best = -1, depth = SPARK_CONTACT_DIST
+          for (let i = 0; i < manifold.numContacts(); i++) {
+            const d = manifold.contactDist(i)
+            if (d < depth) { depth = d; best = i }
+          }
+          if (best < 0) return
+          const lp = flipped ? manifold.localContactPoint2(best) : manifold.localContactPoint1(best)
+          const ln = flipped ? manifold.localNormal2() : manifold.localNormal1()
+          if (!lp || !ln) return
+          _sparkPoint.set(lp.x, lp.y, lp.z).applyQuaternion(_sparkQuat.set(cq.x, cq.y, cq.z, cq.w)).add(_sparkOrigin.set(ct.x, ct.y, ct.z))
+          // The chassis's outward normal, flipped: out of what was hit, toward the car.
+          _sparkNormal.set(-ln.x, -ln.y, -ln.z).applyQuaternion(_sparkQuat)
+          c.x = _sparkPoint.x; c.y = _sparkPoint.y; c.z = _sparkPoint.z
+          c.nx = _sparkNormal.x; c.ny = _sparkNormal.y; c.nz = _sparkNormal.z
+          // The tick's hit throws one burst, from the first contact.
+          c.dv = hit
+          hit = 0
+          c.groundY = c.ny > 0.75 ? c.y : p.y - 0.45
+          this.sparks.emit(c, dt, slot)
+        })
+      })
+      // Bottoming out: a suspension at the end of its travel, still compressing hard.
+      const speed = Math.hypot(v.x, v.z)
+      if (speed < 10) continue
+      for (const w of vehicle.controller.wheels) {
+        const s = w.suspension
+        if (!w.grounded || s.compression < vehicle.config.suspension.travel * 0.97 || s.velocity < 0.6) continue
+        // Under the floor, inboard of the tyre.
+        c.x = w.contactPoint.x + (p.x - w.contactPoint.x) * 0.4
+        c.y = w.contactPoint.y + 0.03
+        c.z = w.contactPoint.z + (p.z - w.contactPoint.z) * 0.4
+        c.nx = 0; c.ny = 1; c.nz = 0
+        c.dv = s.velocity * 0.9
+        c.groundY = w.contactPoint.y
+        this.sparks.emit(c, dt, slot)
+      }
+    }
   }
 
   /** 0 for the player's chassis collider, i + 1 for rival i's, -1 for anything else. */
@@ -1213,6 +1297,7 @@ export class Game {
     const vehicle = slot === 0 ? this.vehicle : this.opponents[slot - 1].vehicle
     if (vehicle.quietTicks > 0) return
     const dv = (force * dt) / vehicle.massKg
+    if (slot < this.tickHit.length) this.tickHit[slot] = Math.max(this.tickHit[slot], dv)
     const h = this.carHits[slot]
     if (otherIsCar) h.car = Math.max(h.car, dv)
     else if (Math.abs(dirY) > 0.75) h.ground = Math.max(h.ground, dv)
@@ -1574,6 +1659,7 @@ export class Game {
     this.audio.dispose()
     this.livery?.dispose()
     this.effects?.dispose()
+    this.sparks.dispose()
     this.guide?.dispose()
     this.driftZones?.dispose()
     this.showroom?.dispose()
