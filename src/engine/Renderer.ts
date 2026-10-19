@@ -4,7 +4,7 @@ import { GpuTimer } from './GpuTimer'
 import { performanceCapture } from './PerformanceCapture'
 import * as THREE from 'three'
 import type { WebGPURenderer } from 'three/webgpu'
-import { PostFX } from '../effects/PostFX'
+import { PostFX, type HazeSource } from '../effects/PostFX'
 import type { QualityPreset } from '../stores/gameStore'
 import { backend, type RendererKind } from './backend'
 
@@ -35,6 +35,7 @@ export function maxAnisotropy(renderer: AnyRenderer): number {
 
 interface PostStack {
   setWhipBlur(strength: number): void
+  setHaze(haze: HazeSource | null): void
   setSize(w: number, h: number): void
   render(): void
   dispose(): void
@@ -53,6 +54,7 @@ export class Renderer {
   private readonly requested: RendererKind
   private gpuTimer?: GpuTimer
   private postfx?: PostStack
+  private haze: HazeSource | null = null
   private quality?: QualityPreset
   private displayDpr = 1
   private resolution = new AdaptiveResolution('high', 1)
@@ -155,6 +157,7 @@ export class Renderer {
         ? new backend.nodes.NodePostFX(this.renderer as WebGPURenderer, this.scene, this.camera, preset)
         : new PostFX(this.renderer as THREE.WebGLRenderer, this.scene, this.camera, preset)
       // The constructor sizes from the renderer's existing drawing buffer.
+      this.postfx.setHaze(this.haze)
     }
     if (backend.kind === 'webgl') {
       // postprocessing tone-maps in its own pass; the node stack reads renderer.toneMapping.
@@ -182,6 +185,12 @@ export class Renderer {
 
   get pixelRatio(): number {
     return renderDiagnostics.fixedDpr ?? this.resolution.ratio
+  }
+
+  /** Heat haze behind the exhausts (#56), drawn by the post stack; none with post FX off. */
+  setHaze(haze: HazeSource | null): void {
+    this.haze = haze
+    this.postfx?.setHaze(haze)
   }
 
   /** Intro whip-pan smear (post stack only; skipped when post FX are off). */

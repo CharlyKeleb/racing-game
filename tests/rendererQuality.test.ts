@@ -9,6 +9,7 @@ vi.mock('../src/effects/PostFX', () => ({ PostFX: class {
   dispose = mocks.dispose
   setSize = mocks.setSize
   setWhipBlur() {}
+  setHaze() {}
   render() {}
 } }))
 vi.mock('three', async importOriginal => {
