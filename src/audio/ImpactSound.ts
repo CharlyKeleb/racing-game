@@ -13,9 +13,13 @@ function noise(ctx: BaseAudioContext): AudioBuffer {
   return buf
 }
 
-/** Overall loudness of a full-strength hit, and of the scrape loop. */
-const HIT_GAIN = 1.1
-const SCRAPE_GAIN = 0.9
+/**
+ * Overall loudness of a full-strength hit (into the saturator below), and
+ * of the scrape loop. A big crash is the loudest thing you hear: measured
+ * through the master limiter, see AudioManager.impact for the engine duck.
+ */
+const HIT_GAIN = 2.2
+const SCRAPE_GAIN = 4
 /** Ignore a second hit on the same car sooner than this, s (one crash, not a burst of clicks). */
 const RETRIGGER = 0.09
 /** Panel ring partials, as ratios of a base that varies per hit (sheet metal is inharmonic). */
@@ -63,7 +67,13 @@ export class ImpactSound {
     const level = HIT_GAIN * (0.25 + 0.75 * strength)
     const out = this.ctx.createGain()
     out.gain.value = level
-    out.connect(this.destination)
+    // Saturate the hit: a thud and ringing panels are peaky, and the limiter
+    // caught their peaks long before they got loud. Clipped, the crash is
+    // dense — far more energy under the same ceiling, and grittier.
+    const drive = this.ctx.createWaveShaper()
+    drive.curve = SATURATION
+    drive.oversample = '2x'
+    out.connect(drive).connect(this.destination)
     let end = t
 
     // Thud: a sine dropping in pitch, like a panel or a tyre absorbing the blow.
@@ -115,7 +125,10 @@ export class ImpactSound {
       }
     }
     // Let the graph go once it's done.
-    setTimeout(() => out.disconnect(), (end - t + 0.3) * 1000)
+    setTimeout(() => {
+      out.disconnect()
+      drive.disconnect()
+    }, (end - t + 0.3) * 1000)
   }
 
   /** Grinding along a wall, 0..1 (follow every frame; 0 = silent). */
@@ -148,6 +161,17 @@ export class ImpactSound {
     return src
   }
 }
+
+/** Soft clip for the hits: tanh(3x), normalised so full scale stays full scale. */
+const SATURATION = (() => {
+  const n = 2048
+  const c = new Float32Array(new ArrayBuffer(n * 4))
+  for (let i = 0; i < n; i++) {
+    const x = (i / (n - 1)) * 2 - 1
+    c[i] = Math.tanh(x * 3) / Math.tanh(3)
+  }
+  return c
+})()
 
 /** A hard-ish clip that roughens the scrape noise into a grind. */
 function gritCurve(): Float32Array<ArrayBuffer> {

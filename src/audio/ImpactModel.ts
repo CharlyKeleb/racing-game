@@ -60,12 +60,12 @@ export function impactLayers(kind: ImpactKind, strength: number): ImpactLayers {
   const big = Math.max(0, (s - 0.55) / 0.45)
   switch (kind) {
     case 'car':
-      return { thudHz: 110, thud: 0.6 + 0.4 * s, thudDecay: 0.18 + 0.2 * s, crunchHz: 2200, crunch: s, crunchDecay: 0.1 + 0.3 * s, ring: 0.3 + 0.7 * s, debris: big }
+      return { thudHz: 110, thud: 0.7 + 0.3 * s, thudDecay: 0.25 + 0.25 * s, crunchHz: 2200, crunch: 0.4 + 0.6 * s, crunchDecay: 0.18 + 0.4 * s, ring: 0.3 + 0.7 * s, debris: big }
     case 'wall':
-      return { thudHz: 75, thud: 0.8 + 0.2 * s, thudDecay: 0.22 + 0.25 * s, crunchHz: 1300, crunch: 0.8 * s, crunchDecay: 0.08 + 0.3 * s, ring: 0.15 * s, debris: big * 0.8 }
+      return { thudHz: 75, thud: 0.85 + 0.15 * s, thudDecay: 0.3 + 0.3 * s, crunchHz: 1300, crunch: 0.35 + 0.65 * s, crunchDecay: 0.15 + 0.4 * s, ring: 0.15 * s, debris: big * 0.8 }
     case 'ground':
       return { thudHz: 60, thud: 1, thudDecay: 0.25 + 0.2 * s, crunchHz: 700, crunch: 0.35 * s, crunchDecay: 0.12, ring: 0, debris: 0 }
     case 'curb':
-      return { thudHz: 95, thud: 0.9, thudDecay: 0.09 + 0.06 * s, crunchHz: 1800, crunch: 0.15 * s, crunchDecay: 0.03, ring: 0.1 * s, debris: 0 }
+      return { thudHz: 95, thud: 1, thudDecay: 0.12 + 0.08 * s, crunchHz: 1800, crunch: 0.25 * s, crunchDecay: 0.05, ring: 0.1 * s, debris: 0 }
   }
 }

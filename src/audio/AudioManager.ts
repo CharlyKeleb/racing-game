@@ -44,6 +44,9 @@ export class AudioManager {
   /** The player's tyres and brakes, and what they're made of. */
   private tyres: TyreBrakeSound | null = null
   private impacts: ImpactSound | null = null
+  /** Dips the player's engine and tyres under a crash. */
+  private duck!: GainNode
+  private fxBus!: GainNode
   private noiseProfile: CarNoiseProfile = DEFAULT_NOISE_PROFILE
 
   // Synth stand-in until the recordings load.
@@ -121,11 +124,18 @@ export class AudioManager {
     this.master.connect(limiter).connect(ctx.destination)
     this.setVolume(volume)
     this.carBus = ctx.createGain()
-    this.carBus.connect(this.master)
+    // Engine and tyres duck under a crash (see impact), so the hit cuts
+    // through instead of being squashed into the engine by the limiter.
+    this.duck = ctx.createGain()
+    this.carBus.connect(this.duck).connect(this.master)
+    // The player's crashes bypass the car bus: they mustn't duck themselves,
+    // and the menu holding the engine quiet mustn't mute them.
+    this.fxBus = ctx.createGain()
+    this.fxBus.connect(this.master)
     this.sound = new CarSound(ctx, this.carBus)
     this.tyres = new TyreBrakeSound(ctx, this.noiseProfile)
     this.tyres.output.connect(this.carBus)
-    this.impacts = new ImpactSound(ctx, this.carBus)
+    this.impacts = new ImpactSound(ctx, this.fxBus)
     this.ambience = new GarageAmbience(ctx, this.master)
     this.sound.setFiringPerRev(this.firingPerRev)
 
@@ -418,8 +428,20 @@ export class AudioManager {
 
   /** A hit on a car: `car` -1 is the player, otherwise the rival's index (heard where it is). */
   impact(car: number, kind: ImpactKind, strength: number): void {
-    if (this.paused) return
+    if (this.paused || strength <= 0) return
     ;(car < 0 ? this.impacts : this.rivals[car]?.impacts)?.hit(kind, strength)
+    const ctx = this.ctx
+    // Your own hit (not a curb thunk): the engine drops away, up to ~14 dB
+    // on a big one, holds for a quarter second and comes back over half a
+    // second, so the crash owns the moment.
+    if (car < 0 && kind !== 'curb' && ctx && this.duck) {
+      const t = ctx.currentTime
+      const g = this.duck.gain
+      g.cancelScheduledValues(t)
+      g.setValueAtTime(g.value, t)
+      g.linearRampToValueAtTime(1 - 0.8 * strength, t + 0.012)
+      g.setTargetAtTime(1, t + 0.1 + 0.15 * strength, 0.2)
+    }
   }
 
   /** Grinding along a wall, 0..1, for the player (-1) or a rival; follow every frame. */
@@ -439,6 +461,8 @@ export class AudioManager {
     this.sampled?.port.close()
     this.master?.disconnect()
     this.limiter?.disconnect()
+    this.duck?.disconnect()
+    this.fxBus?.disconnect()
     if (this.ctx && this.ctx !== Howler.ctx) void this.ctx.close()
     this.ctx = null
   }
