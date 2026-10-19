@@ -137,9 +137,10 @@ describe('handling', () => {
     expect(ctrl.forwardSpeed).toBeGreaterThan(5)
   })
 
-  it('is calmer than with the assist switched off', () => {
-    const assisted = holdTurn(DEFAULT_VEHICLE_CONFIG)
-    const raw = holdTurn({ ...DEFAULT_VEHICLE_CONFIG, yawStability: 0 })
+  it('legacy handling is calmer with yaw trim enabled', () => {
+    const legacy = { ...DEFAULT_VEHICLE_CONFIG, arcade: { ...DEFAULT_VEHICLE_CONFIG.arcade, enabled: false } }
+    const assisted = holdTurn(legacy)
+    const raw = holdTurn({ ...legacy, yawStability: 0 })
     const residual = (r: number[]) => Math.abs(r[30])
     expect(residual(assisted.release)).toBeLessThan(residual(raw.release))
   })
@@ -333,10 +334,10 @@ describe('Porsche 911 handling', () => {
 })
 
 
-it('full keyboard lock uses less front-tire slip without losing cornering after a 100 km/h entry',async()=>{
+it('legacy steering limit reduces front-tire slip without losing cornering after a 100 km/h entry',async()=>{
   await RAPIER.init()
   const corner=(scale:number)=>{
-    const {ctrl,step,body,world}=spawnCar({...PORSCHE_911,steerPeakSlipScale:scale})
+    const {ctrl,step,body,world}=spawnCar({...PORSCHE_911,arcade:{...PORSCHE_911.arcade,enabled:false},steerPeakSlipScale:scale})
     try {
       while(ctrl.forwardSpeed<100/3.6)step(pedals({throttle:1}))
       let slip=0,turn=0,angle=0,samples=0

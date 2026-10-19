@@ -173,9 +173,10 @@ export class AiDriver {
       this.input.brake = 0
       this.input.steer = Math.sign(this.input.steer) * Math.max(0.32, Math.abs(this.input.steer))
     }
-    if (this.difficulty === 'relaxed' && resources.drifting && this.driftingFor > 0.65) {
-      // End a short rotation using the same straight-wheel release as a player.
-      // Otherwise a long bend can keep the arcade drift latched indefinitely.
+    const maxDriftSeconds = this.difficulty === 'relaxed' ? .65 : this.difficulty === 'intense' ? 1.5 : 1.1
+    if (resources.drifting && this.driftingFor > maxDriftSeconds) {
+      // Release at every difficulty: a long bend must not latch a drift forever.
+      // Faster rivals can hold a longer rotation, then resume grip steering.
       this.input.handbrake = false
       this.input.steer = 0
       this.input.throttle = Math.min(this.input.throttle,0.6)
