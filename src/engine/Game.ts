@@ -1,3 +1,4 @@
+import { motionExposure } from '../effects/MotionBlur'
 import { performanceCapture } from './PerformanceCapture'
 import { hudCoversPoint } from '../stores/hudLayoutStore'
 import { driftEvent, readDriftRecord, saveDriftRecord } from '../racing/driftEvents'
@@ -153,6 +154,7 @@ export class Game {
   private track!: RaceTrack
   private environment!: Environment
   private vehicle!: Vehicle
+  private blurCamera = ''
   private camera!: ChaseCamera
   private driftZones?: DriftZones
   private driftPersonalBest = 0
@@ -1210,7 +1212,12 @@ export class Game {
       for (const opponent of this.opponents) this.hazeCars.push(opponent.vehicle)
       this.haze.update(this.hazeCars, this.renderer.camera, dt)
     }
-    this.renderer.setWhipBlur(phase === 'intro' ? this.introCamera.whip * 0.05 : 0)
+    const cameraMode = gameStore.getState().settings.camera
+    const blurAmount = gameStore.getState().settings.motionBlur
+    let exposure = phase === 'racing' ? motionExposure(this.vehicle.speedKmh, blurAmount, dt)
+      : phase === 'intro' ? motionExposure(160, blurAmount * this.introCamera.whip, dt) : 0
+    if (this.blurCamera !== cameraMode) { exposure = 0; this.blurCamera = cameraMode }
+    this.renderer.setMotionBlur(exposure, this.vehicle.model.body)
     const staging = phase === 'intro' || phase === 'countdown'
     if (staging) this.updateStaging(phase, dt)
     else if (phase === 'racing' && this.lightsShown > 0) {

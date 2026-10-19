@@ -47,6 +47,11 @@ export function Settings({ onClose }: { onClose?: () => void }) {
           <p className="settings__help">WebGPU is a trial: GPU particles, falls back to WebGL where it isn't supported. Switching reloads the game.</p>
         </>}
         {section === 'driving' && <>
+          <label className="ui-field settings__volume">
+            <span className="ui-field__label">Motion blur <em>{Math.round(settings.motionBlur * 100)}%</em></span>
+            <input aria-label="Motion blur" className="ui-range" type="range" min={0} max={1} step={.05} value={settings.motionBlur} onChange={e=>update({motionBlur:Number(e.target.value)})}/>
+            <span className="settings__help">Speed-scaled road and wheel blur. Your car body and HUD stay sharp. Set to zero to turn off; requires Post effects.</span>
+          </label>
           <SettingChoices<CameraMode> preview={camera=><SettingScene cockpit={camera==='cockpit'}/>} label="Camera" value={settings.camera} options={[[ 'chase','Chase'],['cockpit','Cockpit']]} onPick={camera=>update({camera})}/>
           <SettingChoices<TimeOfDay> preview={time=><SettingScene time={time}/>} label="Time of day" value={settings.timeOfDay} options={(Object.keys(TIME_PRESETS) as TimeOfDay[]).map(id=>[id,TIME_PRESETS[id].label])} onPick={timeOfDay=>update({timeOfDay})}/>
           <Segmented<number> help label="Laps" value={settings.laps} options={[[1,'1'],[3,'3'],[5,'5']]} onPick={laps=>update({laps})}/>
