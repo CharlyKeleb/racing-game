@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { backend } from '../engine/backend'
 import { surfaceProps } from '../vehicles/Surface'
 import type { WheelState } from '../vehicles/VehicleController'
 
@@ -83,7 +84,9 @@ export class SkidMarks {
   private readonly posAttr: THREE.BufferAttribute
   private readonly alphaAttr: THREE.BufferAttribute
   private readonly birthAttr: THREE.BufferAttribute
-  private readonly material: THREE.ShaderMaterial
+  private readonly material: THREE.Material
+  /** Seconds since start, driving the fade: a WebGL uniform or a node uniform. */
+  private readonly uTime: { value: number }
   private readonly trails: Trail[] = []
   private head = 0
   private time = 0
@@ -112,22 +115,32 @@ export class SkidMarks {
     geo.setAttribute('aBirth', this.birthAttr)
     geo.setIndex(new THREE.BufferAttribute(index, 1))
 
-    this.material = new THREE.ShaderMaterial({
-      uniforms: THREE.UniformsUtils.merge([
-        THREE.UniformsLib.fog,
-        // Ruts: damp, compacted sand under the dry surface — dark brown, not black.
-        { uTime: { value: 0 }, uLife: { value: ruts ? RUT_LIFETIME : LIFETIME }, uColor: { value: new THREE.Color(ruts ? 0x2e2216 : 0x0b0b0c) } },
-      ]),
-      vertexShader,
-      fragmentShader,
-      transparent: true,
-      depthWrite: false,
-      side: THREE.DoubleSide,
-      fog: true,
-      polygonOffset: true,
-      polygonOffsetFactor: -2,
-      polygonOffsetUnits: -2,
-    })
+    // Ruts: damp, compacted sand under the dry surface — dark brown, not black.
+    const color = new THREE.Color(ruts ? 0x2e2216 : 0x0b0b0c)
+    const life = ruts ? RUT_LIFETIME : LIFETIME
+    if (backend.nodes) {
+      const node = backend.nodes.skidMarkMaterial(life, color)
+      this.material = node.material
+      this.uTime = node.time
+    } else {
+      const material = new THREE.ShaderMaterial({
+        uniforms: THREE.UniformsUtils.merge([
+          THREE.UniformsLib.fog,
+          { uTime: { value: 0 }, uLife: { value: life }, uColor: { value: color } },
+        ]),
+        vertexShader,
+        fragmentShader,
+        transparent: true,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+        fog: true,
+        polygonOffset: true,
+        polygonOffsetFactor: -2,
+        polygonOffsetUnits: -2,
+      })
+      this.material = material
+      this.uTime = material.uniforms.uTime
+    }
     this.mesh = new THREE.Mesh(geo, this.material)
     this.mesh.frustumCulled = false
     this.mesh.renderOrder = 1
@@ -135,7 +148,7 @@ export class SkidMarks {
 
   update(wheels: readonly WheelState[], dt: number): void {
     this.time += dt
-    this.material.uniforms.uTime.value = this.time
+    this.uTime.value = this.time
 
     for (let i = 0; i < wheels.length; i++) {
       const w = wheels[i]

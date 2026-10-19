@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { backend } from '../engine/backend'
 
 /**
  * puff: soft smoke / dust; grain: one hard speck; spray: a cluster of tiny
@@ -31,6 +32,35 @@ export interface ParticleSpawn {
    * ~0.5 m/s of bounce, or without it, it settles and fades where it landed.
    */
   bounce?: number
+}
+
+/** What emitters need from a particle pool: the CPU `ParticlePool` or the GPU one (#51). */
+export interface ParticleSystem {
+  readonly mesh: THREE.Object3D
+  readonly max: number
+  spawn(p: ParticleSpawn, groundY?: number): void
+  update(dt: number, windX?: number, windZ?: number): void
+  clear(): void
+  dispose(): void
+}
+
+/**
+ * A pool for the active renderer: compute-shader particles under WebGPU, the
+ * CPU pool under WebGL. `max` is the CPU budget; the GPU pool gets
+ * `particleBudget()` times as many.
+ */
+export function createParticles(max: number, look: ParticleLook, renderOrder = 2, nearFade: [number, number] = [1.5, 6]): ParticleSystem {
+  if (backend.nodes && backend.renderer) return new backend.nodes.GpuParticlePool(backend.renderer, Math.round(max * particleBudget()), look, renderOrder, nearFade)
+  return new ParticlePool(max, look, renderOrder, nearFade)
+}
+
+/**
+ * How many times the CPU particle budget the active renderer affords. GPU
+ * particles cost no CPU per particle, so emitters spawn this many more
+ * (thicker, longer smoke; denser sprays; thousands of sparks per hit).
+ */
+export function particleBudget(): number {
+  return backend.kind === 'webgpu' ? 12 : 1
 }
 
 /** Spark streak length per m/s of screen-plane speed: a ~1/30 s exposure. */
@@ -141,9 +171,9 @@ const fragmentShader = /* glsl */ `
  * in preallocated typed arrays (no per-frame allocation); the oldest particle
  * is recycled when the pool is full.
  */
-export class ParticlePool {
+export class ParticlePool implements ParticleSystem {
   readonly mesh: THREE.Mesh
-  private readonly max: number
+  readonly max: number
   private readonly geometry: THREE.InstancedBufferGeometry
   private readonly material: THREE.ShaderMaterial
   // Render attributes.

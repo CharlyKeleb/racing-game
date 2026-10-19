@@ -16,6 +16,7 @@ import { ChaseCamera, type ShowroomFraming } from '../camera/ChaseCamera'
 import { DirectionGuide } from '../effects/DirectionGuide'
 import { NitroFlames } from '../effects/NitroFlames'
 import { Sparks, type SparkContact } from '../effects/Sparks'
+import { backend } from './backend'
 import { DrivingEffects } from '../effects/DrivingEffects'
 import { Headlights } from '../effects/Headlights'
 import { TrackProgress } from '../racing/TrackProgress'
@@ -181,8 +182,8 @@ export class Game {
   private livery!: CarLivery
   private showroom!: Showroom
   private effects!: DrivingEffects
-  /** Wall-scrape, crash and bottoming-out sparks for every car (#52). */
-  private readonly sparks = new Sparks()
+  /** Wall-scrape, crash and bottoming-out sparks for every car (#52). Built in init(), once the renderer is known. */
+  private sparks!: Sparks
   private readonly sparkContact: SparkContact = { x: 0, y: 0, z: 0, nx: 0, ny: 0, nz: 0, vx: 0, vy: 0, vz: 0, dv: 0, groundY: 0 }
   /** Change in speed per car from contact forces this tick (the spark burst size). */
   private readonly tickHit = new Float32Array(16)
@@ -243,7 +244,7 @@ export class Game {
   private readonly unsubscribe: () => void
 
   constructor(container: HTMLElement) {
-    this.renderer = new Renderer(container)
+    this.renderer = new Renderer(container, gameStore.getState().settings.renderer)
     this.introCamera = new RaceIntroCamera(this.renderer.camera)
     this.loop = new GameLoop({
       fixedUpdate: (dt) => this.fixedUpdate(dt),
@@ -274,6 +275,9 @@ export class Game {
     const { setPhase } = gameStore.getState()
     setPhase('loading')
     performance.mark('boot:start')
+    // WebGPU: device + node module. Before anything builds materials (they pick by backend).
+    await this.renderer.init()
+    if (this.disposed) return
     const settings = gameStore.getState().settings
     const progress = (p: number) => gameStore.setState({ loadProgress: p })
     gameStore.setState({ trackName: getTrack(settings.track).name })
@@ -320,6 +324,7 @@ export class Game {
     this.headlights = new Headlights(model, config)
     this.effects = new DrivingEffects(this.vehicle)
     scene.add(this.effects.group)
+    this.sparks = new Sparks()
     scene.add(this.sparks.mesh)
 
     const spawn = this.track.spawn
@@ -364,8 +369,9 @@ export class Game {
    * Dev-only (window.__game): step frames by hand and read render cost —
    * works even when the tab is hidden and rAF is throttled.
    */
-  debugStep(frames = 60): { msPerFrame: number; calls: number; triangles: number; pixelRatio: number; track: unknown; car: number[] } {
-    const gl = this.renderer.renderer.getContext()
+  debugStep(frames = 60): { msPerFrame: number; calls: number; triangles: number; pixelRatio: number; backend: string; track: unknown; car: number[] } {
+    // WebGL: read a pixel to wait for the GPU. WebGPU timing is CPU submit time only.
+    const gl = backend.kind === 'webgl' ? (this.renderer.renderer as THREE.WebGLRenderer).getContext() : null
     const px = new Uint8Array(4)
     const info = this.renderer.renderer.info
     const t0 = performance.now()
@@ -376,15 +382,16 @@ export class Game {
         info.reset()
       }
       this.loop.advance(1 / 60)
-      gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px) // wait for the GPU
+      gl?.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px) // wait for the GPU
     }
     info.autoReset = true
     const p = this.vehicle.position
     return {
       msPerFrame: (performance.now() - t0) / frames,
-      calls: info.render.calls,
+      calls: this.renderer.drawCalls,
       triangles: info.render.triangles,
       pixelRatio: this.renderer.pixelRatio,
+      backend: this.renderer.backendName,
       track: (this.track as Partial<StreamedTrack>).stats,
       car: [p.x, p.y, p.z].map((v) => Math.round(v)),
     }
@@ -667,7 +674,6 @@ export class Game {
       this.resetCar()
       this.effects.clear()
       this.sparks.clear()
-    this.sparks.clear()
       this.standings?.reset()
       this.playerEntry.finishMs = null
       this.playerEntry.lap = 0
@@ -1659,7 +1665,7 @@ export class Game {
     this.audio.dispose()
     this.livery?.dispose()
     this.effects?.dispose()
-    this.sparks.dispose()
+    this.sparks?.dispose()
     this.guide?.dispose()
     this.driftZones?.dispose()
     this.showroom?.dispose()

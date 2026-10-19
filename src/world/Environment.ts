@@ -2,6 +2,15 @@ import * as THREE from 'three'
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js'
 import { Sky } from 'three/examples/jsm/objects/Sky.js'
 import { TIME_PRESETS, type TimeOfDay, type TimePreset } from './timeOfDay'
+import { backend } from '../engine/backend'
+import type { AnyRenderer } from '../engine/Renderer'
+
+/** The part of PMREMGenerator used here; the WebGL and WebGPU ones share it. */
+interface Pmrem {
+  fromScene(scene: THREE.Scene, sigma?: number, near?: number, far?: number): THREE.RenderTarget
+  fromEquirectangular(texture: THREE.Texture): THREE.RenderTarget
+  dispose(): void
+}
 
 /**
  * Sky dome, key light (sun or moon), hemisphere fill, fog and image-based
@@ -20,33 +29,44 @@ export class Environment {
   /** Shadow-casting key light: the sun by day, the moon at night. */
   readonly sun: THREE.DirectionalLight
   readonly sunDirection = new THREE.Vector3()
-  private readonly sky: Sky
+  /** WebGL `Sky`, or the node `SkyMesh` under WebGPU. */
+  private readonly sky: THREE.Mesh
+  /** The sky's uniforms by their WebGL names (both domes expose the same set). */
+  private readonly skyUniforms: Record<string, { value: any }> // eslint-disable-line @typescript-eslint/no-explicit-any
   private readonly fog = new THREE.Fog(0xbfd4e6, 250, 900)
   private readonly background = new THREE.Color()
   private readonly fill: THREE.HemisphereLight
-  private readonly pmrem: THREE.PMREMGenerator
-  private envTarget: THREE.WebGLRenderTarget | null = null
+  private readonly pmrem: Pmrem
+  private envTarget: THREE.RenderTarget | null = null
   private preset: TimePreset = TIME_PRESETS.noon
   private timeOfDay: TimeOfDay | null = null
   private viewFar = 900
   /** Bumped per preset change so a slow HDRI load can't overwrite a newer choice. */
   private generation = 0
 
-  constructor(renderer: THREE.WebGLRenderer) {
-    this.pmrem = new THREE.PMREMGenerator(renderer)
-
-    this.sky = new Sky()
+  constructor(renderer: AnyRenderer) {
+    if (backend.nodes) {
+      this.pmrem = new backend.nodes.PMREMGenerator(renderer as never) as unknown as Pmrem
+      const dome = backend.nodes.skyDome()
+      this.sky = dome.mesh
+      this.skyUniforms = dome.uniforms
+    } else {
+      this.pmrem = new THREE.PMREMGenerator(renderer as THREE.WebGLRenderer) as unknown as Pmrem
+      const sky = new Sky()
+      const mat = sky.material
+      // Exposure + flat tint (overcast grey, night blue) and the radiance clamp:
+      // the sun disc reaches ~60000, and without the clamp a wide FOV that
+      // catches it floods the screen through bloom (PR #2).
+      mat.uniforms.uSkyExposure = { value: 1 }
+      mat.uniforms.uSkyTint = { value: new THREE.Vector3() }
+      mat.uniforms.uSkyMax = { value: 1.6 }
+      mat.fragmentShader = mat.fragmentShader
+        .replace('void main() {', 'uniform float uSkyExposure;\nuniform vec3 uSkyTint;\nuniform float uSkyMax;\nvoid main() {')
+        .replace('gl_FragColor = vec4( texColor, 1.0 );', 'gl_FragColor = vec4( min( texColor * uSkyExposure + uSkyTint, vec3( uSkyMax ) ), 1.0 );')
+      this.sky = sky
+      this.skyUniforms = mat.uniforms
+    }
     this.sky.scale.setScalar(4000)
-    const mat = this.sky.material
-    // Exposure + flat tint (overcast grey, night blue) and the radiance clamp:
-    // the sun disc reaches ~60000, and without the clamp a wide FOV that
-    // catches it floods the screen through bloom (PR #2).
-    mat.uniforms.uSkyExposure = { value: 1 }
-    mat.uniforms.uSkyTint = { value: new THREE.Vector3() }
-    mat.uniforms.uSkyMax = { value: 1.6 }
-    mat.fragmentShader = mat.fragmentShader
-      .replace('void main() {', 'uniform float uSkyExposure;\nuniform vec3 uSkyTint;\nuniform float uSkyMax;\nvoid main() {')
-      .replace('gl_FragColor = vec4( texColor, 1.0 );', 'gl_FragColor = vec4( min( texColor * uSkyExposure + uSkyTint, vec3( uSkyMax ) ), 1.0 );')
 
     this.fill = new THREE.HemisphereLight(0xcfe3ff, 0x4f6a3a, 0.6)
 
@@ -75,7 +95,7 @@ export class Environment {
     const p = (this.preset = TIME_PRESETS[id])
     const generation = ++this.generation
 
-    const u = this.sky.material.uniforms
+    const u = this.skyUniforms
     u.turbidity.value = p.sky.turbidity
     u.rayleigh.value = p.sky.rayleigh
     u.mieCoefficient.value = p.sky.mieCoefficient
@@ -143,7 +163,7 @@ export class Environment {
    * The preset's sky (same shader, same sun) above a flat ground disc in the
    * preset's ground colour, rendered into a prefiltered HDR cube.
    */
-  private bakeSky(p: TimePreset): THREE.WebGLRenderTarget {
+  private bakeSky(p: TimePreset): THREE.RenderTarget {
     const scene = new THREE.Scene()
     const dome = new THREE.Mesh(this.sky.geometry, this.sky.material)
     dome.scale.setScalar(100)
@@ -159,7 +179,7 @@ export class Environment {
     return target
   }
 
-  private setEnvTarget(target: THREE.WebGLRenderTarget): void {
+  private setEnvTarget(target: THREE.RenderTarget): void {
     const scene = this.group.parent as THREE.Scene | null
     const shown = !!scene && !!this.envTarget && scene.environment === this.envTarget.texture
     this.envTarget?.dispose()
@@ -170,7 +190,7 @@ export class Environment {
 
   dispose(): void {
     this.sky.geometry.dispose()
-    this.sky.material.dispose()
+    ;(this.sky.material as THREE.Material).dispose()
     this.sun.shadow.map?.dispose()
     this.envTarget?.dispose()
     this.pmrem.dispose()

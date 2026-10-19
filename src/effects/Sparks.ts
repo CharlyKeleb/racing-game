@@ -1,4 +1,4 @@
-import { ParticlePool, type ParticleSpawn } from './Particles'
+import { createParticles, particleBudget, type ParticleSpawn, type ParticleSystem } from './Particles'
 
 /** Sliding speed (m/s) along a wall or the road below which metal doesn't throw sparks. */
 const SCRAPE_MIN_SPEED = 3
@@ -51,12 +51,14 @@ const _spawn: ParticleSpawn = {
  * with gravity that skip off the road; bloom makes them glow at night.
  */
 export class Sparks {
-  private readonly pool: ParticlePool
+  private readonly pool: ParticleSystem
   /** Fractional sparks owed per emitter slot (car), so slow scrapes still spark. */
   private readonly carry = new Float32Array(16)
+  /** GPU particles (#51) throw this many times more: thousands per hit. */
+  private readonly scale = Math.min(particleBudget(), 8)
 
   constructor(max = 1500) {
-    this.pool = new ParticlePool(max, 'spark', 3, [0.3, 1.2])
+    this.pool = createParticles(max, 'spark', 3, [0.3, 1.2])
     this.pool.mesh.name = 'sparks'
   }
 
@@ -70,9 +72,9 @@ export class Sparks {
     const vn = c.vx * c.nx + c.vy * c.ny + c.vz * c.nz
     const tx = c.vx - vn * c.nx, ty = c.vy - vn * c.ny, tz = c.vz - vn * c.nz
     const slide = Math.hypot(tx, ty, tz)
-    const total = sparkCount(c.dv, slide, dt, this.carry[slot])
+    const total = sparkCount(c.dv, slide, dt, this.carry[slot] / this.scale) * this.scale
     const n = Math.floor(total)
-    this.carry[slot] = Math.min(total - n, 1)
+    this.carry[slot] = Math.min(total - n, this.scale)
     if (n === 0) return
     const inv = slide > 1e-3 ? 1 / slide : 0
     const burst = c.dv > HIT_MIN_DV ? c.dv : 0

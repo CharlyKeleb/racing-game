@@ -1,5 +1,7 @@
 import * as THREE from 'three'
 import { Reflector } from 'three/examples/jsm/objects/Reflector.js'
+import { backend } from '../engine/backend'
+import type { AnyRenderer } from '../engine/Renderer'
 import type { AssetManager } from '../engine/AssetManager'
 import type { QualityPreset } from '../stores/gameStore'
 
@@ -43,11 +45,11 @@ interface GarageManifest {
 
 export class Showroom {
   readonly group = new THREE.Group()
-  private readonly renderer: THREE.WebGLRenderer
+  private readonly renderer: AnyRenderer
   private readonly disposables: { dispose(): void }[] = []
   /** Excluded from the environment bake (mirror, the car's own shadow). */
   private readonly bakeHidden: THREE.Object3D[] = []
-  private reflector: Reflector | null = null
+  private reflector: { dispose(): void } | null = null
   private envMap: THREE.Texture | null = null
   private manifest: GarageManifest | null = null
   /** The loaded room model, which detail it is, and what it owns (freed when swapped). */
@@ -65,7 +67,7 @@ export class Showroom {
   private blobGeo!: THREE.PlaneGeometry
   private blobMat!: THREE.MeshBasicMaterial
 
-  constructor(renderer: THREE.WebGLRenderer) {
+  constructor(renderer: AnyRenderer) {
     this.renderer = renderer
     this.group.name = 'Showroom'
     this.group.visible = false
@@ -240,7 +242,9 @@ export class Showroom {
     this.group.visible = true
     for (const o of this.bakeHidden) o.visible = false
 
-    const pmrem = new THREE.PMREMGenerator(this.renderer)
+    const pmrem = backend.nodes
+      ? new backend.nodes.PMREMGenerator(this.renderer as never) as unknown as THREE.PMREMGenerator
+      : new THREE.PMREMGenerator(this.renderer as THREE.WebGLRenderer)
     // Blurred (sigma 0.06): sharp, the lamp bulbs and tubes became bright pin-points
     // that sparkled across the clear coat.
     const target = pmrem.fromScene(bakeScene, 0.06, 0.1, 80, { size: 256, position: new THREE.Vector3(0, 1.1, 0) })
@@ -349,6 +353,16 @@ export class Showroom {
    * Medium/High only — it renders the scene a second time.
    */
   private buildFloorSheen(): void {
+    if (backend.nodes) {
+      // WebGPU: the TSL reflector node instead of the WebGL Reflector.
+      const sheen = backend.nodes.floorSheen(SHEEN_RADIUS, 0x3a3a3a, 0.4)
+      sheen.mesh.position.y = sheen.target.position.y = 0.006
+      sheen.mesh.renderOrder = 1
+      this.bakeHidden.push(sheen.mesh)
+      this.reflector = sheen
+      this.group.add(sheen.mesh, sheen.target)
+      return
+    }
     const base = (Reflector as unknown as { ReflectorShader: ReflectorShaderDef }).ReflectorShader // runtime static, missing from the typings
     const shader = {
       ...base,
