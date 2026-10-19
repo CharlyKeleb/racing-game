@@ -49,6 +49,9 @@ const read = async () => {
   return result
 }
 const stationary = await read()
+wheel.rotation.x += .25
+vectors.capture(renderer.renderer, scene, camera, body)
+const spinning = await read()
 camera.position.x += .3
 body.position.x += .3
 wheel.rotation.x += .25
@@ -58,7 +61,7 @@ camera.position.x += 40
 const cut = vectors.capture(renderer.renderer, scene, camera, body)
 camera.position.x -= 40
 vectors.dispose()
-const report = { backend: renderer.backendName, stationary, moving, cutRejected: !cut }
+const report = { backend: renderer.backendName, stationary, spinning, moving, cutRejected: !cut }
 document.querySelector('#report')!.textContent = JSON.stringify(report, null, 2)
 let last = performance.now()
 function frame(now: number) {
