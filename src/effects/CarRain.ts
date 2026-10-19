@@ -12,8 +12,10 @@ export function sampleCarRain(model: CarModel, count = 160): CarRainAnchors {
   const inverse = model.body.matrixWorld.clone().invert()
   const bounds = new THREE.Box3()
   const transform = new THREE.Matrix4()
+  const surfaces: THREE.Mesh[] = []
   model.body.traverse(node => {
     if (!(node instanceof THREE.Mesh)) return
+    surfaces.push(node)
     node.geometry.computeBoundingBox()
     if (node.geometry.boundingBox) bounds.union(node.geometry.boundingBox.clone().applyMatrix4(transform.multiplyMatrices(inverse, node.matrixWorld)))
   })
@@ -29,7 +31,8 @@ export function sampleCarRain(model: CarModel, count = 160): CarRainAnchors {
     origin.set(x, bounds.max.y + .2, z).applyMatrix4(model.body.matrixWorld)
     ray.set(origin, direction)
     hits.length = 0
-    ray.intersectObject(model.body, true, hits)
+    // Lamp sprites need a camera for raycasting and are not body surfaces.
+    ray.intersectObjects(surfaces, false, hits)
     const hit = hits[0]
     if (!hit?.face) continue
     normal.copy(hit.face.normal).applyNormalMatrix(normalMatrix.getNormalMatrix(hit.object.matrixWorld)).transformDirection(inverse)

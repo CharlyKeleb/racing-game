@@ -95,6 +95,10 @@ it('anchors car splashes to actual upper body geometry in body-local coordinates
   const material = new THREE.MeshPhysicalMaterial({ name: 'livery_paint', roughness: .7, clearcoat: 0 })
   const chassis = new THREE.Mesh(new THREE.BoxGeometry(2, 1, 4), material)
   chassis.position.y = .5; body.add(chassis)
+  // Runtime lamp effects add sprites before CarRain is constructed. They must
+  // never enter the camera-independent body surface raycasts.
+  const lamp = new THREE.Sprite(new THREE.SpriteMaterial())
+  lamp.position.set(0, 2, 0); body.add(lamp)
   root.position.set(20, 5, -12); root.rotation.y = .7
   const model = { root, body, wheels: {} } as CarModel
   const anchors = sampleCarRain(model, 40)
