@@ -2,6 +2,8 @@ import { Howler } from 'howler'
 import { CarSound, type CarSoundState } from './CarSound'
 import { OpponentAudio, type RivalSoundState } from './OpponentAudio'
 import { TyreBrakeSound } from './TyreBrakeSound'
+import { ImpactSound } from './ImpactSound'
+import type { ImpactKind } from './ImpactModel'
 import { DEFAULT_NOISE_PROFILE, tyreBrakeLevels, type CarNoiseProfile, type TyreBrakeInput } from './TyreBrakeModel'
 import { GarageAmbience } from './GarageAmbience'
 import { decodeWav16, type EngineBank } from './GranularEngine'
@@ -27,18 +29,21 @@ export class AudioManager {
   private rivals: OpponentAudio[] = []
   private rivalNoise: CarNoiseProfile[] = []
   /** Reused for every rival's update (no per-frame allocation). */
-  private readonly rivalState: RivalSoundState = { rpm: 0, throttle: 0, x: 0, y: 0, z: 0, recession: 0, passSpeed: 0, active: false, tyres: tyreBrakeLevels({ speed: 0, brake: 0, slip: 0, slide: 0, paved: 0, drifting: false }, DEFAULT_NOISE_PROFILE) }
+  private readonly rivalState: RivalSoundState = { rpm: 0, throttle: 0, x: 0, y: 0, z: 0, recession: 0, passSpeed: 0, active: false, tyres: tyreBrakeLevels({ speed: 0, brake: 0, slip: 0, slide: 0, paved: 0, drifting: false, kerb: 0 }, DEFAULT_NOISE_PROFILE) }
   private bankCache = new Map<string, Promise<EngineBankMessage>>()
   private workletReady: Promise<void> | null = null
   private engineBank: EngineBankMessage | null = null
   private ctx: AudioContext | null = null
   private master!: GainNode
+  /** Last stage before the speakers (see unlock). */
+  private limiter: DynamicsCompressorNode | null = null
   private sound: CarSound | null = null
   private carAudioUrl: string | null = null
   /** Firing pulses per crank revolution (flat-six 3, V8 4): pitches the synth and sub. */
   private firingPerRev = 3
   /** The player's tyres and brakes, and what they're made of. */
   private tyres: TyreBrakeSound | null = null
+  private impacts: ImpactSound | null = null
   private noiseProfile: CarNoiseProfile = DEFAULT_NOISE_PROFILE
 
   // Synth stand-in until the recordings load.
@@ -105,13 +110,22 @@ export class AudioManager {
     void ctx.resume()
 
     this.master = ctx.createGain()
-    this.master.connect(ctx.destination)
+    // Brickwall limiter on the whole mix: a crash on top of the engine and the
+    // rivals peaked ~7 dB over full scale (measured) and would clip.
+    const limiter = (this.limiter = ctx.createDynamicsCompressor())
+    limiter.threshold.value = -1.5
+    limiter.knee.value = 0
+    limiter.ratio.value = 20
+    limiter.attack.value = 0.001
+    limiter.release.value = 0.12
+    this.master.connect(limiter).connect(ctx.destination)
     this.setVolume(volume)
     this.carBus = ctx.createGain()
     this.carBus.connect(this.master)
     this.sound = new CarSound(ctx, this.carBus)
     this.tyres = new TyreBrakeSound(ctx, this.noiseProfile)
     this.tyres.output.connect(this.carBus)
+    this.impacts = new ImpactSound(ctx, this.carBus)
     this.ambience = new GarageAmbience(ctx, this.master)
     this.sound.setFiringPerRev(this.firingPerRev)
 
@@ -402,8 +416,20 @@ export class AudioManager {
     rival.update(Object.assign(this.rivalState, state))
   }
 
+  /** A hit on a car: `car` -1 is the player, otherwise the rival's index (heard where it is). */
+  impact(car: number, kind: ImpactKind, strength: number): void {
+    if (this.paused) return
+    ;(car < 0 ? this.impacts : this.rivals[car]?.impacts)?.hit(kind, strength)
+  }
+
+  /** Grinding along a wall, 0..1, for the player (-1) or a rival; follow every frame. */
+  scrape(car: number, level: number, slidingSpeed: number): void {
+    ;(car < 0 ? this.impacts : this.rivals[car]?.impacts)?.scrape(level, slidingSpeed)
+  }
+
   dispose(): void {
     this.clearOpponents()
+    this.impacts?.dispose()
     this.engineBank = null
     this.bankCache.clear()
     this.sound?.dispose()
@@ -412,6 +438,7 @@ export class AudioManager {
     this.sampled?.disconnect()
     this.sampled?.port.close()
     this.master?.disconnect()
+    this.limiter?.disconnect()
     if (this.ctx && this.ctx !== Howler.ctx) void this.ctx.close()
     this.ctx = null
   }

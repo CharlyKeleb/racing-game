@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { tyreBrakeLevels, type TyreBrakeInput } from '../src/audio/TyreBrakeModel'
 import { getCar } from '../src/vehicles/carRegistry'
 
-const cruise: TyreBrakeInput = { speed: 30, brake: 0, slip: 0.4, slide: 0, paved: 1, drifting: false }
+const cruise: TyreBrakeInput = { speed: 30, brake: 0, slip: 0.4, slide: 0, paved: 1, drifting: false, kerb: 0 }
 const porsche = getCar('porsche911').noise
 const koenigsegg = getCar('koenigsegg').noise
 const bmw = getCar('bmw').noise

@@ -55,6 +55,8 @@ export interface TyreBrakeInput {
   paved: number
   /** Arcade drift under way. */
   drifting: boolean
+  /** Share of the wheels on a kerb's ridged surface, 0..1 (the rumble). */
+  kerb: number
 }
 
 export interface TyreBrakeLevels {
@@ -73,6 +75,9 @@ export interface TyreBrakeLevels {
   brakeSqueal: number
   /** ABS chatter depth, 0..1 (the squeal pulses at ~14 Hz). */
   abs: number
+  /** Kerb rumble, 0..1, and its rate: ridges passing under the tyre per second, Hz. */
+  kerbRumble: number
+  kerbRate: number
 }
 
 /** Friction-circle use where a tyre starts to sing. */
@@ -81,6 +86,8 @@ const SQUEAL_ONSET = 0.82
 const FULL_SLIDE = 6
 /** Hard braking near the limit: where ABS works, or a race car locks. */
 const LIMIT_BRAKE = 0.7
+/** Spacing of a sawtooth kerb's ridges, m: 30 m/s over them is an ~85 Hz rumble. */
+const KERB_RIDGE = 0.35
 /** Effective rolling circumference for the grind's rasp rate, m. */
 const WHEEL_CIRCUMFERENCE = 2.1
 
@@ -113,5 +120,8 @@ export function tyreBrakeLevels(s: TyreBrakeInput, p: CarNoiseProfile): TyreBrak
   const slow = s.speed > 0.4 && s.speed < 5 ? 1 - Math.abs(s.speed - 2.2) / 2.8 : 0
   const brakeSqueal = p.brakes.squealHz > 0 ? clamp01(slow) * clamp01(s.brake * 2.5) : 0
 
-  return { squeal, squealPitch, scrub, brakeHiss, grind, grindRate, brakeSqueal, abs }
+  const kerbRumble = s.kerb * clamp01((s.speed - 2) / 18)
+  const kerbRate = s.speed / KERB_RIDGE
+
+  return { squeal, squealPitch, scrub, brakeHiss, grind, grindRate, brakeSqueal, abs, kerbRumble, kerbRate }
 }

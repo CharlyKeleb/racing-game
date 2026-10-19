@@ -30,6 +30,7 @@ const SCRUB_GAIN = 0.9
 const HISS_GAIN = 0.15
 const GRIND_GAIN = 0.5
 const BRAKE_SQUEAL_GAIN = 0.12
+const RUMBLE_GAIN = 1.4
 
 /**
  * One car's tyres and brakes as a Web Audio graph (see TyreBrakeModel for
@@ -57,6 +58,8 @@ export class TyreBrakeSound {
   private readonly grindAm: GainNode
   private readonly brakeTone: OscillatorNode
   private readonly brakeToneGain: GainNode
+  private readonly rumble: OscillatorNode
+  private readonly rumbleGain: GainNode
   /** Slow random walk of the squeal pitch, ±~4%: real squeal never holds one note. */
   private wander = 0
   private wanderVelocity = 0
@@ -139,6 +142,31 @@ export class TyreBrakeSound {
     this.sources.push(this.grindRate)
     loop().connect(grindBand).connect(this.grindAm).connect(this.grindGain).connect(this.output)
 
+    // Kerb rumble: the tyre slapping over each ridge — a buzzy low tone at the
+    // ridge rate, plus tyre noise chopped at the same rate.
+    this.rumble = ctx.createOscillator()
+    this.rumble.type = 'sawtooth'
+    this.rumble.frequency.value = 60
+    const rumbleLow = ctx.createBiquadFilter()
+    rumbleLow.type = 'lowpass'
+    rumbleLow.frequency.value = 380
+    this.rumbleGain = ctx.createGain()
+    this.rumbleGain.gain.value = 0
+    this.rumble.connect(rumbleLow).connect(this.rumbleGain)
+    const slap = ctx.createGain()
+    slap.gain.value = 0
+    const slapDepth = ctx.createGain()
+    slapDepth.gain.value = 0.6
+    this.rumble.connect(slapDepth).connect(slap.gain)
+    const slapBand = ctx.createBiquadFilter()
+    slapBand.type = 'bandpass'
+    slapBand.frequency.value = 300
+    slapBand.Q.value = 1.2
+    loop().connect(slapBand).connect(slap).connect(this.rumbleGain)
+    this.rumbleGain.connect(this.output)
+    this.rumble.start()
+    this.sources.push(this.rumble)
+
     // Low-speed brake squeal: a high tone with a little vibrato.
     this.brakeTone = ctx.createOscillator()
     this.brakeTone.frequency.value = profile.brakes.squealHz || 3000
@@ -182,6 +210,8 @@ export class TyreBrakeSound {
     this.grindGain.gain.setTargetAtTime(levels.grind * GRIND_GAIN, t, 0.05)
     this.grindRate.frequency.setTargetAtTime(Math.max(2, levels.grindRate), t, 0.05)
     this.brakeToneGain.gain.setTargetAtTime(levels.brakeSqueal * BRAKE_SQUEAL_GAIN, t, 0.08)
+    this.rumble.frequency.setTargetAtTime(Math.max(10, levels.kerbRate * pitch), t, 0.03)
+    this.rumbleGain.gain.setTargetAtTime(levels.kerbRumble * RUMBLE_GAIN, t, 0.03)
   }
 
   dispose(): void {

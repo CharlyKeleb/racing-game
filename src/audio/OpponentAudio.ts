@@ -1,5 +1,6 @@
 import type { EngineBankMessage } from './engineWorklet'
 import { TyreBrakeSound } from './TyreBrakeSound'
+import { ImpactSound } from './ImpactSound'
 import type { CarNoiseProfile, TyreBrakeLevels } from './TyreBrakeModel'
 
 /** Speed of sound, m/s, for the doppler shift. */
@@ -51,6 +52,8 @@ export class OpponentAudio {
   private sampled: AudioWorkletNode | null = null
   private readonly tyres: TyreBrakeSound
   private readonly tyreAir: BiquadFilterNode
+  /** Its crashes and wall scrapes, placed where it is. */
+  readonly impacts: ImpactSound
   private readonly wind: AudioBufferSourceNode
   private readonly windGain: GainNode
   private doppler = 1
@@ -88,6 +91,8 @@ export class OpponentAudio {
     this.tyreAir.type = 'lowpass'
     this.tyreAir.frequency.value = 12000
     this.tyres.output.connect(this.tyreAir).connect(this.panner)
+
+    this.impacts = new ImpactSound(ctx, this.panner)
 
     // Wind rush as it passes.
     const buf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate)
@@ -154,6 +159,7 @@ export class OpponentAudio {
     this.sampled?.disconnect()
     this.sampled?.port.close()
     this.tyres.dispose()
+    this.impacts.dispose()
     this.wind.disconnect()
     this.air.disconnect()
     this.tyreAir.disconnect()
@@ -163,4 +169,4 @@ export class OpponentAudio {
   }
 }
 
-const SILENT: TyreBrakeLevels = { squeal: 0, squealPitch: 1, scrub: 0, brakeHiss: 0, grind: 0, grindRate: 0, brakeSqueal: 0, abs: 0 }
+const SILENT: TyreBrakeLevels = { squeal: 0, squealPitch: 1, scrub: 0, brakeHiss: 0, grind: 0, grindRate: 0, brakeSqueal: 0, abs: 0, kerbRumble: 0, kerbRate: 0 }
