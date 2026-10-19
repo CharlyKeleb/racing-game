@@ -3,16 +3,16 @@ import { backend } from '../engine/backend'
 import type { QualityPreset } from '../stores/gameStore'
 
 /** Streaks drawn per preset (the box around the camera is the same; density changes). */
-export const RAIN_STREAKS: Record<QualityPreset, number> = { low: 2500, medium: 5000, high: 8000 }
+export const RAIN_STREAKS: Record<QualityPreset, number> = { low: 2200, medium: 4600, high: 7600 }
 const MAX_STREAKS = RAIN_STREAKS.high
 /** The box of rain that travels with the camera, metres (x, y, z). */
-export const RAIN_BOX = new THREE.Vector3(36, 22, 36)
+export const RAIN_BOX = new THREE.Vector3(44, 24, 44)
 /** Raindrops fall at ~9 m/s; a breeze leans them. */
 export const RAIN_FALL = new THREE.Vector3(1.2, -9.5, 0.6)
-/** Streak length per m/s of apparent speed: a ~1/70 s exposure. */
-export const RAIN_EXPOSURE = 0.014
+/** Streak length per m/s of apparent speed: a short photographic exposure. */
+export const RAIN_EXPOSURE = 0.01
 /** Streak width, metres. */
-export const RAIN_WIDTH = 0.009
+export const RAIN_WIDTH = 0.0018
 
 const vertexShader = /* glsl */ `
   attribute vec4 aSeed; // xyz: position in the box, w: speed variation
@@ -21,23 +21,32 @@ const vertexShader = /* glsl */ `
   uniform vec3 uFall;
   uniform vec3 uCameraVelocity;
   varying float vAlpha;
+  varying float vBrightness;
   varying vec2 vUv;
   #include <fog_pars_vertex>
   void main() {
     vUv = uv;
     // Each drop falls through a box that wraps around the camera: drops stay
     // put in the world while the camera moves, and there are always some near.
-    vec3 fall = uFall * (0.85 + 0.3 * aSeed.w);
+    vec3 fall = uFall * (0.8 + 0.4 * aSeed.w);
     vec3 drop = cameraPosition + mod(aSeed.xyz * uBox + fall * uTime - cameraPosition, uBox) - 0.5 * uBox;
-    // Streak along the drop's motion as the camera sees it: the faster you
-    // drive, the longer and flatter the streaks.
-    vec3 along = -(fall - uCameraVelocity) * ${RAIN_EXPOSURE.toFixed(4)};
-    vec3 mid = drop + along * (position.y + 0.5);
-    vec3 side = normalize(cross(along, mid - cameraPosition)) * ${RAIN_WIDTH.toFixed(4)};
-    vec3 world = mid + side * position.x * 2.0;
-    // Fade near the lens and toward the edge of the box.
+    // Slow, coherent wind drift; never randomise drops from frame to frame.
+    drop.x += sin(uTime * 0.7 + aSeed.z * 6.283) * 0.12;
     float dist = length(drop - cameraPosition);
-    vAlpha = smoothstep(0.6, 2.0, dist) * (1.0 - smoothstep(0.35, 0.5, dist / uBox.x));
+    vec3 motion = -(fall - uCameraVelocity);
+    float speed = max(length(motion), 0.001);
+    float exposure = ${RAIN_EXPOSURE.toFixed(4)} * (0.55 + aSeed.w * 0.7);
+    vec3 along = motion / speed * min(speed * exposure, 0.65);
+    vec3 mid = drop + along * position.y;
+    vec3 crossAxis = cross(along, mid - cameraPosition);
+    vec3 side = crossAxis / max(length(crossAxis), 0.00001);
+    // Subpixel distant drops use a wider, fainter footprint to avoid shimmer.
+    float width = max(${RAIN_WIDTH.toFixed(4)} * (0.65 + aSeed.w * 0.7), dist * 0.00012);
+    vec3 world = mid + side * width * position.x * 2.0;
+    float nearFade = smoothstep(0.8, 2.5, dist);
+    float farFade = 1.0 - smoothstep(12.0, 22.0, dist);
+    vAlpha = nearFade * farFade * (0.07 + 0.15 * aSeed.w) * min(1.0, 0.002 / width);
+    vBrightness = 0.55 + 0.25 * aSeed.y;
     vec4 mvPosition = viewMatrix * vec4(world, 1.0);
     gl_Position = projectionMatrix * mvPosition;
     #include <fog_vertex>
@@ -47,14 +56,16 @@ const vertexShader = /* glsl */ `
 const fragmentShader = /* glsl */ `
   varying float vAlpha;
   varying vec2 vUv;
+  varying float vBrightness;
   #include <fog_pars_fragment>
   void main() {
     // Thin bright core across, fading toward both ends.
-    float across = 1.0 - abs(vUv.x - 0.5) * 2.0;
-    float along = sin(vUv.y * 3.14159);
-    float a = across * along * vAlpha * 0.45;
+    float x = abs(vUv.x - 0.5) * 2.0;
+    float across = 1.0 - smoothstep(0.15, 1.0, x);
+    float along = smoothstep(0.0, 0.18, vUv.y) * (1.0 - smoothstep(0.55, 1.0, vUv.y));
+    float a = across * along * vAlpha;
     if (a < 0.004) discard;
-    gl_FragColor = vec4(0.78, 0.84, 0.9, a);
+    gl_FragColor = vec4(vec3(0.64, 0.69, 0.73) * vBrightness, a);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
     #include <fog_fragment>
@@ -94,6 +105,7 @@ export class Rain {
     }
     geo.setAttribute('aSeed', new THREE.InstancedBufferAttribute(seeds, 4))
     geo.instanceCount = 0
+    plane.dispose()
     if (backend.nodes) {
       const node = backend.nodes.rainMaterial()
       this.material = node.material
@@ -134,15 +146,23 @@ export class Rain {
       this.hasLast = false
       return
     }
+    dt = Math.max(0, Math.min(dt, 0.05))
     this.uniforms.time.value += dt
-    geo.instanceCount = Math.round(this.streaks * intensity)
+    geo.instanceCount = Math.round(this.streaks * THREE.MathUtils.clamp(intensity, 0, 1))
     // Camera velocity (smoothed), for streaks that lean into the motion.
     const v = this.uniforms.cameraVelocity.value
     if (this.hasLast && dt > 0) {
-      const k = 1 - Math.exp(-dt * 8)
-      v.x += ((camera.position.x - this.lastCamera.x) / dt - v.x) * k
-      v.y += ((camera.position.y - this.lastCamera.y) / dt - v.y) * k
-      v.z += ((camera.position.z - this.lastCamera.z) / dt - v.z) * k
+      const dx = camera.position.x - this.lastCamera.x
+      const dy = camera.position.y - this.lastCamera.y
+      const dz = camera.position.z - this.lastCamera.z
+      // Reject the raw jump before smoothing; a cut must not leave a velocity tail.
+      if (dx * dx + dy * dy + dz * dz > Math.pow(120 * dt, 2)) v.set(0, 0, 0)
+      else {
+        const k = 1 - Math.exp(-dt * 10)
+        v.x += (dx / dt - v.x) * k
+        v.y += (dy / dt - v.y) * k
+        v.z += (dz / dt - v.z) * k
+      }
     } else {
       v.set(0, 0, 0)
     }

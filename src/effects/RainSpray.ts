@@ -56,7 +56,7 @@ export class RainSpray {
         const car = cars[c]
         const v = car.body.linvel()
         const speed = Math.hypot(v.x, v.z)
-        const amount = sprayAmount(speed) * wet
+        const amount = Math.min(3, sprayAmount(speed)) * wet
         const pos = car.body.translation()
         if (amount <= 0 || (c > 0 && Math.hypot(pos.x - camera.x, pos.z - camera.z) > MAX_DISTANCE)) continue
         const wheels = car.controller.wheels
@@ -89,10 +89,10 @@ export class RainSpray {
     _p.vx = v.x * (0.45 + Math.random() * 0.2) + (Math.random() - 0.5) * 1.5
     _p.vy = 0.6 + Math.random() * 1.4
     _p.vz = v.z * (0.45 + Math.random() * 0.2) + (Math.random() - 0.5) * 1.5
-    _p.life = 1.2 + Math.random() * 1.3
-    _p.startSize = 0.5 + Math.random() * 0.4
-    _p.endSize = 2.6 + Math.random() * 2 * Math.min(1.5, amount)
-    _p.alpha = (0.07 + 0.08 * Math.min(1, amount)) * this.mistAlpha
+    _p.life = 0.65 + Math.random() * 0.75
+    _p.startSize = 0.18 + Math.random() * 0.22
+    _p.endSize = 1.1 + Math.random() * 1.2 * Math.min(1.5, amount)
+    _p.alpha = (0.035 + 0.045 * Math.min(1, amount)) * this.mistAlpha
     const shade = 0.82 + Math.random() * 0.06
     _p.r = shade
     _p.g = shade + 0.02
@@ -113,8 +113,8 @@ export class RainSpray {
     _p.vy = 1.5 + Math.random() * (2 + speed * 0.05)
     _p.vz = v.z * (1 - fling) + (Math.random() - 0.5) * 2
     _p.life = 0.5 + Math.random() * 0.4
-    _p.startSize = _p.endSize = 0.008 + Math.random() * 0.012
-    _p.alpha = 0.3
+    _p.startSize = _p.endSize = 0.003 + Math.random() * 0.005
+    _p.alpha = 0.18
     _p.r = 0.85
     _p.g = 0.9
     _p.b = 0.96
