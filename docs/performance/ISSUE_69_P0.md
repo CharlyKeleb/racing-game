@@ -1,6 +1,7 @@
 # Issue #69: production baseline protocol
 
-Status: instrumentation prepared; reference-device baseline still pending.
+Status: initial desktop captures collected; full reference-device baseline still pending.
+See [19 October M1 results](runs/2026-10-19-m1/README.md) for evidence and limitations.
 Deployment supplied by the reporter: https://racing-game-jade.vercel.app
 Starting checkout: a5cc4dea6f563c02915436f7b9e1d4195f90fb4c.
 On 2026-10-19, the deployed menu showed Drift Challenge disabled (SOON),
