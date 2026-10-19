@@ -1,4 +1,5 @@
 import { ScaledBloomEffect } from './ScaledBloomEffect'
+import { HAZE_STRENGTH } from './HeatHaze'
 import type { QualityPreset } from '../stores/gameStore'
 import * as THREE from 'three'
 import {
@@ -34,6 +35,33 @@ class WhipBlurEffect extends Effect {
   }
 }
 
+/** Offsets the image by the heat-haze buffer's signed rg (#56). */
+class HeatHazeEffect extends Effect {
+  constructor(distortion: THREE.Texture) {
+    super(
+      'HeatHazeEffect',
+      /* glsl */ `
+        uniform sampler2D distortion;
+        uniform float strength;
+        void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor) {
+          vec2 offset = texture2D(distortion, uv).rg * strength;
+          outputColor = texture2D(inputBuffer, uv + offset);
+        }
+      `,
+      {
+        attributes: EffectAttribute.CONVOLUTION,
+        uniforms: new Map<string, THREE.Uniform>([['distortion', new THREE.Uniform(distortion)], ['strength', new THREE.Uniform(HAZE_STRENGTH)]]),
+      },
+    )
+  }
+}
+
+/** The heat-haze source: a scene of distortion puffs, and whether anything is in it this frame. */
+export interface HazeSource {
+  readonly scene: THREE.Scene
+  readonly active: boolean
+}
+
 /** Bloom + preset-scaled AA (SMAA on High, FXAA otherwise) + ACES, with optional intro whip blur. */
 export class PostFX {
   private readonly bloom = new ScaledBloomEffect({ intensity: 0.35, luminanceThreshold: 1.2, luminanceSmoothing: 0.2, mipmapBlur: true })
@@ -41,10 +69,23 @@ export class PostFX {
   private readonly whip = new WhipBlurEffect()
   private readonly mainPass: EffectPass
   private readonly whipPass: EffectPass
+  private readonly renderer: THREE.WebGLRenderer
+  private readonly camera: THREE.Camera
+  /** Half-resolution signed offsets drawn by the haze puffs. */
+  private readonly hazeTarget = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, format: THREE.RGBAFormat, depthBuffer: false })
+  private readonly hazePass: EffectPass
+  private haze: HazeSource | null = null
+  private readonly clearColor = new THREE.Color()
 
   constructor(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera, quality: QualityPreset) {
+    this.renderer = renderer
+    this.camera = camera
     this.composer = new EffectComposer(renderer, { frameBufferType: THREE.HalfFloatType })
     this.composer.addPass(new RenderPass(scene, camera))
+    // Haze first, so bloom and AA see the shimmered image. Off unless a puff is up.
+    this.hazePass = new EffectPass(camera, new HeatHazeEffect(this.hazeTarget.texture))
+    this.hazePass.enabled = false
+    this.composer.addPass(this.hazePass)
     this.mainPass = new EffectPass(
       camera,
       this.bloom,
@@ -59,6 +100,8 @@ export class PostFX {
     // Only the last enabled pass may draw to the screen, so the two hand it back and forth.
     this.whipPass.enabled = false
     this.mainPass.renderToScreen = true
+    const size = renderer.getDrawingBufferSize(new THREE.Vector2())
+    this.hazeTarget.setSize(Math.max(1, size.x >> 1), Math.max(1, size.y >> 1))
   }
 
   /** Whip-pan smear width in UV units; 0 skips the pass entirely. */
@@ -70,15 +113,35 @@ export class PostFX {
     this.mainPass.renderToScreen = !on
   }
 
+  setHaze(haze: HazeSource | null): void {
+    this.haze = haze
+  }
+
   setSize(w: number, h: number): void {
     this.composer.setSize(w, h)
+    const size = this.renderer.getDrawingBufferSize(new THREE.Vector2())
+    this.hazeTarget.setSize(Math.max(1, size.x >> 1), Math.max(1, size.y >> 1))
   }
 
   render(): void {
+    const haze = this.haze?.active ? this.haze : null
+    this.hazePass.enabled = !!haze
+    if (haze) {
+      const renderer = this.renderer
+      const alpha = renderer.getClearAlpha()
+      renderer.getClearColor(this.clearColor)
+      renderer.setRenderTarget(this.hazeTarget)
+      renderer.setClearColor(0x000000, 0)
+      renderer.clear(true, false, false)
+      renderer.render(haze.scene, this.camera)
+      renderer.setRenderTarget(null)
+      renderer.setClearColor(this.clearColor, alpha)
+    }
     this.composer.render()
   }
 
   dispose(): void {
+    this.hazeTarget.dispose()
     this.composer.dispose()
   }
 }

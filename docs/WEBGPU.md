@@ -41,6 +41,7 @@ performance captures record it with every frame:
     | `DirectionGuide` `onBeforeCompile` per-arrow fade | `instanceFadeMaterial` |
     | `Environment` `Sky` with the exposure / tint / clamp patch | `skyDome` (`SkyMesh`) |
     | `Showroom` `Reflector` floor sheen | `floorSheen` (`reflector()` node) |
+    | `HeatHaze` distortion puffs (#56) | `hazeMaterial` (offsets applied in `postfx.ts`) |
 
 **Known gap:** garage liveries (`CarLivery`, via `LiveryGraphics`) still patch
 the paint shader with `onBeforeCompile`. Under WebGPU the paint, finish and

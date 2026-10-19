@@ -16,6 +16,7 @@ import { ChaseCamera, type ShowroomFraming } from '../camera/ChaseCamera'
 import { DirectionGuide } from '../effects/DirectionGuide'
 import { NitroFlames } from '../effects/NitroFlames'
 import { Sparks, type SparkContact } from '../effects/Sparks'
+import { HeatHaze } from '../effects/HeatHaze'
 import { backend } from './backend'
 import { DrivingEffects } from '../effects/DrivingEffects'
 import { Headlights } from '../effects/Headlights'
@@ -184,6 +185,9 @@ export class Game {
   private effects!: DrivingEffects
   /** Wall-scrape, crash and bottoming-out sparks for every car (#52). Built in init(), once the renderer is known. */
   private sparks!: Sparks
+  /** Exhaust heat haze for every car (#56). Built in init(), once the renderer is known. */
+  private haze!: HeatHaze
+  private readonly hazeCars: Vehicle[] = []
   private readonly sparkContact: SparkContact = { x: 0, y: 0, z: 0, nx: 0, ny: 0, nz: 0, vx: 0, vy: 0, vz: 0, dv: 0, groundY: 0 }
   /** Change in speed per car from contact forces this tick (the spark burst size). */
   private readonly tickHit = new Float32Array(16)
@@ -334,6 +338,8 @@ export class Game {
     scene.add(this.effects.group)
     this.sparks = new Sparks()
     scene.add(this.sparks.mesh)
+    this.haze = new HeatHaze()
+    this.renderer.setHaze(this.haze)
 
     const spawn = this.track.spawn
     this.showroom.placeAt(spawn.position, spawn.heading)
@@ -1197,6 +1203,13 @@ export class Game {
       this.updateGuide(dt)
     }
     if (this.rivalTags.length > 0) this.updateRivalTags(phase === 'countdown' || phase === 'racing', dt)
+    // Exhaust heat haze: every car, laid out after the camera moved this frame.
+    if (gameStore.getState().settings.postfx) {
+      this.hazeCars.length = 0
+      this.hazeCars.push(this.vehicle)
+      for (const opponent of this.opponents) this.hazeCars.push(opponent.vehicle)
+      this.haze.update(this.hazeCars, this.renderer.camera, dt)
+    }
     this.renderer.setWhipBlur(phase === 'intro' ? this.introCamera.whip * 0.05 : 0)
     const staging = phase === 'intro' || phase === 'countdown'
     if (staging) this.updateStaging(phase, dt)
@@ -1708,6 +1721,7 @@ export class Game {
     this.livery?.dispose()
     this.effects?.dispose()
     this.sparks?.dispose()
+    this.haze?.dispose()
     this.guide?.dispose()
     this.driftZones?.dispose()
     this.showroom?.dispose()

@@ -7,7 +7,7 @@ const FLAME_RADIUS = 0.075
 const OVAL = 0.62
 
 /** Fallback exhaust tips when the config has none: twin pipes low at the rear bumper. */
-function defaultExhausts(cfg: VehicleConfig): [number, number, number][] {
+export function defaultExhausts(cfg: VehicleConfig): [number, number, number][] {
   const z = cfg.chassisCenter[2] - cfg.chassisHalfExtents[2]
   return [
     [0.32, 0.36, z],

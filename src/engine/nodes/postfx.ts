@@ -1,9 +1,11 @@
 import * as THREE from 'three/webgpu'
-import { Fn, Loop, convertToTexture, float, pass, renderOutput, uniform, uv, vec2, vec4 } from 'three/tsl'
+import { Fn, Loop, convertToTexture, float, pass, renderOutput, screenUV, uniform, uv, vec2, vec4 } from 'three/tsl'
 import { bloom } from 'three/addons/tsl/display/BloomNode.js'
 import { fxaa } from 'three/addons/tsl/display/FXAANode.js'
 import { smaa } from 'three/addons/tsl/display/SMAANode.js'
 import type { QualityPreset } from '../../stores/gameStore'
+import { HAZE_STRENGTH } from '../../effects/HeatHaze'
+import type { HazeSource } from '../../effects/PostFX'
 
 /**
  * The post stack for WebGPURenderer, as TSL nodes: the same chain as the
@@ -14,16 +16,43 @@ import type { QualityPreset } from '../../stores/gameStore'
 export class NodePostFX {
   private readonly pipeline: THREE.RenderPipeline
   private readonly strength = uniform(0)
-  private readonly plain: THREE.Node
-  private readonly whipped: THREE.Node
+  private plain!: THREE.Node
+  private whipped!: THREE.Node
   private whipOn = false
+  private readonly scene: THREE.Scene
+  private readonly camera: THREE.Camera
+  private readonly quality: QualityPreset
 
   constructor(renderer: THREE.WebGPURenderer, scene: THREE.Scene, camera: THREE.Camera, quality: QualityPreset) {
     this.pipeline = new THREE.RenderPipeline(renderer)
     // Tone mapping and the sRGB transform happen in renderOutput, before AA (which wants display values).
     this.pipeline.outputColorTransform = false
+    this.scene = scene
+    this.camera = camera
+    this.quality = quality
+    this.build(null)
+  }
+
+  /**
+   * Heat haze (#56): a half-resolution pass of the haze puffs gives signed
+   * offsets the scene colour is sampled through, before bloom and AA. It
+   * stays in the graph while a source is set (an empty pass is cheap;
+   * rebuilding the graph whenever haze came and went would recompile).
+   */
+  setHaze(haze: HazeSource | null): void {
+    this.build(haze)
+  }
+
+  private build(haze: HazeSource | null): void {
+    const { scene, camera, quality } = this
     const scenePass = pass(scene, camera)
-    const color = scenePass.getTextureNode('output')
+    let color: THREE.Node<'vec4'> = scenePass.getTextureNode('output')
+    if (haze) {
+      const hazePass = pass(haze.scene, camera)
+      hazePass.setResolutionScale(0.5)
+      const offset = hazePass.getTextureNode('output').sample(screenUV).rg.mul(HAZE_STRENGTH)
+      color = scenePass.getTextureNode('output').sample(screenUV.add(offset))
+    }
     const glow = bloom(color, 0.35, 0.5, 1.2)
     glow.smoothWidth.value = 0.2
     glow.setResolutionScale(quality === 'high' ? 0.5 : quality === 'medium' ? 0.35 : 0.25)
@@ -40,7 +69,8 @@ export class NodePostFX {
       })
       return sum.div(12)
     })()
-    this.pipeline.outputNode = this.plain
+    this.pipeline.outputNode = this.whipOn ? this.whipped : this.plain
+    this.pipeline.needsUpdate = true
   }
 
   /** Whip-pan smear width in UV units; 0 drops the extra pass. */
