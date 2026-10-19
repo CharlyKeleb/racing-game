@@ -1538,6 +1538,7 @@ export class Game {
       this.renderer.setViewDistance(view.fogFar * 1.05)
     }
     this.audio.setVolume(s.masterVolume)
+    this.audio.setMenuMusic(s.musicTrack, s.menuMusic)
     if (this.camera) this.camera.mode = s.camera
     this.applyTimeOfDay(s.timeOfDay)
   }

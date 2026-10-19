@@ -15,6 +15,7 @@ import { TrackSelection } from './TrackSelection'
 import { TrackAerial } from './TrackAerial'
 import trackPreviews from './trackPreviews.json'
 import { RevButton } from './RevButton'
+import { MenuMusicBar } from './MenuMusicBar'
 import { TIME_PRESETS } from '../world/timeOfDay'
 
 export function MainMenu() {
@@ -43,6 +44,7 @@ export function MainMenu() {
         <div className="logo">
           RACING<span>/</span>GAME
         </div>
+        <MenuMusicBar />
         <Button size="sm" className="menu-settings menu-icon-action" aria-label="Settings" onClick={() => setShowSettings((v) => !v)} aria-expanded={showSettings}>
           <GiGears aria-hidden="true"/> Settings
         </Button>

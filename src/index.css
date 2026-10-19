@@ -918,3 +918,68 @@ button.menu-track:hover,button.menu-track:focus-visible { border-color:var(--acc
 .drift-setup-summary{display:grid;gap:6px;padding:14px 16px;background:#19c3ff08;border-left:2px solid var(--accent-2);margin:4px 0 22px}.drift-setup-summary strong{font-family:var(--font-display);font-size:22px;font-weight:900;font-style:normal;text-transform:uppercase;letter-spacing:.03em}.drift-setup-summary span{font-size:11px;color:var(--accent)}.drift-setup-summary small{font-size:12px;line-height:1.5;color:var(--muted)}
 
 .track-select__list:focus-visible { outline:2px solid var(--accent-2); outline-offset:-3px; }
+
+/* ── Menu soundtrack deck ───────────────────────────────────────────── */
+/* A compact top-bar player: change track, pause, see the CC0 source. */
+.menu-top { gap: 16px; }
+.menu-music {
+  display: flex; align-items: center; gap: 10px; flex-shrink: 1;
+  width: min(420px, 38vw); min-width: 280px; padding: 7px 8px 7px 12px;
+  background: linear-gradient(115deg, #101c2bee, #0a111cdd);
+  border: 1px solid #ffffff20; border-left: 3px solid var(--accent-2);
+  box-shadow: 0 8px 24px #0005;
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+}
+.menu-music__icon { display: grid; place-items: center; flex-shrink: 0; color: var(--accent-2); }
+.menu-music__icon svg { width: 22px; height: 22px; }
+.menu-music__meta { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.menu-music .eyebrow { display: flex; align-items: center; gap: 6px; font-size: 9px; line-height: 1; letter-spacing: .16em; }
+.menu-music__license {
+  padding: 1px 4px; border: 1px solid #ffd20055; color: var(--accent);
+  font-size: 8px; font-style: normal; letter-spacing: .1em;
+}
+.menu-music__title {
+  font: italic 800 16px/1.05 var(--font-display); text-transform: uppercase;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.menu-music__artist {
+  font: 600 9px/1.2 var(--font-display); letter-spacing: .13em;
+  text-transform: uppercase; color: var(--muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.menu-music__wave { display: flex; align-items: flex-end; gap: 2px; width: 18px; height: 18px; flex-shrink: 0; }
+.menu-music__wave i {
+  width: 2px; height: 100%; background: var(--accent-2); transform-origin: bottom;
+  animation: menu-music-wave .7s ease-in-out infinite alternate;
+}
+.menu-music__wave i:nth-child(1) { animation-delay: -.45s; }
+.menu-music__wave i:nth-child(2) { animation-delay: -.2s; }
+.menu-music__wave i:nth-child(3) { animation-delay: -.55s; }
+.menu-music__wave i:nth-child(4) { animation-delay: -.1s; }
+.menu-music.is-off .menu-music__wave i { animation-play-state: paused; transform: scaleY(.2); opacity: .3; }
+.menu-music.is-off .menu-music__title { color: var(--muted); }
+.menu-music__controls { display: flex; align-items: center; gap: 1px; flex-shrink: 0; }
+.menu-music__controls button {
+  width: 30px; height: 30px; display: grid; place-items: center; padding: 0;
+  border: 1px solid transparent; background: none; color: var(--muted); cursor: pointer;
+  transition: color .15s, background .15s, border-color .15s;
+}
+.menu-music__controls button:hover { color: var(--ink); background: #ffffff0d; border-color: #ffffff25; }
+.menu-music__controls button:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 1px; }
+.menu-music__controls svg { width: 17px; height: 17px; }
+.menu-music__toggle { color: var(--accent) !important; border-color: #ffd20055 !important; background: #ffd20010 !important; }
+.menu-music__toggle:hover { background: #ffd20022 !important; }
+@keyframes menu-music-wave { from { transform: scaleY(.25); } to { transform: scaleY(1); } }
+@media (prefers-reduced-motion: reduce) {
+  .menu-music__wave i { animation: none; transform: scaleY(.65); }
+}
+@media (max-width: 1000px) {
+  .menu-music { width: min(360px, 32vw); min-width: 0; }
+  .menu-music__artist { display: none; }
+}
+@media (max-width: 720px) {
+  .menu-top { flex-wrap: wrap; row-gap: 10px; }
+  .menu-music { order: 3; width: 100%; min-width: 0; }
+  .menu-music__artist { display: block; }
+}

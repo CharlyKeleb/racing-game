@@ -6,6 +6,8 @@ import { ImpactSound } from './ImpactSound'
 import type { ImpactKind } from './ImpactModel'
 import { DEFAULT_NOISE_PROFILE, tyreBrakeLevels, type CarNoiseProfile, type TyreBrakeInput } from './TyreBrakeModel'
 import { GarageAmbience } from './GarageAmbience'
+import { MenuMusic } from './MenuMusic'
+import { MUSIC_TRACKS, musicTrack } from './musicTracks'
 import { decodeWav16, type EngineBank } from './GranularEngine'
 import type { EngineBankMessage } from './engineWorklet'
 import engineWorkletUrl from './engineWorklet.ts?worker&url'
@@ -61,6 +63,10 @@ export class AudioManager {
   /** The car's sound runs through this, so the menu can hold the engine quiet. */
   private carBus!: GainNode
   private ambience: GarageAmbience | null = null
+  /** Menu/garage soundtrack; created on unlock with the rest of the graph. */
+  private music: MenuMusic | null = null
+  private musicTrackId: string = MUSIC_TRACKS[0].id
+  private musicEnabled = true
   /** 'menu' = garage room tone, engine held quiet (except a swap's rev); 'race' = engine up, room tone out. */
   private scene: 'menu' | 'race' = 'menu'
   private menuEngine = false
@@ -137,6 +143,10 @@ export class AudioManager {
     this.tyres.output.connect(this.carBus)
     this.impacts = new ImpactSound(ctx, this.fxBus)
     this.ambience = new GarageAmbience(ctx, this.master)
+    this.music = new MenuMusic(ctx, this.master)
+    this.music.setTrack(musicTrack(this.musicTrackId))
+    this.music.setEnabled(this.musicEnabled)
+    this.music.setActive(this.scene === 'menu')
     this.sound.setFiringPerRev(this.firingPerRev)
 
     this.synthGain = ctx.createGain()
@@ -314,9 +324,22 @@ export class AudioManager {
     tone.stop(t + length + 0.02)
   }
 
+  /** Menu soundtrack selection and on/off; safe before unlock, applied when the graph exists. */
+  setMenuMusic(trackId: string, enabled: boolean): void {
+    this.musicTrackId = musicTrack(trackId).id
+    this.musicEnabled = enabled
+    if (!this.music) return
+    // Pause before swapping while muted so a track change can never blip.
+    if (!enabled) this.music.setEnabled(false)
+    this.music.setTrack(musicTrack(this.musicTrackId))
+    this.music.setEnabled(enabled)
+    this.music.setActive(this.scene === 'menu')
+  }
+
   /** Menu/garage vs. on track: sets the room tone and whether the engine is heard. */
   setScene(scene: 'menu' | 'race'): void {
     this.scene = scene
+    this.music?.setActive(scene === 'menu')
     this.applyMix()
   }
 
@@ -457,6 +480,8 @@ export class AudioManager {
     this.sound?.dispose()
     this.tyres?.dispose()
     this.ambience?.dispose()
+    this.music?.dispose()
+    this.music = null
     this.sampled?.disconnect()
     this.sampled?.port.close()
     this.master?.disconnect()

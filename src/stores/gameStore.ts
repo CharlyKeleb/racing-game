@@ -4,6 +4,7 @@ import { defaultQuality, isMobile } from '../engine/device'
 import { DEFAULT_BUILD, sanitizeBuild, type CarBuild } from '../vehicles/CarBuild'
 import { selectableCars } from '../vehicles/carRegistry'
 import { isAiDifficulty, type AiDifficulty } from '../racing/AiProfiles'
+import { isMusicTrack, MUSIC_TRACKS, type MusicTrackId } from '../audio/musicTracks'
 import { isTimeOfDay, type TimeOfDay } from '../world/timeOfDay'
 
 /**
@@ -21,6 +22,10 @@ export interface Settings {
   quality: QualityPreset
   postfx: boolean
   masterVolume: number
+  /** Menu/garage soundtrack on/off. */
+  menuMusic: boolean
+  /** Track id from audio/musicTracks.ts. */
+  musicTrack: MusicTrackId
   camera: CameraMode
   difficulty: AiDifficulty
   opponents: number
@@ -72,6 +77,8 @@ const defaultSettings: Settings = {
   quality: defaultQuality(),
   postfx: !isMobile(),
   masterVolume: 0.9,
+  menuMusic: true,
+  musicTrack: MUSIC_TRACKS[0].id,
   camera: 'chase',
   difficulty: 'challenging',
   opponents: 3,
@@ -91,6 +98,8 @@ function loadSettings(): Settings {
     if (!isAiDifficulty(merged.difficulty)) merged.difficulty = 'challenging'
     merged.opponents = [0, 1, 3].includes(merged.opponents) ? merged.opponents : 3
     if (!isTimeOfDay(merged.timeOfDay)) merged.timeOfDay = defaultSettings.timeOfDay
+    if (typeof merged.menuMusic !== 'boolean') merged.menuMusic = defaultSettings.menuMusic
+    if (!isMusicTrack(merged.musicTrack)) merged.musicTrack = defaultSettings.musicTrack
     if (!selectableCars().some((c) => c.id === merged.car)) merged.car = defaultSettings.car
     return merged
   } catch {
