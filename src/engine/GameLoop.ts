@@ -1,3 +1,5 @@
+import { performanceCapture } from './PerformanceCapture'
+
 /**
  * Fixed-timestep loop ("Fix Your Timestep"). Physics and gameplay always tick
  * at FIXED_DT so handling is identical at 30, 60 or 144 Hz; rendering runs once
@@ -39,6 +41,8 @@ export class GameLoop {
 
   /** Advances the simulation; exposed separately so tests can drive it. */
   advance(frameTime: number): number {
+    const profiling = performanceCapture.active
+    const started = profiling ? performance.now() : 0
     const clamped = Math.min(frameTime, MAX_FRAME_TIME)
     this.accumulator += clamped
     let steps = 0
@@ -47,7 +51,9 @@ export class GameLoop {
       this.accumulator -= FIXED_DT
       steps++
     }
+    const simulated = profiling ? performance.now() : 0
     this.callbacks.render(this.accumulator / FIXED_DT, clamped)
+    if (profiling) performanceCapture.frame(frameTime * 1000, steps, simulated - started, performance.now() - simulated)
     return steps
   }
 

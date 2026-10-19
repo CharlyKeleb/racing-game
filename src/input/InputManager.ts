@@ -11,6 +11,8 @@ export interface InputState {
   brake: number
   /** -1 (left) .. 1 (right) */
   steer: number
+  /** Omitted by AI/replays for the existing analog steering response. */
+  steerSource?: 'keyboard' | 'analog'
   handbrake: boolean
   /** Nitro boost held. */
   nitro: boolean
@@ -33,6 +35,7 @@ const PAD = { A: 0, B: 1, X: 2, Y: 3, RB: 5, LT: 6, RT: 7, START: 9 } as const
 
 export class InputManager {
   readonly state: InputState = { throttle: 0, brake: 0, steer: 0, handbrake: false, nitro: false }
+  private steerSource: 'keyboard' | 'analog' = 'keyboard'
   private readonly keys = new Set<string>()
   private readonly pending = new Set<InputAction>()
   private readonly prevPadButtons: boolean[] = []
@@ -50,14 +53,20 @@ export class InputManager {
     const k = this.keys
     let throttle = k.has('KeyW') || k.has('ArrowUp') ? 1 : 0
     let brake = k.has('KeyS') || k.has('ArrowDown') ? 1 : 0
-    let steer = (k.has('KeyD') || k.has('ArrowRight') ? 1 : 0) - (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0)
+    const right = k.has('KeyD') || k.has('ArrowRight')
+    const left = k.has('KeyA') || k.has('ArrowLeft')
+    let steer = (right ? 1 : 0) - (left ? 1 : 0)
+    if (left || right) this.steerSource = 'keyboard'
     let handbrake = k.has('Space')
     let nitro = k.has('ShiftLeft') || k.has('ShiftRight')
 
     const pad = navigator.getGamepads?.().find((p) => p?.connected)
     if (pad) {
       const axis = pad.axes[0] ?? 0
-      if (Math.abs(axis) > GAMEPAD_DEADZONE) steer = axis
+      if (Math.abs(axis) > GAMEPAD_DEADZONE) {
+        steer = axis
+        this.steerSource = 'analog'
+      }
       throttle = Math.max(throttle, pad.buttons[PAD.RT]?.value ?? 0)
       brake = Math.max(brake, pad.buttons[PAD.LT]?.value ?? 0)
       handbrake ||= !!pad.buttons[PAD.A]?.pressed
@@ -71,13 +80,17 @@ export class InputManager {
     const t = this.touch
     throttle = Math.max(throttle, t.throttle)
     brake = Math.max(brake, t.brake)
-    if (t.steer !== 0) steer = t.steer
+    if (t.steer !== 0) {
+      steer = t.steer
+      this.steerSource = 'analog'
+    }
     handbrake ||= t.handbrake
     nitro ||= t.nitro
 
     this.state.throttle = throttle
     this.state.brake = brake
     this.state.steer = Math.max(-1, Math.min(1, steer))
+    this.state.steerSource = this.steerSource
     this.state.handbrake = handbrake
     this.state.nitro = nitro
   }

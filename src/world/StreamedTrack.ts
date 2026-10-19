@@ -1,3 +1,4 @@
+import { performanceCapture } from '../engine/PerformanceCapture'
 import RAPIER from '@dimforge/rapier3d-compat'
 import * as THREE from 'three'
 import type { AssetManager } from '../engine/AssetManager'
@@ -338,8 +339,10 @@ export class StreamedTrack implements RaceTrack {
     // chunk is the main hitch source on mobile.
     const next = this.ready.shift()
     if (next) {
+      const started = performanceCapture.active ? performance.now() : 0
       if (this.wanted[next.index] === next.lod) this.show(next.index, next.lod, next.object)
       else disposeObject(next.object)
+      if (performanceCapture.active) performanceCapture.event('chunk-integration', performance.now() - started, { index: next.index, lod: next.lod })
     }
 
     this.planTimer -= dt
@@ -383,8 +386,15 @@ export class StreamedTrack implements RaceTrack {
   }
 
   private async fetchChunk(index: number, lod: number): Promise<THREE.Object3D> {
+    const started = performanceCapture.active ? performance.now() : 0
     const gltf = await this.assets.loadGltf(this.chunks[index].urls[lod])
-    return this.adopt(gltf.scene)
+    const loaded = performanceCapture.active ? performance.now() : 0
+    const object = this.adopt(gltf.scene)
+    if (performanceCapture.active && started) {
+      performanceCapture.event('chunk-fetch-decode', loaded - started, { index, lod })
+      performanceCapture.event('chunk-adopt', performance.now() - loaded, { index, lod })
+    }
+    return object
   }
 
   /** Swap a chunk's visible LOD (or unload it with NOT_LOADED). */

@@ -27,6 +27,10 @@ npm run dev
 | R | Reset car |
 | Esc / P | Pause |
 
+Keyboard steering builds progressively, with a quicker return through centre when
+changing direction. In normal races, a short brake tap while turning no longer
+activates guided drift on keyboard; use Space for a deliberate drift entry.
+
 On phones and tablets, on-screen touch controls appear: drag to steer on the
 left; Gas, Brake, N₂O and Drift are on the right.
 
@@ -92,3 +96,5 @@ node scripts/track/derive-from-chunks.mjs scripts/track/drift-park.config.mjs
 ```
 
 Set `DRIFT_TRACK_SOURCE` to use a different path to the same GLB.
+
+Normal driving uses arcade cornering assistance by default, including stronger steering at speed and sustained lateral grip. Handbrake drifting fades out this assistance. Per-car `arcade` tuning is merged over `DEFAULT_VEHICLE_CONFIG`; set `arcade.enabled` to `false` for the legacy handling.

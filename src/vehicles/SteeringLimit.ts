@@ -1,5 +1,7 @@
+import { arcadeTurnRadius, type ArcadeHandlingConfig } from './ArcadeHandling'
 /** Shared steering envelope: the AI must normalise against the car's actual lock. */
 export interface SteeringLimitConfig {
+  arcade?: ArcadeHandlingConfig
   wheelbase: number
   maxSteerAngle: number
   steerFalloffSpeed: number
@@ -21,6 +23,12 @@ export function steeringLimit(config: SteeringLimitConfig, speed: number, driftA
     const lateralAcceleration = config.grip * surfaceGrip * normalAcceleration
     const kinematicAngle = Math.atan(config.wheelbase * lateralAcceleration / (v * v))
     gripLimit = Math.min(legacy, kinematicAngle + config.peakSlip * scale)
+  }
+  if (config.arcade?.enabled) {
+    const traction = Math.max(.1, Math.min(1, surfaceGrip))
+    const radius = Math.max(arcadeTurnRadius(config.arcade, v) / traction,
+      v * v / (config.arcade.maxLateralG * 9.81 * traction))
+    gripLimit = Math.min(config.maxSteerAngle, Math.atan(config.wheelbase / radius))
   }
   // A held handbrake or an active drift needs real opposite lock, not grip steering.
   const driftLock = config.maxSteerAngle * Math.max(falloff, 0.55)
