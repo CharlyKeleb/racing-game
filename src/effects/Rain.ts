@@ -1,3 +1,4 @@
+import { RAIN_SURFACE_GLSL, type RainSurfaceUniforms } from './RainSurface'
 import * as THREE from 'three'
 import { backend } from '../engine/backend'
 import type { QualityPreset } from '../stores/gameStore'
@@ -15,6 +16,8 @@ export const RAIN_EXPOSURE = 0.01
 export const RAIN_WIDTH = 0.0018
 
 const vertexShader = /* glsl */ `
+  varying float vRainClearance;
+  ${RAIN_SURFACE_GLSL}
   attribute vec4 aSeed; // xyz: position in the box, w: speed variation
   uniform float uTime;
   uniform vec3 uBox;
@@ -47,6 +50,7 @@ const vertexShader = /* glsl */ `
     float farFade = 1.0 - smoothstep(12.0, 22.0, dist);
     vAlpha = nearFade * farFade * (0.07 + 0.15 * aSeed.w) * min(1.0, 0.002 / width);
     vBrightness = 0.55 + 0.25 * aSeed.y;
+    vRainClearance = uRainReady > .5 ? world.y-rainHeight(world.xz) : 100.;
     vec4 mvPosition = viewMatrix * vec4(world, 1.0);
     gl_Position = projectionMatrix * mvPosition;
     #include <fog_vertex>
@@ -57,6 +61,7 @@ const fragmentShader = /* glsl */ `
   varying float vAlpha;
   varying vec2 vUv;
   varying float vBrightness;
+  varying float vRainClearance;
   #include <fog_pars_fragment>
   void main() {
     // Thin bright core across, fading toward both ends.
@@ -64,6 +69,7 @@ const fragmentShader = /* glsl */ `
     float across = 1.0 - smoothstep(0.15, 1.0, x);
     float along = smoothstep(0.0, 0.18, vUv.y) * (1.0 - smoothstep(0.55, 1.0, vUv.y));
     float a = across * along * vAlpha;
+    if (vRainClearance < .025) discard;
     if (a < 0.004) discard;
     gl_FragColor = vec4(vec3(0.64, 0.69, 0.73) * vBrightness, a);
     #include <tonemapping_fragment>
@@ -90,7 +96,7 @@ export class Rain {
   private hasLast = false
   private streaks = RAIN_STREAKS.medium
 
-  constructor() {
+  constructor(surface?: RainSurfaceUniforms) {
     const plane = new THREE.PlaneGeometry(1, 1)
     const geo = new THREE.InstancedBufferGeometry()
     geo.index = plane.index
@@ -107,13 +113,16 @@ export class Rain {
     geo.instanceCount = 0
     plane.dispose()
     if (backend.nodes) {
-      const node = backend.nodes.rainMaterial()
+      const node = backend.nodes.rainMaterial(surface)
       this.material = node.material
       this.uniforms = node.uniforms
     } else {
       const material = new THREE.ShaderMaterial({
         uniforms: {
           ...THREE.UniformsUtils.clone(THREE.UniformsLib.fog),
+          ...(surface ?? {
+            uRainSurface: { value: null }, uRainBounds: { value: new THREE.Vector4(0, 0, 0, 52) }, uRainReady: { value: 0 },
+          }),
           uTime: { value: 0 },
           uBox: { value: RAIN_BOX.clone() },
           uFall: { value: RAIN_FALL.clone() },

@@ -142,6 +142,8 @@ export class Track implements RaceTrack {
   private buildRoad(width: number): THREE.Mesh {
     const tex = this.track(this.asphaltTexture())
     const mat = this.track(new THREE.MeshStandardMaterial({ map: tex, roughness: 0.85, metalness: 0 }))
+    mat.name = 'road:asphalt'
+    mat.userData.layer = 'road'
     const mesh = new THREE.Mesh(this.ribbon(-width / 2, width / 2, 0.01, width), mat)
     mesh.receiveShadow = true
     return mesh

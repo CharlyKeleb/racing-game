@@ -1,3 +1,6 @@
+import { RainSurface } from '../effects/RainSurface'
+import { RainImpacts } from '../effects/RainImpacts'
+import { WetRoads } from '../effects/WetRoads'
 import { performanceCapture } from './PerformanceCapture'
 import { hudCoversPoint } from '../stores/hudLayoutStore'
 import { driftEvent, readDriftRecord, saveDriftRecord } from '../racing/driftEvents'
@@ -193,6 +196,9 @@ export class Game {
   private haze!: HeatHaze
   private readonly hazeCars: Vehicle[] = []
   /** Rain (#53): streaks around the camera, spray off every car, drops on the lens in cockpit view. Built in init(). */
+  private rainSurface!: RainSurface
+  private rainImpacts!: RainImpacts
+  private wetRoads!: WetRoads
   private rain!: Rain
   private rainSpray!: RainSpray
   private lensDrops!: LensDrops
@@ -351,7 +357,13 @@ export class Game {
     scene.add(this.sparks.mesh)
     this.haze = new HeatHaze()
     this.renderer.setHaze(this.haze)
-    this.rain = new Rain()
+    this.rainSurface = new RainSurface()
+    this.rainImpacts = new RainImpacts(this.rainSurface.uniforms)
+    this.wetRoads = new WetRoads(this.rainSurface.uniforms)
+    scene.add(this.rainImpacts.mesh)
+    this.rainSurface.setQuality(settings.quality)
+    this.rainImpacts.setQuality(settings.quality)
+    this.rain = new Rain(this.rainSurface.uniforms)
     scene.add(this.rain.mesh)
     this.rainSpray = new RainSpray()
     scene.add(...this.rainSpray.meshes)
@@ -1278,6 +1290,9 @@ export class Game {
     const { postfx, weather, camera: cameraMode } = gameStore.getState().settings
     const wet = weather === 'rain' && phase !== 'menu' && phase !== 'garage' ? 1 : 0
     const camera = this.renderer.camera
+    this.rainSurface.update(this.renderer.renderer, this.renderer.scene, this.track.group, camera, wet, dt)
+    this.wetRoads.update(this.track.group, wet, dt)
+    this.rainImpacts.mesh.visible = wet > 0 && this.rainSurface.uniforms.uRainReady.value > 0
     this.rain.update(camera, wet, dt)
     this.rainSpray.update(this.hazeCars, camera.position, wet, dt)
     // Exhaust heat haze and lens drops share the distortion buffer (post FX only).
@@ -1764,6 +1779,8 @@ export class Game {
     this.audio.setMenuMusic(s.musicTrack, s.menuMusic)
     if (this.camera) this.camera.mode = s.camera
     this.rain?.setQuality(s.quality)
+    this.rainSurface?.setQuality(s.quality)
+    this.rainImpacts?.setQuality(s.quality)
     // Before the time of day: rain re-bakes the environment, applyTimeOfDay pushes it to the scene.
     this.environment?.setRain(s.weather === 'rain')
     this.applyTimeOfDay(s.timeOfDay)
@@ -1801,6 +1818,9 @@ export class Game {
     this.effects?.dispose()
     this.sparks?.dispose()
     this.haze?.dispose()
+    this.wetRoads?.dispose()
+    this.rainImpacts?.dispose()
+    this.rainSurface?.dispose()
     this.rain?.dispose()
     this.rainSpray?.dispose()
     this.lensDrops?.dispose()

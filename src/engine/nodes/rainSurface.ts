@@ -1,0 +1,87 @@
+import * as THREE from 'three/webgpu'
+import {
+  abs, attribute, cameraPosition, cameraViewMatrix, cos, cross, float, floor, fract, length, max, min, mix, mod, normalMap, normalView,
+  normalize, positionGeometry, positionWorld, reference, sin, smoothstep, step, texture, uniform, uv, varying, vec2, vec3, vec4,
+} from 'three/tsl'
+import type { RainSurfaceUniforms } from '../../effects/RainSurface'
+
+// Native WebGPU render targets have a top-left origin (the GLSL twin is bottom-left).
+function surfaceUv(surface: RainSurfaceUniforms, p: THREE.Node<'vec2'>) {
+  const bounds = uniform(surface.uRainBounds.value)
+  return vec2(p.x.sub(bounds.x).div(bounds.w).add(.5), p.y.sub(bounds.z).div(bounds.w).add(.5))
+}
+export function surfaceHeight(surface: RainSurfaceUniforms, p: THREE.Node<'vec2'>) {
+  return texture(surface.uRainSurface.value, surfaceUv(surface, p)).r.sub(.5).mul(128).add(uniform(surface.uRainBounds.value).y)
+}
+export function rainSurfaceMaterial(surface: RainSurfaceUniforms) {
+  const material = new THREE.MeshBasicNodeMaterial({ side: THREE.DoubleSide, toneMapped: false, fog: false })
+  const height = positionWorld.y.sub(uniform(surface.uRainBounds.value).y).div(128).add(.5)
+  material.colorNode = vec3(height, 0, 0)
+  return material
+}
+export function rainClearance(surface: RainSurfaceUniforms, world: THREE.Node<'vec3'>) {
+  const ready = reference('value', 'float', surface.uRainReady)
+  return mix(float(100), world.y.sub(surfaceHeight(surface, world.xz)), ready)
+}
+
+export function rainImpactMaterial(surface: RainSurfaceUniforms) {
+  const material = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false, side: THREE.DoubleSide })
+  const seed = attribute('aSeed', 'vec4')
+  const bounds = uniform(surface.uRainBounds.value)
+  const time = reference('value', 'float', surface.uRainTime)
+  const wet = reference('value', 'float', surface.uRainWet)
+  const ready = reference('value', 'float', surface.uRainReady)
+  const xz = bounds.xz.add(mod(seed.xy.mul(32).sub(bounds.xz).add(16), 32)).sub(16)
+  const age = fract(time.mul(seed.w.add(1.4)).add(seed.z))
+  const h = surfaceHeight(surface, xz)
+  const normal = normalize(vec3(
+    surfaceHeight(surface, xz.sub(vec2(.22, 0))).sub(surfaceHeight(surface, xz.add(vec2(.22, 0)))),
+    .44,
+    surfaceHeight(surface, xz.sub(vec2(0, .22))).sub(surfaceHeight(surface, xz.add(vec2(0, .22)))),
+  ))
+  const center = vec3(xz.x, h, xz.y)
+  const toCamera = cameraPosition.sub(center)
+  const tangent = normalize(cross(normal, normalize(toCamera).add(vec3(.001, 0, 0))))
+  const width = age.mul(.18).add(.05)
+  const height = sin(age.mul(Math.PI)).mul(.07).add(.025)
+  material.positionNode = center.add(normal.mul(.012)).add(tangent.mul(positionGeometry.x).mul(width)).add(normal.mul(positionGeometry.y.add(.5)).mul(height))
+  const fade = varying(float(1).sub(age).pow(2).mul(wet).mul(ready).mul(smoothstep(.2, 1, normal.y))
+    .mul(float(1).sub(smoothstep(9, 18, length(toCamera)))), 'vImpactFade')
+  const p = uv()
+  const x = abs(p.x.sub(.5)).mul(2)
+  const crown = abs(sin(p.x.mul(15.708))).pow(3).mul(.65).add(.18)
+  material.colorNode = vec3(.55, .61, .64)
+  material.opacityNode = float(1).sub(smoothstep(.04, .16, abs(p.y.sub(crown)))).mul(float(1).sub(x.mul(x))).mul(fade).mul(.32)
+  material.alphaTest = .005
+  return material
+}
+
+export function wetRoadMaterial(source: THREE.MeshStandardMaterial, surface: RainSurfaceUniforms) {
+  const material = new THREE.MeshStandardNodeMaterial()
+  THREE.MeshStandardMaterial.prototype.copy.call(material, source)
+  const time = reference('value', 'float', surface.uRainTime)
+  const p = positionWorld.xz
+  const coords = surfaceUv(surface, p)
+  const inside = step(0, coords.x).mul(step(coords.x, 1)).mul(step(0, coords.y)).mul(step(coords.y, 1))
+  const exposed = mix(1, step(surfaceHeight(surface, p).sub(.18), positionWorld.y), inside.mul(reference('value', 'float', surface.uRainReady)))
+  const wet = exposed.mul(reference('value', 'float', surface.uRainWet))
+  const noise = sin(p.x.mul(.19).add(sin(p.y.mul(.11)))).mul(sin(p.y.mul(.24).add(sin(p.x.mul(.17))))).mul(.5).add(.5)
+  const pool = smoothstep(.62, .82, noise).mul(wet)
+  const color = vec3(source.color.r, source.color.g, source.color.b)
+  const baseColor = source.map ? color.mul(texture(source.map).rgb) : color
+  material.colorNode = baseColor.mul(mix(1, mix(.78, .64, pool), wet))
+  const roughness = source.roughnessMap ? texture(source.roughnessMap).g.mul(source.roughness) : float(source.roughness)
+  material.roughnessNode = mix(mix(roughness, min(roughness, .32), wet), .09, pool)
+  const cell = floor(p.mul(1.7))
+  const hash = fract(sin(cell.x.mul(127.1).add(cell.y.mul(311.7))).mul(43758.5453))
+  const center = cell.add(vec2(hash.mul(.5).add(.25), fract(hash.mul(7.13)).mul(.5).add(.25))).div(1.7)
+  const delta = p.sub(center)
+  const d = length(delta)
+  const age = fract(time.mul(.85).add(hash))
+  const band = float(1).sub(smoothstep(.012, .045, abs(d.sub(age.mul(.28)))))
+  const ripple = delta.div(max(d, .001)).mul(band).mul(cos(d.sub(age.mul(.28)).mul(100))).mul(float(1).sub(age)).mul(.065).mul(pool)
+  // NormalMapNode's declaration predates the typed TSL vec3 extensions.
+  const baseNormal = source.normalMap ? normalMap(texture(source.normalMap), uniform(source.normalScale)) as unknown as THREE.Node<'vec3'> : normalView
+  material.normalNode = normalize(vec3(baseNormal).add(cameraViewMatrix.mul(vec4(ripple.x, 0, ripple.y, 0)).xyz))
+  return material
+}

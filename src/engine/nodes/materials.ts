@@ -1,3 +1,5 @@
+import type { RainSurfaceUniforms } from '../../effects/RainSurface'
+import { rainClearance } from './rainSurface'
 import * as THREE from 'three/webgpu'
 import {
   abs, attribute, cameraPosition, clamp, cos, cross, float, fwidth, length, materialColor, materialOpacity, max, min, mix, mod, modelViewMatrix, normalize,
@@ -185,7 +187,7 @@ export function liveryPaintMaterial(u: LiveryUniforms): THREE.MeshPhysicalNodeMa
  * Rain streaks (#53): the box-wrapped, camera-relative streaks of
  * effects/Rain.ts, in world space (the mesh sits at the origin).
  */
-export function rainMaterial() {
+export function rainMaterial(surface?: RainSurfaceUniforms) {
   const uTime = uniform(0)
   const cameraVelocity = new THREE.Vector3()
   const uCameraVelocity = uniform(cameraVelocity)
@@ -205,7 +207,8 @@ export function rainMaterial() {
   const side = crossAxis.div(max(length(crossAxis), 0.00001))
   const width = max(seed.w.mul(0.7).add(0.65).mul(RAIN_WIDTH), dist.mul(0.00012))
   const material = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false })
-  material.positionNode = mid.add(side.mul(width).mul(positionGeometry.x.mul(2)))
+  const world = mid.add(side.mul(width).mul(positionGeometry.x.mul(2)))
+  material.positionNode = world
   const fade = varying(smoothstep(0.8, 2.5, dist)
     .mul(float(1).sub(smoothstep(12, 22, dist)))
     .mul(seed.w.mul(0.15).add(0.07)).mul(min(1, float(0.002).div(width))), 'vRainFade')
@@ -215,6 +218,7 @@ export function rainMaterial() {
   const taper = smoothstep(0, 0.18, p.y).mul(float(1).sub(smoothstep(0.55, 1, p.y)))
   material.colorNode = vec3(0.64, 0.69, 0.73).mul(brightness)
   material.opacityNode = across.mul(taper).mul(fade)
+  if (surface) material.opacityNode = across.mul(taper).mul(fade).mul(step(.025, varying(rainClearance(surface, world), 'vRainClearance')))
   material.alphaTest = 0.004
   return { material, uniforms: { time: uTime, cameraVelocity: { value: cameraVelocity } } }
 }
