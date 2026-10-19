@@ -478,9 +478,9 @@ kbd { font-family: inherit; font-size: 11px; padding: 1px 6px; border: 1px solid
 .minimap__rim { fill: none; stroke: rgba(200, 219, 231, .24); stroke-width: .4; }
 .minimap__north { fill: #edf4f7; font: 500 3.8px sans-serif; opacity: .8; }
 .minimap__roads { fill: none; stroke: #d4dfe5; stroke-opacity: .65; stroke-width: 1.7px; stroke-linecap: round; stroke-linejoin: round; }
-.minimap__edge { fill: none; stroke: #20323c; stroke-opacity: .3; stroke-width: 3.5px; stroke-linejoin: round; }
-.minimap__track { fill: none; stroke: #e5edf0; stroke-opacity: .8; stroke-width: 1.6px; stroke-linejoin: round; }
-.minimap__route { fill: none; stroke: #36e2de; stroke-width: 4px; stroke-linejoin: round; stroke-linecap: round; filter: drop-shadow(0 0 1px #36e2de66); }
+.minimap__edge { fill: none; stroke: #20323c; stroke-opacity: .3; stroke-width: 10px; stroke-linejoin: round; stroke-linecap: round; }
+.minimap__track { fill: none; stroke: #e5edf0; stroke-opacity: .8; stroke-width: 8px; stroke-linejoin: round; stroke-linecap: round; }
+.minimap__route { fill: none; stroke: #36e2de; stroke-width: 8px; stroke-linejoin: round; stroke-linecap: round; filter: drop-shadow(0 0 1px #36e2de66); }
 .minimap__start { stroke: #fff; stroke-width: 2px; }
 .minimap__car circle { fill: #122e3d; stroke: #e1f6ff; stroke-width: .45; filter: drop-shadow(0 0 1px #36e2de99); }
 .minimap__car path { fill: #fff; stroke: #092230; stroke-width: .4; }

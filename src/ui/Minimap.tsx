@@ -8,15 +8,12 @@ const CAR_X = 50
 const CAR_Y = 62
 /** Meters of world per viewBox unit: ~520 m across. */
 const SCALE = 100 / 520
-/** Route highlight: this many centreline points ahead of the car (~4 m apart → ~480 m). */
-const ROUTE_POINTS = 120
 
 /**
  * Heading-up road map in a circular instrument, with dimmed surface context.
  * It turns with the car, so left on screen is left at the wheel. Zoomed in on the car, with the road
- * ahead lit cyan and the distance left to the finish underneath. The outline
- * path is built once per track; only the transform and the short route path
- * change at telemetry rate (20 Hz).
+ * ahead lit cyan and the distance left to the finish underneath. Passed sections
+ * return to the pale road colour as lap progress advances.
  */
 export function Minimap() {
   const id = useId().replace(/:/g, '')
@@ -50,11 +47,12 @@ export function Minimap() {
   const route = useMemo(() => {
     if (!data || data.points.length < 2) return ''
     const pts = data.points
-    const n = pts.length
+    const start = Math.max(0, Math.min(pts.length - 1, index))
+    // Keep all remaining points through the finish, without wrapping into passed road.
     let d = ''
-    for (let k = 0; k <= ROUTE_POINTS; k++) {
-      const [x, z] = pts[(index + k) % n]
-      d += `${k ? 'L' : 'M'}${x.toFixed(1)},${z.toFixed(1)}`
+    for (let k = start; k <= pts.length; k++) {
+      const [x, z] = pts[k % pts.length]
+      d += `${k === start ? 'M' : 'L'}${x.toFixed(1)},${z.toFixed(1)}`
     }
     return d
   }, [data, index])
