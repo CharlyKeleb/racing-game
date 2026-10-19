@@ -1,3 +1,5 @@
+import { renderDiagnostics } from './renderDiagnostics'
+
 /** Opt-in, bounded diagnostics. No observers/listeners or per-frame work without ?perf=1. */
 export const CAPTURE_LIMIT = 18000
 export function summarize(values: number[]) {
@@ -106,7 +108,7 @@ class PerformanceCapture {
       durationMs: (this.ended ?? performance.now()) - this.started, dropped: this.dropped,
       environment: { url: location.origin + location.pathname, userAgent: navigator.userAgent,
         viewport: [innerWidth, innerHeight], dpr: devicePixelRatio, cores: navigator.hardwareConcurrency },
-      context: this.context(),
+      context: this.context(), renderDiagnostics,
       summary: { visibleFrames: summarize(visible.map(f => f[1])),
         simulationMs: summarize(visible.map(f => f[3])), renderCpuMs: summarize(visible.map(f => f[4])),
         inputToFrameMs: summarize(visible.filter(f => f[5] >= 0).map(f => f[5])) },
