@@ -33,7 +33,7 @@ import { CarLivery } from '../vehicles/CarLivery'
 import { buildPlaceholderCar, rigCarModel, type CarModel } from '../vehicles/CarModel'
 import { getCar, selectableCars, stepCar, type CarEntry } from '../vehicles/carRegistry'
 import { Vehicle, type SpawnPoint } from '../vehicles/Vehicle'
-import { resolveVehicleConfig, type VehicleConfig } from '../vehicles/VehicleConfig'
+import { resolveVehicleConfig, type VehicleConfig, type WheelId } from '../vehicles/VehicleConfig'
 import { Environment } from '../world/Environment'
 import type { RaceTrack } from '../world/RaceTrack'
 import { Surface } from '../vehicles/Surface'
@@ -57,7 +57,7 @@ interface StackedTag extends RivalTag {
   target: number
 }
 // Handbrake, not brake: brake at standstill would engage reverse.
-export type ShowroomFocus = 'car' | 'wheel'
+export type ShowroomFocus = 'car' | 'wheel' | `wheel-${WheelId}` | 'plate-front' | 'plate-rear'
 
 const LOCKED_INPUT: InputState = { throttle: 0, brake: 0, steer: 0, handbrake: true, nitro: false }
 /** Past the flag: brake to a stop in a straight line while the rivals finish. */
@@ -217,8 +217,10 @@ export class Game {
   private showroomPadStale = false
   /** What the garage camera frames; the Wheels tab zooms onto the front-left wheel. */
   private showroomFocus: ShowroomFocus = 'car'
+  private wheelFocusId: WheelId = 'FL'
   private wheelYaw = 0
   private readonly carFraming: ShowroomFraming = { focus: new THREE.Vector3(0, 0.55, 0), distance: SHOWROOM_DISTANCE, height: 1.5, shift: 0, fov: SHOWROOM_FOV }
+  private readonly plateFraming: ShowroomFraming = { focus: new THREE.Vector3(), distance: 2.1, height: .18, shift: .45, fov: 34 }
   private readonly wheelFraming: ShowroomFraming = { focus: new THREE.Vector3(), distance: 2.9, height: 0.45, shift: 0.55, fov: 38 }
 
   private standingsPublishedAt = -Infinity
@@ -728,7 +730,7 @@ export class Game {
    */
   rotateShowroom(deltaYaw: number, deltaHeight = 0): void {
     if (gameStore.getState().carSwitching) return
-    if (this.showroomFocus === 'wheel') {
+    if (this.showroomFocus !== 'car') {
       this.wheelYaw = THREE.MathUtils.clamp(this.wheelYaw + deltaYaw, -0.7, 0.7)
       return
     }
@@ -743,7 +745,7 @@ export class Game {
 
   /** Pinch / scroll: <1 zooms in, >1 out. */
   zoomShowroom(factor: number): void {
-    if (this.showroomFocus === 'wheel') return
+    if (this.showroomFocus !== 'car') return
     this.showroomZoom = THREE.MathUtils.clamp(this.showroomZoom * factor, ORBIT_ZOOM[0], ORBIT_ZOOM[1])
   }
 
@@ -766,10 +768,14 @@ export class Game {
     this.orbitCoasting = false
   }
 
-  /** Garage tabs call this: 'wheel' glides the camera to the front-left wheel. */
+  /** Garage detail tabs glide to the selected part using the same camera damping. */
   setShowroomFocus(focus: ShowroomFocus): void {
     if (focus === this.showroomFocus) return
     this.showroomFocus = focus
+    if (focus.startsWith('wheel-')) this.wheelFocusId = focus.slice(6) as WheelId
+    else if (focus === 'wheel') this.wheelFocusId = 'FL'
+    this.orbitVelocity = 0
+    this.orbitCoasting = false
     this.wheelYaw = 0
   }
 
@@ -1112,12 +1118,27 @@ export class Game {
     const revAudible = audition && (this.revHeld || this.revRpm > idle + 50)
     this.audio.setMenuEngine(this.showroomRev !== null || revAudible)
     if (phase === 'menu' || phase === 'garage') {
-      const wheel = phase === 'garage' && this.showroomFocus === 'wheel'
-      if (wheel) {
-        // Front-left wheel axle in car space (+X is the car's left), seen from a low front three-quarter.
-        const fl = this.vehicle.config.wheels.find((w) => w.id === 'FL') ?? this.vehicle.config.wheels[0]
-        this.wheelFraming.focus.set(fl.position[0], fl.radius, fl.position[2])
-        this.camera.showroom(this.showroomAnchor, Math.PI / 2 - 0.55 + this.wheelYaw, dt, this.wheelFraming)
+      const wheel = phase === 'garage' && (this.showroomFocus === 'wheel' || this.showroomFocus.startsWith('wheel-'))
+      const plateFocus = phase === 'garage' && (this.showroomFocus === 'plate-front' || this.showroomFocus === 'plate-rear')
+      if (plateFocus) {
+        const front = this.showroomFocus === 'plate-front'
+        const plate = this.vehicle.model.body.getObjectByName(front ? 'CustomPlate_front' : 'CustomPlate_rear')
+        if (plate) this.plateFraming.focus.copy(plate.position)
+        else this.plateFraming.focus.set(0, .5, front ? 2.2 : -2.2)
+        this.camera.showroom(this.showroomAnchor, (front ? 0 : Math.PI) + this.wheelYaw, dt, this.plateFraming)
+      } else if (wheel) {
+        let selected = this.vehicle.config.wheels[0]
+        for (const wheel of this.vehicle.config.wheels) {
+          if (wheel.id === this.wheelFocusId) { selected = wheel; break }
+        }
+        // Follow the rendered hub, including suspension height, instead of assuming
+        // the axle sits one radius above the body origin on every car.
+        this.wheelFraming.focus.copy(this.vehicle.model.wheels[selected.id].pivot.position)
+        this.wheelFraming.distance = Math.max(1.7, selected.radius * 6)
+        this.wheelFraming.height = selected.radius * .65
+        const side = selected.position[0] >= 0 ? 1 : -1
+        const quarter = selected.position[2] >= 0 ? -.35 : .35
+        this.camera.showroom(this.showroomAnchor, side * (Math.PI / 2 + quarter) + this.wheelYaw, dt, this.wheelFraming)
       } else {
         if (this.showroomPadStale) {
           this.setShowroomPad(false)

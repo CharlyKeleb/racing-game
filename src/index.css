@@ -1001,3 +1001,36 @@ button.menu-track:hover,button.menu-track:focus-visible { border-color:var(--acc
 }
 /* Garage keeps the radio in the same bottom-left column, under the options. */
 .garage-left .menu-music { width: 100%; margin-top: auto; flex-shrink: 0; }
+
+/* Livery controls share the garage palette and leave the car available to orbit. */
+.livery-editor { border: 0; padding: 0; margin: 0; min-width: 0; display: flex; flex-direction: column; gap: 18px; }
+.livery-editor:disabled { opacity: .55; }
+.livery-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.livery-number { width: 100%; box-sizing: border-box; padding: 10px 12px; color: inherit; background: #11151c; border: 1px solid #ffffff30; border-radius: 4px; font: inherit; }
+.garage-tabs button { font-size: 15px; }
+@media (max-width: 600px) { .garage-tabs button > span { gap: 3px; } .garage-tabs button { font-size: 13px; } }
+
+.livery-editor .ui-segmented { flex-wrap: wrap; }
+.livery-editor .ui-segmented button { flex: 1 0 22%; min-width: 0; }
+.livery-toggle { display: flex; align-items: center; gap: 10px; font-size: 14px; }
+.livery-toggle input { accent-color: var(--accent-2); width: 18px; height: 18px; }
+
+.plate-editor { display: flex; flex-direction: column; gap: 15px; padding-bottom: 20px; border-bottom: 1px solid #ffffff20; }
+.plate-editor__heading { display: flex; justify-content: space-between; gap: 8px; font-size: 10px; letter-spacing: .13em; color: var(--accent-2); }
+.plate-editor__heading span:last-child { color: #ffffff75; }
+.plate-preview { position: relative; isolation: isolate; display: flex; flex-direction: column; align-items: center; justify-content: center; aspect-ratio: 4 / 1; border: 3px solid #969ba0; outline: 1px solid #000; border-radius: 7px; background: #151a24; color: #e9c87e; box-shadow: 0 8px 20px #0007, inset 0 0 0 2px #ffffff25; overflow: hidden; padding: 7px 12px; }
+.plate-preview::before, .plate-preview::after { content: '−'; position: absolute; top: 8px; color: #52575b; background: #a2a5a7; font: bold 8px monospace; width: 7px; height: 7px; line-height: 7px; border-radius: 50%; box-shadow: 0 1px 2px #0009; }
+.plate-preview::before { left: 9px; } .plate-preview::after { right: 9px; }
+.plate-preview small { font: 700 10px sans-serif; letter-spacing: .16em; }
+.plate-preview strong { font: bold clamp(24px, 3vw, 36px) monospace; letter-spacing: .08em; text-shadow: 0 2px 1px #0003; line-height: 1.3; white-space: pre; }
+.plate-preview > span:last-child { font: 600 6px sans-serif; letter-spacing: .15em; opacity: .7; }
+.plate-preview--classic { background: #f2eee1; color: #173567; }
+.plate-preview--classic small { color: #b62929; font-style: italic; font-family: cursive; }
+.plate-preview--euro { background: #f4f4ec; color: #151920; padding-left: 35px; }
+.plate-preview__band { position: absolute; inset: 0 auto 0 0; width: 26px; display: flex; align-items: center; justify-content: center; text-align: center; background: #154ba5; color: #fff; font: bold 12px sans-serif; line-height: 2; }
+.plate-preview--heritage { background: #edb83b; color: #1a2025; }
+.plate-text { text-transform: uppercase; letter-spacing: .16em; font-family: monospace; }
+
+.garage-tabs { flex-wrap: wrap; }
+.garage-tabs button { flex: 1 0 28%; }
+.livery-editor > legend { padding: 0 0 16px; font-size: 18px; font-weight: 700; }

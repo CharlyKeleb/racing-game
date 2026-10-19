@@ -60,7 +60,22 @@ export function rigCarModel(scene: THREE.Group, config: VehicleConfig): CarModel
       // origin (which the pipeline guarantees is the axle center) to 0.
       root.attach(node)
       node.position.set(0, 0, 0)
-      spinner.add(node)
+      const fit = new THREE.Group()
+      fit.name = `WheelFit_${id}`
+      spinner.add(fit)
+      fit.add(node)
+      root.updateMatrixWorld(true)
+      // Measure after retaining exporter rotation/scale. Fit in axle space so
+      // diameter and tread width agree with the suspension/tyre configuration.
+      // Only the wrapper changes: cached mesh geometry remains shared and intact.
+      const bounds = new THREE.Box3().setFromObject(node, true)
+      const size = bounds.getSize(new THREE.Vector3())
+      const center = bounds.getCenter(new THREE.Vector3())
+      const wheel = config.wheels.find((wheel) => wheel.id === id)
+      if (wheel && size.x > .001 && size.y > .001 && size.z > .001) {
+        fit.scale.set(wheel.width / size.x, wheel.radius * 2 / size.y, wheel.radius * 2 / size.z)
+        fit.position.copy(center).multiply(fit.scale).negate()
+      }
     } else {
       console.warn(`[CarModel] ${config.id}: missing Wheel_${id}; wheel will be invisible`)
     }
