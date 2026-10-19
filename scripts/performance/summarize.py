@@ -22,14 +22,15 @@ def summarize(path):
     data = json.loads(path.read_text())
     racing = next((e["at"] for e in data["events"]
                    if e["kind"] == "phase" and e["detail"]["phase"] == "racing"), None)
-    if racing is None:
+    if racing is None and data['context']['phase'] != 'paused':
         return None
-    start = racing + 5000
+    start = 5000 if racing is None else racing + 5000
     frames = [f for f in data["frames"] if f[0] >= start and f[6] == 0 and f[1] > 0]
     events = [e for e in data["events"] if e["at"] >= start]
     render = [e["detail"] for e in events if e["kind"] == "render"]
     return {
-        "file": path.name, "settings": data["context"]["settings"],
+        "file": path.name, "segment": "paused-render" if racing is None else "racing",
+        "renderDiagnostics": data.get("renderDiagnostics"), "settings": data["context"]["settings"],
         "environment": data["environment"], "dropped": data["dropped"],
         "visibilityChanges": sum(e["kind"] == "visibility" for e in data["events"]),
         "warmupCutoffMs": start, "durationMs": data["durationMs"],
@@ -41,6 +42,7 @@ def summarize(path):
         "fixedSteps": distribution([f[2] for f in frames]),
         "eventDurationsMs": {kind: distribution([e["duration"] for e in events if e["kind"] == kind])
                              for kind in ["gpu", "longtask", "chunk-integration", "chunk-fetch-decode", "chunk-adopt"]},
+        "renderDprChanges": sum(a["pixelRatio"] != b["pixelRatio"] for a, b in zip(render, render[1:])),
         "drawCalls": distribution([e["calls"] for e in render]),
         "triangles": distribution([e["triangles"] for e in render]),
         "renderDprRange": [min(e["pixelRatio"] for e in render), max(e["pixelRatio"] for e in render)] if render else None,

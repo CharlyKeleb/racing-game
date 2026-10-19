@@ -1,3 +1,5 @@
+import { AdaptiveResolution } from './AdaptiveResolution'
+import { renderDiagnostics } from './renderDiagnostics'
 import { GpuTimer } from './GpuTimer'
 import { performanceCapture } from './PerformanceCapture'
 import * as THREE from 'three'
@@ -10,31 +12,24 @@ export class Renderer {
   readonly scene = new THREE.Scene()
   readonly camera = new THREE.PerspectiveCamera(60, 1, 0.1, 2000)
   private gpuTimer?: GpuTimer
-  private postfx: PostFX
-  private postfxEnabled = true
+  private postfx?: PostFX
+  private quality?: QualityPreset
+  private displayDpr = 1
+  private resolution = new AdaptiveResolution('high', 1)
   private readonly resizeObserver: ResizeObserver
   private readonly container: HTMLElement
-  // Dynamic resolution: pixel ratio floats between min and max to hold ~60 fps.
-  private maxRatio = 1
-  private minRatio = 0.6
-  private ratio = 1
-  private windowTime = 0
-  private windowFrames = 0
-  private goodWindows = 0
 
   constructor(container: HTMLElement) {
     this.container = container
     this.renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance', stencil: false })
     this.renderer.outputColorSpace = THREE.SRGBColorSpace
     // Tone mapping is applied by the post stack; see PostFX.
-    this.renderer.toneMapping = THREE.NoToneMapping
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping
     this.renderer.shadowMap.enabled = true
     this.renderer.shadowMap.type = THREE.PCFShadowMap
     container.appendChild(this.renderer.domElement)
 
     // Image-based lighting comes from world/Environment (sky-baked, per time of day).
-
-    this.postfx = new PostFX(this.renderer, this.scene, this.camera)
 
     this.resizeObserver = new ResizeObserver(() => this.resize())
     this.resizeObserver.observe(container)
@@ -43,18 +38,27 @@ export class Renderer {
 
   applyQuality(quality: QualityPreset, postfx: boolean): void {
     const dpr = window.devicePixelRatio
-    // Phones have DPR 3 — rendering at that is 9× the pixels for little gain.
-    this.maxRatio = quality === 'low' ? Math.min(dpr, 1) : quality === 'medium' ? Math.min(dpr, 1.5) : Math.min(dpr, 2)
-    this.minRatio = quality === 'low' ? 0.55 : 0.75
-    this.ratio = this.maxRatio
-    this.goodWindows = 0
-    this.renderer.setPixelRatio(this.ratio)
-    this.renderer.shadowMap.enabled = quality !== 'low'
-    // PCFSoftShadowMap was removed in three r186 (it falls back to PCF anyway).
-    this.renderer.shadowMap.type = THREE.PCFShadowMap
-    this.postfxEnabled = postfx
-    this.renderer.toneMapping = postfx ? THREE.NoToneMapping : THREE.ACESFilmicToneMapping
-    this.resize()
+    const qualityChanged = this.quality !== quality
+    const resolutionChanged = qualityChanged || this.displayDpr !== dpr
+    if (resolutionChanged) {
+      this.quality = quality
+      this.displayDpr = dpr
+      this.resolution = new AdaptiveResolution(quality, dpr)
+      this.renderer.setPixelRatio(this.pixelRatio)
+    }
+    this.renderer.shadowMap.enabled = quality !== 'low' && !renderDiagnostics.shadowsOff
+    const enabled = postfx && !renderDiagnostics.postfxOff
+    if (this.postfx && (!enabled || qualityChanged)) {
+      this.postfx.dispose()
+      this.postfx = undefined
+    }
+    if (enabled && !this.postfx) {
+      this.postfx = new PostFX(this.renderer, this.scene, this.camera, renderDiagnostics.postfxQuality ?? quality)
+      // The constructor sizes from the renderer's existing drawing buffer.
+    }
+    this.renderer.toneMapping = enabled ? THREE.NoToneMapping : THREE.ACESFilmicToneMapping
+    this.renderer.autoClear = !enabled
+    if (resolutionChanged) this.resize()
   }
 
   /** Distance beyond which nothing is drawn; tracks set it from their fog. */
@@ -63,41 +67,23 @@ export class Renderer {
     this.camera.updateProjectionMatrix()
   }
 
-  /**
-   * Dynamic resolution. Every second, drop the pixel ratio when we're under
-   * ~55 fps, and creep back up after a few smooth seconds. Fill rate is the
-   * usual mobile bottleneck, so this is the cheapest way to keep 60 fps.
-   */
+  /** Ignore background frames; require sustained headroom and cooldowns to resize. */
   adapt(dt: number): void {
-    if (dt > 0.2) return // tab switch / stall, not a real frame
-    this.windowTime += dt
-    this.windowFrames++
-    if (this.windowTime < 1) return
-    const fps = this.windowFrames / this.windowTime
-    this.windowTime = 0
-    this.windowFrames = 0
-    let next = this.ratio
-    if (fps < 55) {
-      next = Math.max(this.minRatio, this.ratio - (fps < 40 ? 0.2 : 0.1))
-      this.goodWindows = 0
-    } else if (fps > 58 && ++this.goodWindows >= 3) {
-      next = Math.min(this.maxRatio, this.ratio + 0.05)
-      this.goodWindows = 0
-    }
-    if (Math.abs(next - this.ratio) > 0.001) {
-      this.ratio = next
-      this.renderer.setPixelRatio(next)
-      this.resize()
-    }
+    if (document.hidden) { this.resolution.resetWindow(); return }
+    if (renderDiagnostics.fixedDpr !== null || !this.resolution.update(dt)) return
+    this.renderer.setPixelRatio(this.pixelRatio)
+    // setPixelRatio already resizes the drawing buffer. Resize only the post targets.
+    this.postfx?.setSize(this.container.clientWidth, this.container.clientHeight)
+    performanceCapture.event('resolution-change', 0, { pixelRatio: this.pixelRatio })
   }
 
   get pixelRatio(): number {
-    return this.ratio
+    return renderDiagnostics.fixedDpr ?? this.resolution.ratio
   }
 
   /** Intro whip-pan smear (post stack only; skipped when post FX are off). */
   setWhipBlur(strength: number): void {
-    this.postfx.setWhipBlur(strength)
+    this.postfx?.setWhipBlur(strength)
   }
 
   render(): void {
@@ -112,12 +98,12 @@ export class Renderer {
       this.gpuTimer.begin()
       info.autoReset = false; info.reset()
     }
-    if (this.postfxEnabled) this.postfx.render()
+    if (this.postfx) this.postfx.render()
     else this.renderer.render(this.scene, this.camera)
     if (capture) {
       this.gpuTimer?.end()
       performanceCapture.event('render', 0, { calls: info.render.calls, triangles: info.render.triangles,
-        textures: info.memory.textures, geometries: info.memory.geometries, pixelRatio: this.ratio })
+        textures: info.memory.textures, geometries: info.memory.geometries, pixelRatio: this.pixelRatio })
       info.autoReset = autoReset
     }
   }
@@ -127,14 +113,15 @@ export class Renderer {
     if (w === 0 || h === 0) return
     this.camera.aspect = w / h
     this.camera.updateProjectionMatrix()
-    this.renderer.setSize(w, h)
-    this.postfx.setSize(w, h)
+    // Composer delegates to renderer.setSize only when CSS dimensions differ.
+    if (this.postfx) this.postfx.setSize(w, h)
+    else this.renderer.setSize(w, h)
   }
 
   dispose(): void {
     this.resizeObserver.disconnect()
     this.gpuTimer?.dispose()
-    this.postfx.dispose()
+    this.postfx?.dispose()
     this.renderer.dispose()
     this.renderer.domElement.remove()
   }

@@ -1,0 +1,1080 @@
+[
+  {
+    "file": "p1-adaptive-drive.json",
+    "segment": "racing",
+    "renderDiagnostics": {
+      "postfxQuality": null,
+      "fixedDpr": null,
+      "shadowsOff": false,
+      "postfxOff": false
+    },
+    "settings": {
+      "mode": "quick",
+      "driftEvent": "flow",
+      "quality": "high",
+      "postfx": true,
+      "masterVolume": 0.9,
+      "camera": "chase",
+      "difficulty": "challenging",
+      "opponents": 3,
+      "laps": 3,
+      "track": "nurburgring",
+      "car": "porsche911",
+      "timeOfDay": "noon"
+    },
+    "environment": {
+      "url": "http://127.0.0.1:4174/",
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36",
+      "viewport": [
+        1024,
+        934
+      ],
+      "dpr": 1.600000023841858,
+      "cores": 8
+    },
+    "dropped": 0,
+    "visibilityChanges": 0,
+    "warmupCutoffMs": 23721.600000023842,
+    "durationMs": 94490.69999992847,
+    "analyzedDurationMs": 70780.4,
+    "frameMs": {
+      "count": 4168,
+      "p50": 16.7,
+      "p95": 17.6,
+      "p99": 33.3,
+      "max": 66.6
+    },
+    "stalls": {
+      "33": 57,
+      "50": 2,
+      "100": 0
+    },
+    "simulationMs": {
+      "count": 4168,
+      "p50": 0.5,
+      "p95": 0.9,
+      "p99": 1.2,
+      "max": 2.3
+    },
+    "renderCpuMs": {
+      "count": 4168,
+      "p50": 2.7,
+      "p95": 4.2,
+      "p99": 5.3,
+      "max": 71
+    },
+    "fixedSteps": {
+      "count": 4168,
+      "p50": 1,
+      "p95": 2,
+      "p99": 2,
+      "max": 4
+    },
+    "eventDurationsMs": {
+      "gpu": {
+        "count": 2522,
+        "p50": 13.763,
+        "p95": 23.198,
+        "p99": 30.932,
+        "max": 55.122
+      },
+      "longtask": {
+        "count": 2,
+        "p50": 64,
+        "p95": 74,
+        "p99": 74,
+        "max": 74
+      },
+      "chunk-integration": {
+        "count": 65,
+        "p50": 0,
+        "p95": 0.3,
+        "p99": 0.6,
+        "max": 0.6
+      },
+      "chunk-fetch-decode": {
+        "count": 65,
+        "p50": 7.3,
+        "p95": 23.7,
+        "p99": 26.3,
+        "max": 26.3
+      },
+      "chunk-adopt": {
+        "count": 65,
+        "p50": 0,
+        "p95": 0.1,
+        "p99": 0.2,
+        "max": 0.2
+      }
+    },
+    "renderDprChanges": 9,
+    "drawCalls": {
+      "count": 4168,
+      "p50": 318,
+      "p95": 486,
+      "p99": 529,
+      "max": 539
+    },
+    "triangles": {
+      "count": 4168,
+      "p50": 539695,
+      "p95": 687378,
+      "p99": 764589,
+      "max": 769622
+    },
+    "renderDprRange": [
+      1.2,
+      1.6
+    ],
+    "outliers": [
+      [
+        56863.89999997616,
+        66.60000000000582,
+        4,
+        1.2000000476837158,
+        4,
+        -1,
+        0
+      ],
+      [
+        48750.39999997616,
+        66.59999999999854,
+        4,
+        2,
+        3.799999952316284,
+        -1,
+        0
+      ],
+      [
+        28343.799999952316,
+        50,
+        3,
+        0.9000000953674316,
+        4.199999928474426,
+        -1,
+        0
+      ],
+      [
+        56207.699999928474,
+        34.400000000001455,
+        3,
+        1,
+        3.5,
+        -1,
+        0
+      ],
+      [
+        46928.39999997616,
+        34.30000000000291,
+        3,
+        1.899999976158142,
+        3.700000047683716,
+        -1,
+        0
+      ]
+    ]
+  },
+  {
+    "file": "p1-fxaa-medium.json",
+    "segment": "paused-render",
+    "renderDiagnostics": {
+      "postfxQuality": "medium",
+      "fixedDpr": 1,
+      "shadowsOff": false,
+      "postfxOff": false
+    },
+    "settings": {
+      "mode": "quick",
+      "driftEvent": "flow",
+      "quality": "high",
+      "postfx": true,
+      "masterVolume": 0.9,
+      "camera": "chase",
+      "difficulty": "challenging",
+      "opponents": 3,
+      "laps": 3,
+      "track": "nurburgring",
+      "car": "porsche911",
+      "timeOfDay": "noon"
+    },
+    "environment": {
+      "url": "http://127.0.0.1:4174/",
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36",
+      "viewport": [
+        1024,
+        934
+      ],
+      "dpr": 1.600000023841858,
+      "cores": 8
+    },
+    "dropped": 0,
+    "visibilityChanges": 0,
+    "warmupCutoffMs": 5000,
+    "durationMs": 49261.89999997616,
+    "analyzedDurationMs": 44264.8,
+    "frameMs": {
+      "count": 2653,
+      "p50": 16.7,
+      "p95": 16.8,
+      "p99": 17.6,
+      "max": 49
+    },
+    "stalls": {
+      "33": 2,
+      "50": 0,
+      "100": 0
+    },
+    "simulationMs": {
+      "count": 2653,
+      "p50": 0,
+      "p95": 0.1,
+      "p99": 0.1,
+      "max": 0.2
+    },
+    "renderCpuMs": {
+      "count": 2653,
+      "p50": 4,
+      "p95": 4.5,
+      "p99": 4.8,
+      "max": 15.2
+    },
+    "fixedSteps": {
+      "count": 2653,
+      "p50": 1,
+      "p95": 1,
+      "p99": 1,
+      "max": 3
+    },
+    "eventDurationsMs": {
+      "gpu": {
+        "count": 2644,
+        "p50": 5.903,
+        "p95": 7.246,
+        "p99": 9.662,
+        "max": 14.189
+      },
+      "longtask": null,
+      "chunk-integration": null,
+      "chunk-fetch-decode": null,
+      "chunk-adopt": null
+    },
+    "renderDprChanges": 0,
+    "drawCalls": {
+      "count": 2653,
+      "p50": 555,
+      "p95": 555,
+      "p99": 555,
+      "max": 555
+    },
+    "triangles": {
+      "count": 2653,
+      "p50": 798557,
+      "p95": 798557,
+      "p99": 798557,
+      "max": 798557
+    },
+    "renderDprRange": [
+      1,
+      1
+    ],
+    "outliers": [
+      [
+        41113.39999997616,
+        49,
+        3,
+        0,
+        4,
+        -1,
+        0
+      ],
+      [
+        41028.200000047684,
+        33.400000000001455,
+        2,
+        0.09999990463256836,
+        4.300000071525574,
+        -1,
+        0
+      ],
+      [
+        41244.300000071526,
+        17.799999999995634,
+        1,
+        0,
+        3.8000000715255737,
+        -1,
+        0
+      ],
+      [
+        13894.899999976158,
+        17.700000000004366,
+        1,
+        0,
+        3.1999999284744263,
+        -1,
+        0
+      ],
+      [
+        24195.399999976158,
+        17.700000000004366,
+        1,
+        0,
+        4.099999904632568,
+        -1,
+        0
+      ]
+    ]
+  },
+  {
+    "file": "p1-medium-fx.json",
+    "segment": "paused-render",
+    "renderDiagnostics": {
+      "postfxQuality": "medium",
+      "fixedDpr": 1,
+      "shadowsOff": false,
+      "postfxOff": false
+    },
+    "settings": {
+      "mode": "quick",
+      "driftEvent": "flow",
+      "quality": "high",
+      "postfx": true,
+      "masterVolume": 0.9,
+      "camera": "chase",
+      "difficulty": "challenging",
+      "opponents": 3,
+      "laps": 3,
+      "track": "nurburgring",
+      "car": "porsche911",
+      "timeOfDay": "noon"
+    },
+    "environment": {
+      "url": "http://127.0.0.1:4174/",
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36",
+      "viewport": [
+        1024,
+        934
+      ],
+      "dpr": 1.600000023841858,
+      "cores": 8
+    },
+    "dropped": 0,
+    "visibilityChanges": 0,
+    "warmupCutoffMs": 5000,
+    "durationMs": 49847.89999997616,
+    "analyzedDurationMs": 44848.0,
+    "frameMs": {
+      "count": 2691,
+      "p50": 16.7,
+      "p95": 17.6,
+      "p99": 17.7,
+      "max": 17.8
+    },
+    "stalls": {
+      "33": 0,
+      "50": 0,
+      "100": 0
+    },
+    "simulationMs": {
+      "count": 2691,
+      "p50": 0,
+      "p95": 0.1,
+      "p99": 0.1,
+      "max": 0.4
+    },
+    "renderCpuMs": {
+      "count": 2691,
+      "p50": 3.9,
+      "p95": 4.3,
+      "p99": 4.8,
+      "max": 6.1
+    },
+    "fixedSteps": {
+      "count": 2691,
+      "p50": 1,
+      "p95": 1,
+      "p99": 1,
+      "max": 1
+    },
+    "eventDurationsMs": {
+      "gpu": {
+        "count": 2688,
+        "p50": 6.73,
+        "p95": 8.173,
+        "p99": 8.525,
+        "max": 12.188
+      },
+      "longtask": null,
+      "chunk-integration": null,
+      "chunk-fetch-decode": null,
+      "chunk-adopt": null
+    },
+    "renderDprChanges": 0,
+    "drawCalls": {
+      "count": 2691,
+      "p50": 557,
+      "p95": 557,
+      "p99": 557,
+      "max": 557
+    },
+    "triangles": {
+      "count": 2691,
+      "p50": 798559,
+      "p95": 798559,
+      "p99": 798559,
+      "max": 798559
+    },
+    "renderDprRange": [
+      1,
+      1
+    ],
+    "outliers": [
+      [
+        31064.100000023842,
+        17.80000000000291,
+        1,
+        0.10000002384185791,
+        4,
+        -1,
+        0
+      ],
+      [
+        37313.60000002384,
+        17.799999999995634,
+        1,
+        0,
+        3.799999952316284,
+        -1,
+        0
+      ],
+      [
+        48362.800000071526,
+        17.70000000001164,
+        1,
+        0.10000002384185791,
+        3.5,
+        -1,
+        0
+      ],
+      [
+        48663.10000002384,
+        17.70000000001164,
+        1,
+        0,
+        3.799999952316284,
+        -1,
+        0
+      ],
+      [
+        48963.39999997616,
+        17.70000000001164,
+        1,
+        0,
+        4.199999928474426,
+        -1,
+        0
+      ]
+    ]
+  },
+  {
+    "file": "p1-no-postfx.json",
+    "segment": "paused-render",
+    "renderDiagnostics": {
+      "fixedDpr": 1,
+      "shadowsOff": false,
+      "postfxOff": true
+    },
+    "settings": {
+      "mode": "quick",
+      "driftEvent": "flow",
+      "quality": "high",
+      "postfx": true,
+      "masterVolume": 0.9,
+      "camera": "chase",
+      "difficulty": "challenging",
+      "opponents": 3,
+      "laps": 3,
+      "track": "nurburgring",
+      "car": "porsche911",
+      "timeOfDay": "noon"
+    },
+    "environment": {
+      "url": "http://127.0.0.1:4174/",
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36",
+      "viewport": [
+        1024,
+        934
+      ],
+      "dpr": 1.600000023841858,
+      "cores": 8
+    },
+    "dropped": 0,
+    "visibilityChanges": 0,
+    "warmupCutoffMs": 5000,
+    "durationMs": 50015.10000002384,
+    "analyzedDurationMs": 45015.3,
+    "frameMs": {
+      "count": 2701,
+      "p50": 16.7,
+      "p95": 16.8,
+      "p99": 17.6,
+      "max": 17.8
+    },
+    "stalls": {
+      "33": 0,
+      "50": 0,
+      "100": 0
+    },
+    "simulationMs": {
+      "count": 2701,
+      "p50": 0,
+      "p95": 0.1,
+      "p99": 0.1,
+      "max": 0.9
+    },
+    "renderCpuMs": {
+      "count": 2701,
+      "p50": 4.2,
+      "p95": 4.7,
+      "p99": 5,
+      "max": 9.3
+    },
+    "fixedSteps": {
+      "count": 2701,
+      "p50": 1,
+      "p95": 1,
+      "p99": 1,
+      "max": 1
+    },
+    "eventDurationsMs": {
+      "gpu": {
+        "count": 2699,
+        "p50": 3.875,
+        "p95": 4.209,
+        "p99": 4.403,
+        "max": 5.948
+      },
+      "longtask": null,
+      "chunk-integration": null,
+      "chunk-fetch-decode": null,
+      "chunk-adopt": null
+    },
+    "renderDprChanges": 0,
+    "drawCalls": {
+      "count": 2701,
+      "p50": 542,
+      "p95": 542,
+      "p99": 542,
+      "max": 542
+    },
+    "triangles": {
+      "count": 2701,
+      "p50": 797610,
+      "p95": 797610,
+      "p99": 797610,
+      "max": 797610
+    },
+    "renderDprRange": [
+      1,
+      1
+    ],
+    "outliers": [
+      [
+        44398.700000047684,
+        17.80000000000291,
+        1,
+        0,
+        4.399999976158142,
+        -1,
+        0
+      ],
+      [
+        45298,
+        17.70000000001164,
+        1,
+        0,
+        3.6999999284744263,
+        -1,
+        0
+      ],
+      [
+        45497.90000009537,
+        17.70000000001164,
+        1,
+        0,
+        3.700000047683716,
+        11,
+        0
+      ],
+      [
+        45748.10000002384,
+        17.70000000001164,
+        1,
+        0,
+        3.799999952316284,
+        -1,
+        0
+      ],
+      [
+        46898.10000002384,
+        17.70000000001164,
+        1,
+        0,
+        3.899999976158142,
+        -1,
+        0
+      ]
+    ]
+  },
+  {
+    "file": "p1-no-shadows.json",
+    "segment": "paused-render",
+    "renderDiagnostics": {
+      "fixedDpr": 1,
+      "shadowsOff": true,
+      "postfxOff": false
+    },
+    "settings": {
+      "mode": "quick",
+      "driftEvent": "flow",
+      "quality": "high",
+      "postfx": true,
+      "masterVolume": 0.9,
+      "camera": "chase",
+      "difficulty": "challenging",
+      "opponents": 3,
+      "laps": 3,
+      "track": "nurburgring",
+      "car": "porsche911",
+      "timeOfDay": "noon"
+    },
+    "environment": {
+      "url": "http://127.0.0.1:4174/",
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36",
+      "viewport": [
+        1024,
+        934
+      ],
+      "dpr": 1.600000023841858,
+      "cores": 8
+    },
+    "dropped": 0,
+    "visibilityChanges": 0,
+    "warmupCutoffMs": 5000,
+    "durationMs": 47382.40000009537,
+    "analyzedDurationMs": 42382.0,
+    "frameMs": {
+      "count": 2543,
+      "p50": 16.7,
+      "p95": 17.6,
+      "p99": 17.7,
+      "max": 17.8
+    },
+    "stalls": {
+      "33": 0,
+      "50": 0,
+      "100": 0
+    },
+    "simulationMs": {
+      "count": 2543,
+      "p50": 0,
+      "p95": 0.1,
+      "p99": 0.1,
+      "max": 0.3
+    },
+    "renderCpuMs": {
+      "count": 2543,
+      "p50": 3.6,
+      "p95": 4.4,
+      "p99": 5.5,
+      "max": 18.6
+    },
+    "fixedSteps": {
+      "count": 2543,
+      "p50": 1,
+      "p95": 2,
+      "p99": 2,
+      "max": 2
+    },
+    "eventDurationsMs": {
+      "gpu": {
+        "count": 2535,
+        "p50": 6.623,
+        "p95": 8.184,
+        "p99": 9.617,
+        "max": 13.687
+      },
+      "longtask": null,
+      "chunk-integration": null,
+      "chunk-fetch-decode": null,
+      "chunk-adopt": null
+    },
+    "renderDprChanges": 0,
+    "drawCalls": {
+      "count": 2543,
+      "p50": 392,
+      "p95": 392,
+      "p99": 392,
+      "max": 392
+    },
+    "triangles": {
+      "count": 2543,
+      "p50": 486598,
+      "p95": 486598,
+      "p99": 486598,
+      "max": 486598
+    },
+    "renderDprRange": [
+      1,
+      1
+    ],
+    "outliers": [
+      [
+        17965.700000047684,
+        17.80000000000291,
+        2,
+        0,
+        4.200000047683716,
+        -1,
+        0
+      ],
+      [
+        21514.900000095367,
+        17.80000000000291,
+        1,
+        0,
+        3.600000023841858,
+        -1,
+        0
+      ],
+      [
+        24766.5,
+        17.80000000000291,
+        1,
+        0,
+        4.799999952316284,
+        -1,
+        0
+      ],
+      [
+        25014.200000047684,
+        17.80000000000291,
+        1,
+        0.10000002384185791,
+        3,
+        -1,
+        0
+      ],
+      [
+        19331.600000023842,
+        17.799999999995634,
+        1,
+        0,
+        3.5,
+        -1,
+        0
+      ]
+    ]
+  },
+  {
+    "file": "p1-normal.json",
+    "segment": "paused-render",
+    "renderDiagnostics": {
+      "fixedDpr": 1,
+      "shadowsOff": false,
+      "postfxOff": false
+    },
+    "settings": {
+      "mode": "quick",
+      "driftEvent": "flow",
+      "quality": "high",
+      "postfx": true,
+      "masterVolume": 0.9,
+      "camera": "chase",
+      "difficulty": "challenging",
+      "opponents": 3,
+      "laps": 3,
+      "track": "nurburgring",
+      "car": "porsche911",
+      "timeOfDay": "noon"
+    },
+    "environment": {
+      "url": "http://127.0.0.1:4174/",
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36",
+      "viewport": [
+        1024,
+        934
+      ],
+      "dpr": 1.600000023841858,
+      "cores": 8
+    },
+    "dropped": 0,
+    "visibilityChanges": 0,
+    "warmupCutoffMs": 5000,
+    "durationMs": 45282.5,
+    "analyzedDurationMs": 40282.6,
+    "frameMs": {
+      "count": 2417,
+      "p50": 16.7,
+      "p95": 17.6,
+      "p99": 17.7,
+      "max": 17.8
+    },
+    "stalls": {
+      "33": 0,
+      "50": 0,
+      "100": 0
+    },
+    "simulationMs": {
+      "count": 2417,
+      "p50": 0,
+      "p95": 0.1,
+      "p99": 0.1,
+      "max": 0.2
+    },
+    "renderCpuMs": {
+      "count": 2417,
+      "p50": 4,
+      "p95": 4.5,
+      "p99": 5,
+      "max": 6.6
+    },
+    "fixedSteps": {
+      "count": 2417,
+      "p50": 1,
+      "p95": 1,
+      "p99": 2,
+      "max": 2
+    },
+    "eventDurationsMs": {
+      "gpu": {
+        "count": 2414,
+        "p50": 7.099,
+        "p95": 7.997,
+        "p99": 10.115,
+        "max": 13.902
+      },
+      "longtask": null,
+      "chunk-integration": null,
+      "chunk-fetch-decode": null,
+      "chunk-adopt": null
+    },
+    "renderDprChanges": 0,
+    "drawCalls": {
+      "count": 2417,
+      "p50": 561,
+      "p95": 561,
+      "p99": 561,
+      "max": 561
+    },
+    "triangles": {
+      "count": 2417,
+      "p50": 797629,
+      "p95": 797629,
+      "p99": 797629,
+      "max": 797629
+    },
+    "renderDprRange": [
+      1,
+      1
+    ],
+    "outliers": [
+      [
+        42231.700000047684,
+        17.80000000000291,
+        2,
+        0,
+        4.200000047683716,
+        -1,
+        0
+      ],
+      [
+        43231.5,
+        17.80000000000291,
+        2,
+        0,
+        4,
+        -1,
+        0
+      ],
+      [
+        5098.5,
+        17.70000000001164,
+        1,
+        0.10000002384185791,
+        3.299999952316284,
+        -1,
+        0
+      ],
+      [
+        6198.900000095367,
+        17.70000000001164,
+        1,
+        0,
+        3.700000047683716,
+        -1,
+        0
+      ],
+      [
+        11565.800000071526,
+        17.70000000001164,
+        1,
+        0,
+        4.100000023841858,
+        -1,
+        0
+      ]
+    ]
+  },
+  {
+    "file": "p1-scaled-medium-fx.json",
+    "segment": "paused-render",
+    "renderDiagnostics": {
+      "postfxQuality": "medium",
+      "fixedDpr": 1,
+      "shadowsOff": false,
+      "postfxOff": false
+    },
+    "settings": {
+      "mode": "quick",
+      "driftEvent": "flow",
+      "quality": "high",
+      "postfx": true,
+      "masterVolume": 0.9,
+      "camera": "chase",
+      "difficulty": "challenging",
+      "opponents": 3,
+      "laps": 3,
+      "track": "nurburgring",
+      "car": "porsche911",
+      "timeOfDay": "noon"
+    },
+    "environment": {
+      "url": "http://127.0.0.1:4174/",
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36",
+      "viewport": [
+        1024,
+        934
+      ],
+      "dpr": 1.600000023841858,
+      "cores": 8
+    },
+    "dropped": 0,
+    "visibilityChanges": 0,
+    "warmupCutoffMs": 5000,
+    "durationMs": 41781.300000071526,
+    "analyzedDurationMs": 36781.6,
+    "frameMs": {
+      "count": 2207,
+      "p50": 16.7,
+      "p95": 17.6,
+      "p99": 17.7,
+      "max": 17.7
+    },
+    "stalls": {
+      "33": 0,
+      "50": 0,
+      "100": 0
+    },
+    "simulationMs": {
+      "count": 2207,
+      "p50": 0,
+      "p95": 0.1,
+      "p99": 0.1,
+      "max": 0.2
+    },
+    "renderCpuMs": {
+      "count": 2207,
+      "p50": 3.9,
+      "p95": 4.3,
+      "p99": 4.5,
+      "max": 7.1
+    },
+    "fixedSteps": {
+      "count": 2207,
+      "p50": 1,
+      "p95": 1,
+      "p99": 1,
+      "max": 1
+    },
+    "eventDurationsMs": {
+      "gpu": {
+        "count": 2204,
+        "p50": 6.511,
+        "p95": 7.945,
+        "p99": 8.387,
+        "max": 13.839
+      },
+      "longtask": null,
+      "chunk-integration": null,
+      "chunk-fetch-decode": null,
+      "chunk-adopt": null
+    },
+    "renderDprChanges": 0,
+    "drawCalls": {
+      "count": 2207,
+      "p50": 555,
+      "p95": 555,
+      "p99": 555,
+      "max": 555
+    },
+    "triangles": {
+      "count": 2207,
+      "p50": 797623,
+      "p95": 797623,
+      "p99": 797623,
+      "max": 797623
+    },
+    "renderDprRange": [
+      1,
+      1
+    ],
+    "outliers": [
+      [
+        18447.600000023842,
+        17.700000000004366,
+        1,
+        0.10000002384185791,
+        3.5,
+        -1,
+        0
+      ],
+      [
+        20147.800000071526,
+        17.700000000004366,
+        1,
+        0,
+        3.9000000953674316,
+        -1,
+        0
+      ],
+      [
+        21564.5,
+        17.700000000004366,
+        1,
+        0,
+        4,
+        -1,
+        0
+      ],
+      [
+        24314.300000071526,
+        17.700000000004366,
+        1,
+        0.09999990463256836,
+        3.9000000953674316,
+        -1,
+        0
+      ],
+      [
+        24431,
+        17.700000000004366,
+        1,
+        0,
+        3.899999976158142,
+        -1,
+        0
+      ]
+    ]
+  }
+]
