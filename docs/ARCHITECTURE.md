@@ -189,13 +189,13 @@ src/
 ├── racing/      RaceManager, CheckpointManager, LapTimer, AiDriver, AiProfiles,
 │                Overtaking, Drafting, RaceStandings
 ├── input/       InputManager (keyboard + gamepad → InputState)
-├── audio/       AudioManager (procedural engine + tire squeal)
+├── audio/       AudioManager (engine, tires, SFX, menu music + garage room tone)
 ├── effects/     PostFX (bloom, SMAA, tone mapping), particles (smoke, spray, sparks), skid marks
 ├── stores/      gameStore, telemetryStore
 └── ui/          React overlay: MainMenu, Settings, Hud, PauseMenu, Results
 public/models/cars/<id>/   <id>.glb + vehicle-config.json   (from the Blender MCP pipeline)
 public/models/tracks/<id>/ streamed track packages from scripts/track/build-track.mjs
-public/audio/              recorded engine loops / SFX (later)
+public/audio/              recorded engine loops / SFX; music/ CC0 menu tracks
 tests/                     Vitest: physics + racing rules + loop
 docs/                      this file, ASSET_PIPELINE.md, blender/ prompts
 ```

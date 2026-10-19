@@ -1,3 +1,4 @@
+import { DEFAULT_LIVERY, sanitizeLivery, type LiveryDesign } from './LiveryDesign'
 import type { VehicleConfig } from './VehicleConfig'
 
 /**
@@ -12,6 +13,7 @@ export type TireCompound = 'street' | 'sport' | 'race'
 export type SuspensionKit = 'stock' | 'sport' | 'race'
 
 export interface CarBuild {
+  livery: LiveryDesign
   paint: string
   finish: PaintFinish
   rims: string
@@ -27,6 +29,7 @@ export interface CarBuild {
 }
 
 export const DEFAULT_BUILD: CarBuild = {
+  livery: DEFAULT_LIVERY,
   paint: '#c8102e',
   finish: 'metallic',
   rims: '#c0c4c8',
@@ -160,6 +163,7 @@ export function sanitizeBuild(raw: unknown): CarBuild {
     tires: pick(r.tires, ['street', 'sport', 'race'] as const, d.tires),
     suspension: pick(r.suspension, ['stock', 'sport', 'race'] as const, d.suspension),
     weight: pick(r.weight, [0, 1, 2] as const, d.weight),
+    livery: sanitizeLivery(r.livery),
     brakes: pick(r.brakes, [0, 1, 2] as const, d.brakes),
   }
 }

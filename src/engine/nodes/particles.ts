@@ -276,6 +276,12 @@ export class GpuParticlePool implements ParticleSystem {
     return Math.min(n, this.max)
   }
 
+  /**
+   * The quality presets cap the CPU pools; GPU particles cost no CPU, so the
+   * pool keeps its size (emitters still scale emission by quality).
+   */
+  setLimit(): void {}
+
   clear(): void {
     this.batches.fill(0)
     this.mesh.count = 0

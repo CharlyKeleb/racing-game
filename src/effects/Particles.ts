@@ -40,6 +40,8 @@ export interface ParticleSystem {
   readonly max: number
   spawn(p: ParticleSpawn, groundY?: number): void
   update(dt: number, windX?: number, windZ?: number): void
+  /** Cap live particles (per-quality budget, effects/EffectBudget). */
+  setLimit(limit: number): void
   clear(): void
   dispose(): void
 }
@@ -169,7 +171,7 @@ const fragmentShader = /* glsl */ `
 /**
  * A fixed pool of camera-facing particles, one draw call. Simulated on the CPU
  * in preallocated typed arrays (no per-frame allocation); the oldest particle
- * is recycled when the pool is full.
+ * slots are recycled when the pool is full. Live particles occupy a dense prefix.
  */
 export class ParticlePool implements ParticleSystem {
   readonly mesh: THREE.Mesh
@@ -196,8 +198,11 @@ export class ParticlePool implements ParticleSystem {
   private readonly bounce: Float32Array
   private readonly attrs: THREE.InstancedBufferAttribute[]
   private readonly look: ParticleLook
+  private colorDirty = false
+  private readonly scalarState: readonly Float32Array[]
   private cursor = 0
   private live = 0
+  private limit: number
 
   /**
    * @param nearFade distance from the lens (m) where particles start / finish
@@ -206,6 +211,7 @@ export class ParticlePool implements ParticleSystem {
    */
   constructor(max: number, look: ParticleLook, renderOrder = 2, nearFade: [number, number] = [1.5, 6]) {
     this.max = max
+    this.limit = max
     this.look = look
     this.pos = new Float32Array(max * 3)
     this.size = new Float32Array(max)
@@ -223,6 +229,8 @@ export class ParticlePool implements ParticleSystem {
     this.drag = new Float32Array(max)
     this.groundY = new Float32Array(max)
     this.bounce = new Float32Array(max)
+    this.scalarState = [this.size, this.alpha, this.rot, this.age, this.life,
+      this.spin, this.startSize, this.endSize, this.peak, this.lift, this.drag, this.groundY, this.bounce]
 
     const plane = new THREE.PlaneGeometry(1, 1)
     const geo = new THREE.InstancedBufferGeometry()
@@ -243,7 +251,7 @@ export class ParticlePool implements ParticleSystem {
       // Sparks draw along their velocity: the simulation array doubles as a render attribute.
       ...(look === 'spark' ? [attr('iVel', this.vel, 3)] : []),
     ]
-    geo.instanceCount = max
+    geo.instanceCount = 0
     this.geometry = geo
 
     this.material = new THREE.ShaderMaterial({
@@ -259,12 +267,15 @@ export class ParticlePool implements ParticleSystem {
     this.mesh = new THREE.Mesh(geo, this.material)
     this.mesh.frustumCulled = false
     this.mesh.renderOrder = renderOrder
+    this.mesh.visible = false
   }
 
   /** `groundY`: grains stop and settle when they fall back to this height. */
   spawn(p: ParticleSpawn, groundY = -Infinity): void {
-    const i = this.cursor
-    this.cursor = (this.cursor + 1) % this.max
+    if (this.limit === 0) return
+    const i = this.live < this.limit ? this.live++ : this.cursor
+    this.cursor = (i + 1) % this.limit
+    this.colorDirty = true
     const j = i * 3
     this.pos[j] = p.x
     this.pos[j + 1] = p.y
@@ -275,7 +286,8 @@ export class ParticlePool implements ParticleSystem {
     this.color[j] = p.r
     this.color[j + 1] = p.g
     this.color[j + 2] = p.b
-    if (this.age[i] >= this.life[i]) this.live++
+    this.size[i] = p.startSize
+    this.alpha[i] = 0
     this.age[i] = 0
     this.life[i] = p.life
     this.startSize[i] = p.startSize
@@ -292,17 +304,15 @@ export class ParticlePool implements ParticleSystem {
   /** `wind`: world-space air drift, m/s; puffs ease toward it. */
   update(dt: number, windX = 0, windZ = 0): void {
     if (this.live === 0) return
-    let live = 0
     const grain = this.look === 'grain'
     const spark = this.look === 'spark'
-    for (let i = 0; i < this.max; i++) {
-      if (this.age[i] >= this.life[i]) {
-        this.alpha[i] = 0
-        this.size[i] = 0
+    let i = 0
+    while (i < this.live) {
+      const age = (this.age[i] += dt)
+      if (age >= this.life[i]) {
+        this.remove(i)
         continue
       }
-      live++
-      const age = (this.age[i] += dt)
       const t = Math.min(1, age / this.life[i])
       const j = i * 3
       const k = Math.exp(-this.drag[i] * dt)
@@ -332,17 +342,51 @@ export class ParticlePool implements ParticleSystem {
       this.alpha[i] = spark ? this.peak[i] * Math.pow(1 - t, 1.3)
         : grain ? this.peak[i] * Math.min(1, (1 - t) * 4) : this.peak[i] * Math.min(1, t * 10) * Math.pow(1 - t, 1.5)
       this.rot[i] += this.spin[i] * dt
+      i++
     }
-    this.live = live
-    for (const a of this.attrs) a.needsUpdate = true
+    this.geometry.instanceCount = this.live
+    this.mesh.visible = this.live > 0
+    if (this.live === 0) return
+    for (let index = 0; index < this.attrs.length; index++) {
+      // Colour is constant over a particle's life; only spawn/compaction changes it.
+      if (index === 4 && !this.colorDirty) continue
+      const attr = this.attrs[index]
+      attr.clearUpdateRanges()
+      attr.addUpdateRange(0, this.live * attr.itemSize)
+      attr.needsUpdate = true
+    }
+    this.colorDirty = false
+  }
+
+  /** Swap removal keeps simulation and GPU instance ranges free of dead slots. */
+  private remove(index: number): void {
+    const last = --this.live
+    if (index === last) return
+    for (const state of this.scalarState) state[index] = state[last]
+    const target = index * 3
+    const source = last * 3
+    for (let axis = 0; axis < 3; axis++) {
+      this.pos[target + axis] = this.pos[source + axis]
+      this.vel[target + axis] = this.vel[source + axis]
+      this.color[target + axis] = this.color[source + axis]
+    }
+    this.colorDirty = true
+  }
+
+  setLimit(limit: number): void {
+    this.limit = Math.max(0, Math.min(this.max, Math.floor(limit)))
+    this.live = Math.min(this.live, this.limit)
+    this.cursor = this.limit > 0 ? this.cursor % this.limit : 0
+    this.geometry.instanceCount = this.live
+    this.mesh.visible = this.live > 0
   }
 
   clear(): void {
-    this.age.fill(Infinity)
-    this.alpha.fill(0)
-    this.size.fill(0)
     this.live = 0
-    for (const a of this.attrs) a.needsUpdate = true
+    this.cursor = 0
+    this.colorDirty = false
+    this.geometry.instanceCount = 0
+    this.mesh.visible = false
   }
 
   dispose(): void {

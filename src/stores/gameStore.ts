@@ -1,9 +1,11 @@
+import { sanitizeLivery, type LiveryDesign } from '../vehicles/LiveryDesign'
 import { driftEvent, type DriftEventId } from '../racing/driftEvents'
 import { createStore } from 'zustand/vanilla'
 import { defaultQuality, isMobile } from '../engine/device'
 import { DEFAULT_BUILD, sanitizeBuild, type CarBuild } from '../vehicles/CarBuild'
 import { selectableCars } from '../vehicles/carRegistry'
 import { isAiDifficulty, type AiDifficulty } from '../racing/AiProfiles'
+import { isMusicTrack, MUSIC_TRACKS, type MusicTrackId } from '../audio/musicTracks'
 import { isTimeOfDay, type TimeOfDay } from '../world/timeOfDay'
 import type { RendererKind } from '../engine/backend'
 
@@ -24,6 +26,10 @@ export interface Settings {
   /** WebGL, or the WebGPU trial (#50). Read once at startup: switching reloads the page. */
   renderer: RendererKind
   masterVolume: number
+  /** Menu/garage soundtrack on/off. */
+  menuMusic: boolean
+  /** Track id from audio/musicTracks.ts. */
+  musicTrack: MusicTrackId
   camera: CameraMode
   difficulty: AiDifficulty
   opponents: number
@@ -38,6 +44,8 @@ export interface Settings {
 
 export interface GameState {
   phase: GamePhase
+  /** True only while the menu soundtrack is audibly playing. */
+  musicPlaying: boolean
   /** Display name of the loaded car, set by the engine. */
   carName: string
   /** True while the garage swaps cars (one drives off, the next drives in). */
@@ -60,6 +68,8 @@ export interface GameState {
   updateSettings(patch: Partial<Settings>): void
   updateBuild(patch: Partial<CarBuild>): void
   resetBuild(): void
+  liveryHistory: Record<string, LiveryDesign[]>
+  undoLivery(): void
 }
 
 const SETTINGS_KEY = 'racing-game:settings'
@@ -76,6 +86,8 @@ const defaultSettings: Settings = {
   postfx: !isMobile(),
   renderer: 'webgl',
   masterVolume: 0.9,
+  menuMusic: true,
+  musicTrack: MUSIC_TRACKS[0].id,
   camera: 'chase',
   difficulty: 'challenging',
   opponents: 3,
@@ -96,6 +108,8 @@ function loadSettings(): Settings {
     merged.opponents = [0, 1, 3].includes(merged.opponents) ? merged.opponents : 3
     if (!isTimeOfDay(merged.timeOfDay)) merged.timeOfDay = defaultSettings.timeOfDay
     if (merged.renderer !== 'webgpu') merged.renderer = 'webgl'
+    if (typeof merged.menuMusic !== 'boolean') merged.menuMusic = defaultSettings.menuMusic
+    if (!isMusicTrack(merged.musicTrack)) merged.musicTrack = defaultSettings.musicTrack
     if (!selectableCars().some((c) => c.id === merged.car)) merged.car = defaultSettings.car
     return merged
   } catch {
@@ -131,6 +145,7 @@ const initialBuilds = loadBuilds()
 
 export const gameStore = createStore<GameState>()((set, get) => ({
   phase: 'boot',
+  musicPlaying: false,
   carName: '',
   trackSwitching: false,
   carSwitching: false,
@@ -140,6 +155,7 @@ export const gameStore = createStore<GameState>()((set, get) => ({
   error: null,
   settings: initialSettings,
   builds: initialBuilds,
+  liveryHistory: {},
   build: initialBuilds[initialSettings.car] ?? DEFAULT_BUILD,
   setPhase: (phase) => set({ phase }),
   setError: (error) => set({ error }),
@@ -155,9 +171,24 @@ export const gameStore = createStore<GameState>()((set, get) => ({
     }
   },
   updateBuild: (patch) => {
-    const build = { ...get().build, ...patch }
+    const previous = get().build.livery
+    const build = { ...get().build, ...patch, livery: patch.livery ? sanitizeLivery(patch.livery) : previous }
+    if (patch.livery && JSON.stringify(previous) !== JSON.stringify(build.livery)) {
+      const car = get().settings.car
+      set({ liveryHistory: { ...get().liveryHistory, [car]: [...(get().liveryHistory[car] ?? []), previous].slice(-30) } })
+    }
     const builds = { ...get().builds, [get().settings.car]: build }
     set({ build, builds })
+    saveBuilds(builds)
+  },
+  undoLivery: () => {
+    const car = get().settings.car
+    const history = get().liveryHistory[car] ?? []
+    const previous = history.at(-1)
+    if (!previous) return
+    const build = { ...get().build, livery: previous }
+    const builds = { ...get().builds, [car]: build }
+    set({ build, builds, liveryHistory: { ...get().liveryHistory, [car]: history.slice(0, -1) } })
     saveBuilds(builds)
   },
   resetBuild: () => {

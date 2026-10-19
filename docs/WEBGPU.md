@@ -42,6 +42,10 @@ performance captures record it with every frame:
     | `Environment` `Sky` with the exposure / tint / clamp patch | `skyDome` (`SkyMesh`) |
     | `Showroom` `Reflector` floor sheen | `floorSheen` (`reflector()` node) |
 
+**Known gap:** garage liveries (`CarLivery`, via `LiveryGraphics`) still patch
+the paint shader with `onBeforeCompile`. Under WebGPU the paint, finish and
+plates render, but livery graphics don't show until they get a node twin.
+
 **Rule:** `WebGPURenderer` runs no `ShaderMaterial`, `RawShaderMaterial` or
 `onBeforeCompile` patch. Any new one needs a node twin in `engine/nodes`,
 picked with `backend.nodes`.

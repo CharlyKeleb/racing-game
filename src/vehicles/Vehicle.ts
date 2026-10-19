@@ -257,6 +257,12 @@ export class Vehicle {
     }
   }
 
+  /** Only the lamp copies belong to Vehicle; source model resources are shared. */
+  disposeMaterials(): void {
+    for (const material of this.headlights) material.dispose()
+    for (const material of this.taillights) material.dispose()
+  }
+
   respawn(spawn: SpawnPoint): void {
     this.quietTicks = 30
     const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), spawn.heading)

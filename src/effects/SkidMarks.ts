@@ -89,6 +89,9 @@ export class SkidMarks {
   private readonly uTime: { value: number }
   private readonly trails: Trail[] = []
   private head = 0
+  private limit = MAX_SEGMENTS
+  private written = 0
+  private lastWrite = -Infinity
   private time = 0
   private readonly ruts: boolean
 
@@ -114,6 +117,7 @@ export class SkidMarks {
     geo.setAttribute('aAlpha', this.alphaAttr)
     geo.setAttribute('aBirth', this.birthAttr)
     geo.setIndex(new THREE.BufferAttribute(index, 1))
+    geo.setDrawRange(0, 0)
 
     // Ruts: damp, compacted sand under the dry surface — dark brown, not black.
     const color = new THREE.Color(ruts ? 0x2e2216 : 0x0b0b0c)
@@ -144,11 +148,13 @@ export class SkidMarks {
     this.mesh = new THREE.Mesh(geo, this.material)
     this.mesh.frustumCulled = false
     this.mesh.renderOrder = 1
+    this.mesh.visible = false
   }
 
   update(wheels: readonly WheelState[], dt: number): void {
     this.time += dt
     this.uTime.value = this.time
+    this.mesh.visible = this.time - this.lastWrite < (this.ruts ? RUT_LIFETIME : LIFETIME)
 
     for (let i = 0; i < wheels.length; i++) {
       const w = wheels[i]
@@ -209,7 +215,11 @@ export class SkidMarks {
 
   private writeSegment(l0: THREE.Vector3, r0: THREE.Vector3, l1: THREE.Vector3, r1: THREE.Vector3, a0: number, a1: number): void {
     const s = this.head
-    this.head = (this.head + 1) % MAX_SEGMENTS
+    this.head = (this.head + 1) % this.limit
+    this.written = Math.min(this.limit, this.written + 1)
+    this.lastWrite = this.time
+    this.mesh.visible = true
+    this.mesh.geometry.setDrawRange(0, this.written * 6)
     const v = s * 4
     const p = this.positions
     l0.toArray(p, v * 3)
@@ -226,8 +236,20 @@ export class SkidMarks {
     this.posAttr.needsUpdate = this.alphaAttr.needsUpdate = this.birthAttr.needsUpdate = true
   }
 
+  setLimit(limit: number): void {
+    const next = Math.max(1, Math.min(MAX_SEGMENTS, Math.floor(limit)))
+    if (next === this.limit) return
+    this.limit = next
+    this.clear()
+  }
+
   /** Wipes every mark (new race). */
   clear(): void {
+    this.head = 0
+    this.written = 0
+    this.lastWrite = -Infinity
+    this.mesh.geometry.setDrawRange(0, 0)
+    this.mesh.visible = false
     this.births.fill(NEVER)
     this.birthAttr.clearUpdateRanges()
     this.birthAttr.needsUpdate = true

@@ -198,7 +198,11 @@ export class ChaseCamera {
     this.camera.lookAt(this.lookTarget)
     // Clip away anything hugging the lens (pillars, shelving the orbit passes
     // beside); the subject is always further than this.
-    const near = THREE.MathUtils.clamp(framing.distance - 2.2, NEAR, 1.6)
+    // Framing changes immediately, but the camera is still gliding out of the
+    // wheel/plate close-up. Keep clipping outside a sphere containing the car,
+    // using the actual camera position, not the destination's distance.
+    const carClearance = Math.max(NEAR, this.camera.position.distanceTo(target.position) - 3)
+    const near = Math.min(carClearance, THREE.MathUtils.clamp(framing.distance - 2.2, NEAR, 1.6))
     let dirty = Math.abs(this.camera.near - near) > 0.01
     if (dirty) this.camera.near = near
     if (Math.abs(this.camera.fov - framing.fov) > 0.01) {

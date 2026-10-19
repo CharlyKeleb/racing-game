@@ -35,7 +35,7 @@ import { CarLivery } from '../vehicles/CarLivery'
 import { buildPlaceholderCar, rigCarModel, type CarModel } from '../vehicles/CarModel'
 import { getCar, selectableCars, stepCar, type CarEntry } from '../vehicles/carRegistry'
 import { Vehicle, type SpawnPoint } from '../vehicles/Vehicle'
-import { resolveVehicleConfig, type VehicleConfig } from '../vehicles/VehicleConfig'
+import { resolveVehicleConfig, type VehicleConfig, type WheelId } from '../vehicles/VehicleConfig'
 import { Environment } from '../world/Environment'
 import type { RaceTrack } from '../world/RaceTrack'
 import { Surface } from '../vehicles/Surface'
@@ -59,7 +59,7 @@ interface StackedTag extends RivalTag {
   target: number
 }
 // Handbrake, not brake: brake at standstill would engage reverse.
-export type ShowroomFocus = 'car' | 'wheel'
+export type ShowroomFocus = 'car' | 'wheel' | `wheel-${WheelId}` | 'plate-front' | 'plate-rear'
 
 const LOCKED_INPUT: InputState = { throttle: 0, brake: 0, steer: 0, handbrake: true, nitro: false }
 /** Past the flag: brake to a stop in a straight line while the rivals finish. */
@@ -232,10 +232,13 @@ export class Game {
   private showroomPadStale = false
   /** What the garage camera frames; the Wheels tab zooms onto the front-left wheel. */
   private showroomFocus: ShowroomFocus = 'car'
+  private wheelFocusId: WheelId = 'FL'
   private wheelYaw = 0
   private readonly carFraming: ShowroomFraming = { focus: new THREE.Vector3(0, 0.55, 0), distance: SHOWROOM_DISTANCE, height: 1.5, shift: 0, fov: SHOWROOM_FOV }
+  private readonly plateFraming: ShowroomFraming = { focus: new THREE.Vector3(), distance: 2.1, height: .18, shift: .45, fov: 34 }
   private readonly wheelFraming: ShowroomFraming = { focus: new THREE.Vector3(), distance: 2.9, height: 0.45, shift: 0.55, fov: 38 }
 
+  private standingsPublishedAt = -Infinity
   private telemetryTimer = 0
   private fpsFrames = 0
   private fpsTimer = 0
@@ -251,6 +254,10 @@ export class Game {
       render: (alpha, dt) => this.renderFrame(alpha, dt),
     })
     performanceCapture.setContext(() => ({ phase: gameStore.getState().phase, settings: gameStore.getState().settings }))
+    document.addEventListener('visibilitychange', this.onVisibilityChange)
+    this.audio.onMenuMusicState = (playing) => {
+      if (gameStore.getState().musicPlaying !== playing) gameStore.setState({ musicPlaying: playing })
+    }
     this.unsubscribe = gameStore.subscribe((s, prev) => {
       if (s.settings.car !== prev.settings.car && this.vehicle) void this.switchCar(s.settings.car)
       if (s.settings.track !== prev.settings.track && this.track) void this.switchTrack(s.settings.track)
@@ -323,6 +330,7 @@ export class Game {
     scene.add(model.root)
     this.headlights = new Headlights(model, config)
     this.effects = new DrivingEffects(this.vehicle)
+    this.effects.setQuality(gameStore.getState().settings.quality)
     scene.add(this.effects.group)
     this.sparks = new Sparks()
     scene.add(this.sparks.mesh)
@@ -342,21 +350,20 @@ export class Game {
     this.applySettings(gameStore.getState().settings)
     telemetryStore.setState({ redlineRpm: config.engine.redlineRpm })
     this.vehicle.render(1)
-    this.loop.start()
+    if (!document.hidden) this.loop.start()
     setPhase('menu')
     performance.measure('boot:menu', 'boot:start')
     if (import.meta.env.DEV) (window as unknown as { __game: Game }).__game = this
 
     const bootToken = this.trackLoadToken
     // Behind the menu: the track's visuals first (Race needs them), then the
-    // sharp garage textures, then the other cars.
+    // sharp garage textures. Other cars load only when selected or used as rivals.
     void this.loadTrackVisuals()
       .then(async () => {
         if (this.disposed || this.trackLoadToken !== bootToken) return
         performance.measure('boot:trackVisuals', 'boot:start')
         await this.showroom.upgrade(this.assets)
         performance.measure('boot:garageHigh', 'boot:start')
-        await this.preloadCars()
       })
       .catch((err: unknown) => {
         if (!this.disposed && this.trackLoadToken === bootToken) {
@@ -433,6 +440,7 @@ export class Game {
     this.removeSafetyWalls()
     const edges = measureRoadEdges(this.track.line, (x, z) => this.track.surfaceAt(x, z))
     this.roadEdges = edges
+    this.standingsPublishedAt = -Infinity
     this.standings = new RaceStandings(this.track.line, this.track.checkpoints)
     const track = this.track
     this.guide = new DirectionGuide(this.track.line, edges, {
@@ -557,43 +565,24 @@ export class Game {
     this.track.group.visible = false
     this.guide.group.visible = false
     gameStore.setState({ trackSwitching: false })
-    this.loop.start()
-  }
-
-  /**
-   * Warm the asset cache with every other car in the picker, one at a time in
-   * the background, so a garage swap never waits on a download.
-   */
-  private async preloadCars(): Promise<void> {
-    const low = gameStore.getState().settings.quality === 'low'
-    for (const car of selectableCars()) {
-      if (car.id === this.carId || this.disposed) continue
-      try {
-        await this.assets.loadJson(car.configUrl)
-        const url = low && car.modelUrlLow ? car.modelUrlLow : car.modelUrl
-        if (await this.assets.exists(url)) await this.assets.loadModel(url)
-      } catch {
-        // Preloading is best effort; switchCar loads (and reports) on demand.
-      }
-    }
+    if (!document.hidden) this.loop.start()
   }
 
   /** Loads the GLB + config from the pipeline, falling back to the placeholder car. */
   private async loadCar(carId: string) {
     const entry = getCar(carId)
-    const json = await this.assets.loadJson<Partial<VehicleConfig>>(entry.configUrl)
-    const config = resolveVehicleConfig(json ?? undefined)
-    // Phones on Low get the simplified car: it's the single heaviest mesh on screen.
+    // Config and geometry are independent downloads: start both immediately.
     const low = gameStore.getState().settings.quality === 'low' && entry.modelUrlLow
     const url = low ? entry.modelUrlLow! : entry.modelUrl
-    let scene
-    if (await this.assets.exists(url)) {
-      try {
-        scene = await this.assets.loadModel(url)
-      } catch (err) {
+    const [json, loaded] = await Promise.all([
+      this.assets.loadJson<Partial<VehicleConfig>>(entry.configUrl),
+      this.assets.loadModel(url).catch((err: unknown) => {
         console.warn(`[Game] failed to load ${url}, using placeholder`, err)
-      }
-    }
+        return null
+      }),
+    ])
+    const config = resolveVehicleConfig(json ?? undefined)
+    let scene = loaded
     scene ??= buildPlaceholderCar(config)
     return { config, model: rigCarModel(scene, config) }
   }
@@ -643,6 +632,7 @@ export class Game {
     this.opponents = []
     this.traffic = [this.playerPose]
     this.entries = [this.playerEntry]
+    this.standingsPublishedAt = -Infinity
   }
 
   private async launchRace(): Promise<void> {
@@ -765,7 +755,7 @@ export class Game {
    */
   rotateShowroom(deltaYaw: number, deltaHeight = 0): void {
     if (gameStore.getState().carSwitching) return
-    if (this.showroomFocus === 'wheel') {
+    if (this.showroomFocus !== 'car') {
       this.wheelYaw = THREE.MathUtils.clamp(this.wheelYaw + deltaYaw, -0.7, 0.7)
       return
     }
@@ -780,7 +770,7 @@ export class Game {
 
   /** Pinch / scroll: <1 zooms in, >1 out. */
   zoomShowroom(factor: number): void {
-    if (this.showroomFocus === 'wheel') return
+    if (this.showroomFocus !== 'car') return
     this.showroomZoom = THREE.MathUtils.clamp(this.showroomZoom * factor, ORBIT_ZOOM[0], ORBIT_ZOOM[1])
   }
 
@@ -803,10 +793,14 @@ export class Game {
     this.orbitCoasting = false
   }
 
-  /** Garage tabs call this: 'wheel' glides the camera to the front-left wheel. */
+  /** Garage detail tabs glide to the selected part using the same camera damping. */
   setShowroomFocus(focus: ShowroomFocus): void {
     if (focus === this.showroomFocus) return
     this.showroomFocus = focus
+    if (focus.startsWith('wheel-')) this.wheelFocusId = focus.slice(6) as WheelId
+    else if (focus === 'wheel') this.wheelFocusId = 'FL'
+    this.orbitVelocity = 0
+    this.orbitCoasting = false
     this.wheelYaw = 0
   }
 
@@ -874,6 +868,7 @@ export class Game {
     this.effects.dispose()
     this.headlights.dispose()
     this.livery.dispose()
+    old.disposeMaterials()
     scene.remove(old.model.root)
     this.physics.world.removeRigidBody(old.body)
     this.setShowroomPad(false)
@@ -890,6 +885,7 @@ export class Game {
     this.headlights = new Headlights(model, config)
     this.headlights.setOn(this.environment.current.headlights)
     this.effects = new DrivingEffects(this.vehicle)
+    this.effects.setQuality(gameStore.getState().settings.quality)
     scene.add(this.effects.group)
     const phase = gameStore.getState().phase
     const inShowroom = phase === 'menu' || phase === 'garage'
@@ -934,6 +930,20 @@ export class Game {
     this.race.skipIntro()
     this.camera.snap()
     this.publishTelemetry()
+  }
+
+  /** A hidden race stays paused on return; the player explicitly resumes it. */
+  private onVisibilityChange = (): void => {
+    if (this.disposed || !this.race) return
+    if (document.hidden) {
+      const phase = gameStore.getState().phase
+      if (phase === 'racing' || phase === 'countdown' || phase === 'intro') this.togglePause()
+      this.audio.suspend()
+      this.loop.stop()
+    } else {
+      this.loop.start()
+      if (gameStore.getState().phase !== 'paused') this.audio.resume()
+    }
   }
 
   togglePause(): void {
@@ -1034,10 +1044,11 @@ export class Game {
     for (const opponent of this.opponents) opponent.readPose()
     this.vehicle.controller.drafting = controls ? draftingStrength(this.playerPose, this.traffic, 0) : 0
     this.vehicle.fixedUpdate(phase === 'finished' ? FINISHED_INPUT : controls ? this.input.state : LOCKED_INPUT, dt)
+    const playerDistance = this.standings.distance(this.playerEntry)
     for (const opponent of this.opponents) {
       const i = opponent.driver.progress.index
       const laneLimit = Math.max(0, Math.min(this.roadEdges.left[i], this.roadEdges.right[i]) - 2)
-      const gap = this.standings.distance(this.playerEntry) - this.standings.distance(opponent.entry)
+      const gap = playerDistance - this.standings.distance(opponent.entry)
       if (!inMenu) opponent.drive(dt, this.traffic, gap, laneLimit)
     }
     this.physics.step(dt)
@@ -1088,7 +1099,7 @@ export class Game {
         angle:Math.atan2(Math.abs(sideways),forward)*180/Math.PI,
         direction:Math.sign(sideways),
         distance:Math.hypot(body.x-this.driftLastX,body.z-this.driftLastZ),
-        grounded:ctrl.wheels.filter(w=>w.grounded).length>=3,
+        grounded:ctrl.wheels.reduce((count, w) => count + (w.grounded ? 1 : 0), 0)>=3,
         paved:surface===Surface.Asphalt || surface===Surface.Kerb,
         active:ctrl.drift.active,
         zone:!!this.driftZones?.at(body.x,body.z), impact,
@@ -1134,12 +1145,27 @@ export class Game {
     const revAudible = audition && (this.revHeld || this.revRpm > idle + 50)
     this.audio.setMenuEngine(this.showroomRev !== null || revAudible)
     if (phase === 'menu' || phase === 'garage') {
-      const wheel = phase === 'garage' && this.showroomFocus === 'wheel'
-      if (wheel) {
-        // Front-left wheel axle in car space (+X is the car's left), seen from a low front three-quarter.
-        const fl = this.vehicle.config.wheels.find((w) => w.id === 'FL') ?? this.vehicle.config.wheels[0]
-        this.wheelFraming.focus.set(fl.position[0], fl.radius, fl.position[2])
-        this.camera.showroom(this.showroomAnchor, Math.PI / 2 - 0.55 + this.wheelYaw, dt, this.wheelFraming)
+      const wheel = phase === 'garage' && (this.showroomFocus === 'wheel' || this.showroomFocus.startsWith('wheel-'))
+      const plateFocus = phase === 'garage' && (this.showroomFocus === 'plate-front' || this.showroomFocus === 'plate-rear')
+      if (plateFocus) {
+        const front = this.showroomFocus === 'plate-front'
+        const plate = this.vehicle.model.body.getObjectByName(front ? 'CustomPlate_front' : 'CustomPlate_rear')
+        if (plate) this.plateFraming.focus.copy(plate.position)
+        else this.plateFraming.focus.set(0, .5, front ? 2.2 : -2.2)
+        this.camera.showroom(this.showroomAnchor, (front ? 0 : Math.PI) + this.wheelYaw, dt, this.plateFraming)
+      } else if (wheel) {
+        let selected = this.vehicle.config.wheels[0]
+        for (const wheel of this.vehicle.config.wheels) {
+          if (wheel.id === this.wheelFocusId) { selected = wheel; break }
+        }
+        // Follow the rendered hub, including suspension height, instead of assuming
+        // the axle sits one radius above the body origin on every car.
+        this.wheelFraming.focus.copy(this.vehicle.model.wheels[selected.id].pivot.position)
+        this.wheelFraming.distance = Math.max(1.7, selected.radius * 6)
+        this.wheelFraming.height = selected.radius * .65
+        const side = selected.position[0] >= 0 ? 1 : -1
+        const quarter = selected.position[2] >= 0 ? -.35 : .35
+        this.camera.showroom(this.showroomAnchor, side * (Math.PI / 2 + quarter) + this.wheelYaw, dt, this.wheelFraming)
       } else {
         if (this.showroomPadStale) {
           this.setShowroomPad(false)
@@ -1491,8 +1517,20 @@ export class Game {
     _forward.set(0, 0, 1).applyQuaternion(q)
     const ctrl = this.vehicle.controller
     const t = this.race.timer
-    const standings = this.standings?.snapshot(this.entries) ?? []
-    const rivalLabels = this.opponents.map(o => ({ id: o.id, name: o.driver.profile.name, style: o.driver.profile.style, position: standings.find(s => s.id === o.id)?.position ?? o.id }))
+    const now = performance.now()
+    const previousStandings = telemetryStore.getState().standings
+    const refreshStandings = now - this.standingsPublishedAt >= 200 ||
+      previousStandings.length !== this.entries.length ||
+      this.entries.some(entry => previousStandings.find(row => row.id === entry.id)?.finishMs !== entry.finishMs)
+    const standings = refreshStandings ? this.standings?.snapshot(this.entries) ?? [] : previousStandings
+    if (refreshStandings) this.standingsPublishedAt = now
+    const previousLabels = telemetryStore.getState().rivalLabels
+    const labelsUnchanged = previousLabels.length === this.opponents.length && this.opponents.every((o, i) => {
+      const previous = previousLabels[i]
+      return previous.id === o.id && previous.name === o.driver.profile.name &&
+        previous.style === o.driver.profile.style && previous.position === (standings.find(s => s.id === o.id)?.position ?? o.id)
+    })
+    const rivalLabels = labelsUnchanged ? previousLabels : this.opponents.map(o => ({ id: o.id, name: o.driver.profile.name, style: o.driver.profile.style, position: standings.find(s => s.id === o.id)?.position ?? o.id }))
     telemetryStore.setState({
       rivalLabels,
       introShot: introShot(this.race.introDuration > 0 ? 1-this.race.introRemaining/this.race.introDuration : 0),
@@ -1625,6 +1663,7 @@ export class Game {
 
   private applySettings(s: Settings): void {
     this.renderer.applyQuality(s.quality, s.postfx)
+    this.effects?.setQuality(s.quality)
     this.environment?.setShadowMapSize(s.quality === 'high' ? 2048 : 1024)
     if (this.track) {
       void this.track.setQuality(s.quality)
@@ -1633,6 +1672,7 @@ export class Game {
       this.renderer.setViewDistance(view.fogFar * 1.05)
     }
     this.audio.setVolume(s.masterVolume)
+    this.audio.setMenuMusic(s.musicTrack, s.menuMusic)
     if (this.camera) this.camera.mode = s.camera
     this.applyTimeOfDay(s.timeOfDay)
   }
@@ -1657,12 +1697,14 @@ export class Game {
 
   dispose(): void {
     this.disposed = true
+    document.removeEventListener('visibilitychange', this.onVisibilityChange)
     this.clearRaceLoading()
     this.loop.stop()
     this.unsubscribe()
     this.clearOpponents()
     this.input.dispose()
     this.audio.dispose()
+    this.audio.onMenuMusicState = null
     this.livery?.dispose()
     this.effects?.dispose()
     this.sparks?.dispose()
@@ -1672,7 +1714,9 @@ export class Game {
     this.track?.dispose()
     this.headlights?.dispose()
     this.environment?.dispose()
+    this.vehicle?.disposeMaterials()
     this.physics?.dispose()
+    this.assets.dispose()
     this.renderer.dispose()
   }
 }

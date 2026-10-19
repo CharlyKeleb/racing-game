@@ -51,11 +51,14 @@ export function Settings({ onClose }: { onClose?: () => void }) {
           <SettingChoices<TimeOfDay> preview={time=><SettingScene time={time}/>} label="Time of day" value={settings.timeOfDay} options={(Object.keys(TIME_PRESETS) as TimeOfDay[]).map(id=>[id,TIME_PRESETS[id].label])} onPick={timeOfDay=>update({timeOfDay})}/>
           <Segmented<number> help label="Laps" value={settings.laps} options={[[1,'1'],[3,'3'],[5,'5']]} onPick={laps=>update({laps})}/>
         </>}
-        {section === 'audio' && <label className="ui-field settings__volume">
-          <span className="ui-field__label">Master volume <Help label="Master volume">Adjusts all game sound, including the engine, tires, effects and garage ambience. Zero mutes the game.</Help><em>{Math.round(settings.masterVolume*100)}%</em></span>
-          <input aria-label="Master volume" className="ui-range" type="range" min={0} max={1} step={.05} value={settings.masterVolume} onChange={e=>update({masterVolume:Number(e.target.value)})}/>
-          <span className="settings__help">Engine, tires, effects and garage ambience.</span>
-        </label>}
+        {section === 'audio' && <>
+          <label className="ui-field settings__volume">
+            <span className="ui-field__label">Master volume <Help label="Master volume">Adjusts all game sound, including the engine, tires, effects, menu music and garage ambience. Zero mutes the game.</Help><em>{Math.round(settings.masterVolume*100)}%</em></span>
+            <input aria-label="Master volume" className="ui-range" type="range" min={0} max={1} step={.05} value={settings.masterVolume} onChange={e=>update({masterVolume:Number(e.target.value)})}/>
+            <span className="settings__help">Engine, tires, effects, menu music and garage ambience.</span>
+          </label>
+          <Segmented<number> label="Menu music" value={settings.menuMusic?1:0} options={[[1,'On'],[0,'Off']]} onPick={v=>update({menuMusic:v===1})}/>
+        </>}
         {section === 'controls' && <dl className="settings__controls">
           <div><dt>Accelerate</dt><dd><kbd>W</kbd> / <kbd>↑</kbd></dd></div>
           <div><dt>Brake / reverse</dt><dd><kbd>S</kbd> / <kbd>↓</kbd></dd></div>

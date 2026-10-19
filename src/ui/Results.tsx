@@ -1,3 +1,4 @@
+import { useShallow } from 'zustand/react/shallow'
 import { driftEvent, driftMedal } from '../racing/driftEvents'
 import { formatTime } from '../racing/LapTimer'
 import { useGameInstance } from './GameContext'
@@ -7,7 +8,7 @@ import { Button, Panel } from './kit'
 export function Results() {
   const drift = useGame(s => s.settings.mode === 'drift')
   const score = useTelemetry(s => s.driftTotal)
-  const t=useTelemetry(s=>s)
+  const t = useTelemetry(useShallow(s => ({ driftBestChain: s.driftBestChain, driftBusts: s.driftBusts, driftLongest: s.driftLongest, driftNewBest: s.driftNewBest, driftPeakCombo: s.driftPeakCombo, driftPersonalBest: s.driftPersonalBest, driftTransitions: s.driftTransitions, driftZoneSeconds: s.driftZoneSeconds })))
   const event=driftEvent(useGame(s=>s.settings.driftEvent))
   const medal=driftMedal(score,event.targets)
   const game = useGameInstance()

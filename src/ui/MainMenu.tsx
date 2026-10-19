@@ -1,6 +1,6 @@
 import { driftEvent } from '../racing/driftEvents'
 import { GiCheckeredFlag, GiStopwatch, GiRaceCar, GiRoad, GiHomeGarage, GiGears } from 'react-icons/gi'
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { buildStats, carClass, performanceRank } from '../vehicles/CarBuild'
 import { getCar } from '../vehicles/carRegistry'
 import { GAME_MODES } from '../racing/gameModes'
@@ -9,23 +9,26 @@ import { useGame } from './hooks'
 import { CarPicker } from './CarPicker'
 import { Button, ClassBadge, StatBar } from './kit'
 import { OrbitLayer } from './OrbitLayer'
-import { SettingsDialog } from './Settings'
 import { RaceSetup } from './RaceSetup'
 import { TrackSelection } from './TrackSelection'
 import { TrackAerial } from './TrackAerial'
 import trackPreviews from './trackPreviews.json'
 import { RevButton } from './RevButton'
+import { MenuMusicBar } from './MenuMusicBar'
 import { TIME_PRESETS } from '../world/timeOfDay'
+
+const SettingsDialog = lazy(() => import('./Settings').then(module => ({ default: module.SettingsDialog })))
 
 export function MainMenu() {
   const game = useGameInstance()
   const [showSettings, setShowSettings] = useState(false)
   const [showRaceSetup, setShowRaceSetup] = useState(false)
   const settings = useGame((s) => s.settings)
-  // Browsers only start audio from a user gesture: the first click or key in
-  // the menu brings up the garage's room tone.
+  // Try immediately in case autoplay is allowed; otherwise the first click or
+  // key in the menu brings up the garage's room tone and the soundtrack.
   useEffect(() => {
     if (!game) return
+    game.unlockAudio()
     const start = () => game.unlockAudio()
     window.addEventListener('pointerdown', start, { once: true })
     window.addEventListener('keydown', start, { once: true })
@@ -53,6 +56,7 @@ export function MainMenu() {
           <CarPicker />
           <CarCard />
           <RevButton />
+          <MenuMusicBar />
         </div>
         <div className="menu-actions">
           <ModeSelect />
@@ -70,7 +74,7 @@ export function MainMenu() {
       </div>
 
       {showRaceSetup && <RaceSetup onClose={() => setShowRaceSetup(false)} />}
-      {showSettings && <SettingsDialog onClose={() => setShowSettings(false)} />}
+      {showSettings && <Suspense fallback={<div role="status">Loading settings…</div>}><SettingsDialog onClose={() => setShowSettings(false)} /></Suspense>}
     </div>
   )
 }

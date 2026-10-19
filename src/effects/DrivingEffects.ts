@@ -1,3 +1,5 @@
+import type { QualityPreset } from '../stores/gameStore'
+import { EFFECT_BUDGET } from './EffectBudget'
 import * as THREE from 'three'
 import type { Vehicle } from '../vehicles/Vehicle'
 import { NitroFlames } from './NitroFlames'
@@ -26,6 +28,13 @@ export class DrivingEffects {
     this.flames = new NitroFlames(vehicle.config)
     // On the body, not the root: the body leans, and the pipes lean with it.
     vehicle.model.body.add(this.flames.group)
+  }
+
+  setQuality(quality: QualityPreset): void {
+    this.smoke.setQuality(quality)
+    this.spray.setQuality(quality)
+    this.skidMarks.setLimit(EFFECT_BUDGET[quality].marks)
+    this.ruts.setLimit(EFFECT_BUDGET[quality].marks)
   }
 
   update(vehicle: Vehicle, dt: number): void {

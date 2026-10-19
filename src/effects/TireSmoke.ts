@@ -1,3 +1,5 @@
+import type { QualityPreset } from '../stores/gameStore'
+import { EFFECT_BUDGET } from './EffectBudget'
 import { surfaceProps } from '../vehicles/Surface'
 import type { WheelState } from '../vehicles/VehicleController'
 import { createParticles, particleBudget, type ParticleSpawn } from './Particles'
@@ -39,7 +41,16 @@ export class TireSmoke {
   private readonly alphaScale = Math.pow(this.budget, -0.55)
   private readonly lifeScale = this.budget > 1 ? 1.5 : 1
   private readonly sizeScale = this.budget > 1 ? 1.25 : 1
+  private emission = 1
+  private cloudSize = 1
   private readonly emitDebt: number[] = []
+
+  setQuality(quality: QualityPreset): void {
+    const budget = EFFECT_BUDGET[quality]
+    this.pool.setLimit(budget.smoke)
+    this.emission = budget.emission
+    this.cloudSize = budget.cloudSize
+  }
 
   get mesh() {
     return this.pool.mesh
@@ -55,7 +66,7 @@ export class TireSmoke {
         this.emitDebt[i] = 0
         continue
       }
-      let debt = (this.emitDebt[i] ?? 0) + this.rate * (0.25 + 0.75 * k) * dt
+      let debt = (this.emitDebt[i] ?? 0) + this.rate * (0.25 + 0.75 * k) * Math.min(dt, .05) * this.emission
       while (debt >= 1) {
         this.spawn(w, carVelocity, k)
         debt -= 1
@@ -76,7 +87,7 @@ export class TireSmoke {
     _p.vz = carVel.z * 0.3 + (Math.random() - 0.5) * 1.6
     _p.life = (LIFE_MIN + Math.random() * (LIFE_MAX - LIFE_MIN)) * this.lifeScale
     _p.startSize = 0.5 + 0.35 * Math.random()
-    _p.endSize = (3 + 2.2 * Math.random()) * (0.55 + 0.45 * k) * this.sizeScale
+    _p.endSize = (3 + 2.2 * Math.random()) * (0.55 + 0.45 * k) * this.sizeScale * this.cloudSize
     _p.alpha = (0.05 + 0.13 * k) * this.alphaScale
     // Faintly blue-grey, like vaporised rubber, not pure white.
     _p.r = shade
