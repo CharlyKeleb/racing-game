@@ -44,7 +44,6 @@ export function MainMenu() {
         <div className="logo">
           RACING<span>/</span>GAME
         </div>
-        <MenuMusicBar />
         <Button size="sm" className="menu-settings menu-icon-action" aria-label="Settings" onClick={() => setShowSettings((v) => !v)} aria-expanded={showSettings}>
           <GiGears aria-hidden="true"/> Settings
         </Button>
@@ -55,6 +54,7 @@ export function MainMenu() {
           <CarPicker />
           <CarCard />
           <RevButton />
+          <MenuMusicBar />
         </div>
         <div className="menu-actions">
           <ModeSelect />
