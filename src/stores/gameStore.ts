@@ -1,3 +1,4 @@
+import { sanitizeLivery, type LiveryDesign } from '../vehicles/LiveryDesign'
 import { driftEvent, type DriftEventId } from '../racing/driftEvents'
 import { createStore } from 'zustand/vanilla'
 import { defaultQuality, isMobile } from '../engine/device'
@@ -64,6 +65,8 @@ export interface GameState {
   updateSettings(patch: Partial<Settings>): void
   updateBuild(patch: Partial<CarBuild>): void
   resetBuild(): void
+  liveryHistory: Record<string, LiveryDesign[]>
+  undoLivery(): void
 }
 
 const SETTINGS_KEY = 'racing-game:settings'
@@ -147,6 +150,7 @@ export const gameStore = createStore<GameState>()((set, get) => ({
   error: null,
   settings: initialSettings,
   builds: initialBuilds,
+  liveryHistory: {},
   build: initialBuilds[initialSettings.car] ?? DEFAULT_BUILD,
   setPhase: (phase) => set({ phase }),
   setError: (error) => set({ error }),
@@ -162,9 +166,24 @@ export const gameStore = createStore<GameState>()((set, get) => ({
     }
   },
   updateBuild: (patch) => {
-    const build = { ...get().build, ...patch }
+    const previous = get().build.livery
+    const build = { ...get().build, ...patch, livery: patch.livery ? sanitizeLivery(patch.livery) : previous }
+    if (patch.livery && JSON.stringify(previous) !== JSON.stringify(build.livery)) {
+      const car = get().settings.car
+      set({ liveryHistory: { ...get().liveryHistory, [car]: [...(get().liveryHistory[car] ?? []), previous].slice(-30) } })
+    }
     const builds = { ...get().builds, [get().settings.car]: build }
     set({ build, builds })
+    saveBuilds(builds)
+  },
+  undoLivery: () => {
+    const car = get().settings.car
+    const history = get().liveryHistory[car] ?? []
+    const previous = history.at(-1)
+    if (!previous) return
+    const build = { ...get().build, livery: previous }
+    const builds = { ...get().builds, [car]: build }
+    set({ build, builds, liveryHistory: { ...get().liveryHistory, [car]: history.slice(0, -1) } })
     saveBuilds(builds)
   },
   resetBuild: () => {
