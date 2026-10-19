@@ -501,6 +501,7 @@ export class Game {
     // Every point: the minimap is zoomed in and highlights the route from the car's index.
     gameStore.setState({
       minimap: {
+        overview: this.track.mapOverview?.() ?? null,
         points: line.map((p) => [p.x, p.z]),
         gates: this.track.checkpoints.map((c) => [c.position.x, c.position.z]),
       },

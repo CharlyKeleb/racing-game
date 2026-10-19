@@ -1,3 +1,4 @@
+import type { MinimapRaster } from './MinimapData'
 import type RAPIER from '@dimforge/rapier3d-compat'
 import type * as THREE from 'three'
 import type { QualityPreset } from '../stores/gameStore'
@@ -25,6 +26,8 @@ export interface RaceTrack {
   readonly line: THREE.Vector3[]
   /** What the ground is at a world XZ position (tire grip, sand / dust effects). */
   surfaceAt(x: number, z: number): Surface
+  /** Full road/land coverage for the HUD; independent of the racing line. */
+  mapOverview?(): MinimapRaster | null
   /** True for colliders that are the paved road itself (not terrain, run-off or barriers). */
   isRoadCollider(collider: RAPIER.Collider): boolean
   /** Below this height the car has fallen out of the world. */

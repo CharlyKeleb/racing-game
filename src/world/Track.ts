@@ -55,6 +55,8 @@ export class Track implements RaceTrack {
     this.surfaces = SurfaceMap.fromRibbon(this.curve.getSpacedPoints(SAMPLES), def.roadWidth / 2, KERB_WIDTH)
   }
 
+  mapOverview() { return this.surfaces.overview() }
+
   surfaceAt(x: number, z: number): Surface {
     return this.surfaces.at(x, z)
   }

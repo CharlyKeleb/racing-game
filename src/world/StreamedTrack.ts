@@ -360,6 +360,8 @@ export class StreamedTrack implements RaceTrack {
     if (bytes) this.surfaces = new SurfaceMap(info, decodeSurfaceRle(bytes, info.width * info.height))
   }
 
+  mapOverview() { return this.surfaces?.overview() ?? null }
+
   surfaceAt(x: number, z: number): Surface {
     return this.surfaces ? this.surfaces.at(x, z) : Surface.Asphalt
   }
