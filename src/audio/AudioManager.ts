@@ -67,6 +67,8 @@ export class AudioManager {
   private music: MenuMusic | null = null
   private musicTrackId: string = MUSIC_TRACKS[0].id
   private musicEnabled = true
+  /** Audible playback state for the UI; false while autoplay is blocked or muted. */
+  onMenuMusicState: ((playing: boolean) => void) | null = null
   /** 'menu' = garage room tone, engine held quiet (except a swap's rev); 'race' = engine up, room tone out. */
   private scene: 'menu' | 'race' = 'menu'
   private menuEngine = false
@@ -112,6 +114,8 @@ export class AudioManager {
     this.paused = false
     if (this.ctx) {
       void this.ctx.resume()
+      // A blocked first play left the element paused; this gesture unblocks it.
+      this.music?.retry()
       return
     }
     const ctx = Howler.ctx ?? new AudioContext()
@@ -143,7 +147,7 @@ export class AudioManager {
     this.tyres.output.connect(this.carBus)
     this.impacts = new ImpactSound(ctx, this.fxBus)
     this.ambience = new GarageAmbience(ctx, this.master)
-    this.music = new MenuMusic(ctx, this.master)
+    this.music = new MenuMusic(ctx, this.master, (playing) => this.onMenuMusicState?.(playing))
     this.music.setTrack(musicTrack(this.musicTrackId))
     this.music.setEnabled(this.musicEnabled)
     this.music.setActive(this.scene === 'menu')

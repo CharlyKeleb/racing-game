@@ -23,10 +23,11 @@ export function MainMenu() {
   const [showSettings, setShowSettings] = useState(false)
   const [showRaceSetup, setShowRaceSetup] = useState(false)
   const settings = useGame((s) => s.settings)
-  // Browsers only start audio from a user gesture: the first click or key in
-  // the menu brings up the garage's room tone.
+  // Try immediately in case autoplay is allowed; otherwise the first click or
+  // key in the menu brings up the garage's room tone and the soundtrack.
   useEffect(() => {
     if (!game) return
+    game.unlockAudio()
     const start = () => game.unlockAudio()
     window.addEventListener('pointerdown', start, { once: true })
     window.addEventListener('keydown', start, { once: true })

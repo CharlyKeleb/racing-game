@@ -20,10 +20,13 @@ export class MenuMusic {
   private url = ''
   private enabled = true
   private active = false
+  private playing = false
   private pauseTimer: ReturnType<typeof setTimeout> | null = null
+  private readonly onPlayingChange: (playing: boolean) => void
 
-  constructor(ctx: AudioContext, destination: AudioNode) {
+  constructor(ctx: AudioContext, destination: AudioNode, onPlayingChange: (playing: boolean) => void = () => {}) {
     this.ctx = ctx
+    this.onPlayingChange = onPlayingChange
     this.out = ctx.createGain()
     this.out.gain.value = 0
     this.out.connect(destination)
@@ -31,6 +34,10 @@ export class MenuMusic {
     this.audio = new Audio()
     this.audio.loop = true
     this.audio.preload = 'auto'
+    this.audio.addEventListener('playing', this.syncPlaying)
+    this.audio.addEventListener('pause', this.syncPlaying)
+    this.audio.addEventListener('emptied', this.syncPlaying)
+    ctx.addEventListener('statechange', this.syncPlaying)
     ctx.createMediaElementSource(this.audio).connect(this.out)
   }
 
@@ -61,6 +68,11 @@ export class MenuMusic {
     else this.stop()
   }
 
+  /** Retry after a user gesture clears the browser's autoplay block. */
+  retry(): void {
+    if (this.shouldPlay()) this.play()
+  }
+
   private shouldPlay(): boolean {
     return this.enabled && this.active && this.url !== ''
   }
@@ -68,11 +80,22 @@ export class MenuMusic {
   private play(): void {
     if (!this.shouldPlay()) return
     this.clearPauseTimer()
-    void this.audio.play().catch(() => {
-      // Autoplay was refused before the first gesture; the menu's next click
-      // calls setTrack/setEnabled again and retries.
-    })
+    // The element can be playing while the context is still suspended (an
+    // autoplay-blocked AudioContext), which is silent. syncPlaying treats only
+    // "element playing AND context running" as actually audible.
+    void this.audio.play().then(this.syncPlaying, () => this.setPlaying(false))
     this.fadeTo(LEVEL, FADE_IN)
+  }
+
+  /** Published state is audible state, never just "we asked it to play". */
+  private readonly syncPlaying = (): void => {
+    this.setPlaying(!this.audio.paused && this.ctx.state === 'running')
+  }
+
+  private setPlaying(playing: boolean): void {
+    if (playing === this.playing) return
+    this.playing = playing
+    this.onPlayingChange(playing)
   }
 
   private stop(): void {
@@ -99,6 +122,7 @@ export class MenuMusic {
 
   dispose(): void {
     this.clearPauseTimer()
+    this.ctx.removeEventListener('statechange', this.syncPlaying)
     this.audio.pause()
     this.audio.removeAttribute('src')
     this.audio.load()

@@ -953,10 +953,14 @@ button.menu-track:hover,button.menu-track:focus-visible { border-color:var(--acc
   text-shadow: 0 2px 10px #0008; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .menu-music__artist {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
   font: 600 9px/1.2 var(--font-display); letter-spacing: .14em;
-  text-transform: uppercase; color: var(--muted);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  text-transform: uppercase; color: var(--muted); white-space: nowrap;
 }
+.menu-music__artist > span { overflow: hidden; text-overflow: ellipsis; }
+.menu-music__status { font-style: normal; flex-shrink: 0; letter-spacing: .1em; }
+.menu-music__status.is-live { color: var(--accent-2); }
+.menu-music__status.is-call { color: var(--accent); }
 .menu-music__side { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 .menu-music__wave { display: flex; align-items: flex-end; gap: 2px; width: 20px; height: 22px; }
 .menu-music__wave i {
@@ -995,3 +999,5 @@ button.menu-track:hover,button.menu-track:focus-visible { border-color:var(--acc
 @media (max-width: 720px) {
   .menu-music { width: 100%; }
 }
+/* Garage keeps the radio in the same bottom-left column, under the options. */
+.garage-left .menu-music { width: 100%; margin-top: auto; flex-shrink: 0; }

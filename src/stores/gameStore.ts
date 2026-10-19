@@ -40,6 +40,8 @@ export interface Settings {
 
 export interface GameState {
   phase: GamePhase
+  /** True only while the menu soundtrack is audibly playing. */
+  musicPlaying: boolean
   /** Display name of the loaded car, set by the engine. */
   carName: string
   /** True while the garage swaps cars (one drives off, the next drives in). */
@@ -135,6 +137,7 @@ const initialBuilds = loadBuilds()
 
 export const gameStore = createStore<GameState>()((set, get) => ({
   phase: 'boot',
+  musicPlaying: false,
   carName: '',
   trackSwitching: false,
   carSwitching: false,
