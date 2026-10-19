@@ -28,6 +28,13 @@ function dropIdentitySwizzle(): void {
   ;(GPUTexture.prototype as { swizzlePatched?: boolean }).swizzlePatched = true
 }
 
+const WEBGPU_LOST_KEY = 'racing-game:webgpu-lost'
+
+/** The WebGPU device was lost earlier in this tab: stay on WebGL until it's closed. */
+function webgpuLostThisSession(): boolean {
+  try { return sessionStorage.getItem(WEBGPU_LOST_KEY) === '1' } catch { return false }
+}
+
 /** Highest texture anisotropy the GPU supports, on either renderer. */
 export function maxAnisotropy(renderer: AnyRenderer): number {
   return 'capabilities' in renderer ? renderer.capabilities.getMaxAnisotropy() : renderer.getMaxAnisotropy()
@@ -86,6 +93,7 @@ export class Renderer {
   async init(): Promise<void> {
     if (this.renderer) return
     try {
+      if (webgpuLostThisSession()) throw new Error('the WebGPU device was lost earlier this session')
       const gpu = (navigator as { gpu?: { requestAdapter(o?: object): Promise<unknown> } }).gpu
       if (!gpu || !(await gpu.requestAdapter({ powerPreference: 'high-performance' }))) throw new Error('no WebGPU adapter')
       dropIdentitySwizzle()
@@ -95,6 +103,13 @@ export class Renderer {
       if (!(renderer.backend as { isWebGPUBackend?: boolean }).isWebGPUBackend) {
         renderer.dispose()
         throw new Error('WebGPURenderer fell back to WebGL 2')
+      }
+      // A lost device (driver reset, GPU switched or removed) can't be
+      // recovered in place: reload on WebGL for the rest of the session.
+      renderer.onDeviceLost = (info: { message: string; reason: string | null }) => {
+        console.error('[Renderer] WebGPU device lost, reloading on WebGL:', info.reason ?? '', info.message)
+        try { sessionStorage.setItem(WEBGPU_LOST_KEY, '1') } catch { /* private mode: the reload just tries WebGPU again */ }
+        location.reload()
       }
       backend.kind = 'webgpu'
       backend.nodes = nodes
@@ -127,7 +142,10 @@ export class Renderer {
     this.resize()
   }
 
-  /** Draw calls in the last frame (the two renderers count them under different names). */
+  /** Draw calls and triangles of the last frame, every pass included, on either renderer. */
+  readonly frameStats = { calls: 0, triangles: 0 }
+
+  /** Draw calls in the renderer's counters (the two renderers count them under different names). */
   get drawCalls(): number {
     const render = this.renderer.info.render as { calls: number; drawCalls?: number }
     return backend.kind === 'webgpu' ? render.drawCalls ?? 0 : render.calls
@@ -209,14 +227,19 @@ export class Renderer {
       }
       this.gpuTimer.begin()
     }
-    if (capture) { info.autoReset = false; info.reset() }
+    // Count the whole frame, every post pass included. WebGPU otherwise resets
+    // its counters from its own animation loop, out of step with ours.
+    info.autoReset = false
+    info.reset()
     if (this.postfx) this.postfx.render()
     else this.renderer.render(this.scene, this.camera)
+    this.frameStats.calls = this.drawCalls
+    this.frameStats.triangles = info.render.triangles
+    info.autoReset = autoReset
     if (capture) {
       this.gpuTimer?.end()
-      performanceCapture.event('render', 0, { calls: this.drawCalls, triangles: info.render.triangles, backend: this.backendName,
+      performanceCapture.event('render', 0, { calls: this.frameStats.calls, triangles: this.frameStats.triangles, backend: this.backendName,
         textures: info.memory.textures, geometries: info.memory.geometries, pixelRatio: this.pixelRatio })
-      info.autoReset = autoReset
     }
   }
 

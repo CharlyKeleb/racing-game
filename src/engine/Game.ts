@@ -17,6 +17,7 @@ import { DirectionGuide } from '../effects/DirectionGuide'
 import { NitroFlames } from '../effects/NitroFlames'
 import { Sparks, type SparkContact } from '../effects/Sparks'
 import { HeatHaze } from '../effects/HeatHaze'
+import { Benchmark } from './Benchmark'
 import { backend } from './backend'
 import { DrivingEffects } from '../effects/DrivingEffects'
 import { Headlights } from '../effects/Headlights'
@@ -188,6 +189,8 @@ export class Game {
   /** Exhaust heat haze for every car (#56). Built in init(), once the renderer is known. */
   private haze!: HeatHaze
   private readonly hazeCars: Vehicle[] = []
+  /** `?bench=1`: autopiloted WebGL vs WebGPU frame-time comparison (#50). */
+  private benchmark: Benchmark | null = null
   private readonly sparkContact: SparkContact = { x: 0, y: 0, z: 0, nx: 0, ny: 0, nz: 0, vx: 0, vy: 0, vz: 0, dv: 0, groundY: 0 }
   /** Change in speed per car from contact forces this tick (the spark burst size). */
   private readonly tickHit = new Float32Array(16)
@@ -358,6 +361,7 @@ export class Game {
     this.vehicle.render(1)
     if (!document.hidden) this.loop.start()
     setPhase('menu')
+    if (new URLSearchParams(location.search).get('bench') === '1') this.startBenchmark()
     performance.measure('boot:menu', 'boot:start')
     if (import.meta.env.DEV) (window as unknown as { __game: Game }).__game = this
 
@@ -1012,6 +1016,47 @@ export class Game {
     }
   }
 
+  /** Drive a race on autopilot and report frame times for this renderer (`?bench=1`). */
+  private startBenchmark(): void {
+    this.benchmark = new Benchmark({
+      racing: () => this.race.state === 'racing',
+      position: () => this.vehicle.position,
+      quaternion: () => this.vehicle.quaternion,
+      speedKmh: () => this.vehicle.speedKmh,
+      lineAhead: (ahead) => {
+        const line = this.track.line
+        return line[(this.progress.index + ahead) % line.length]
+      },
+      setInput: (state) => this.input.setTouch(state),
+      startRace: () => this.startRace(),
+      drawCalls: () => this.renderer.frameStats.calls,
+      triangles: () => this.renderer.frameStats.triangles,
+      environment: () => this.benchmarkEnvironment(),
+    })
+    this.benchmark.start()
+  }
+
+  /** Renderer, GPU, display and settings, so two benchmark runs can be compared. */
+  private async benchmarkEnvironment(): Promise<Record<string, unknown>> {
+    const { quality, postfx, track, opponents, timeOfDay, renderer } = gameStore.getState().settings
+    let gpu: unknown = null
+    try {
+      if (backend.kind === 'webgpu') {
+        const adapter = await (navigator as { gpu?: { requestAdapter(): Promise<{ info?: Record<string, string> } | null> } }).gpu?.requestAdapter()
+        gpu = adapter?.info ? { vendor: adapter.info.vendor, architecture: adapter.info.architecture, description: adapter.info.description } : null
+      } else {
+        const gl = (this.renderer.renderer as THREE.WebGLRenderer).getContext()
+        const ext = gl.getExtension('WEBGL_debug_renderer_info')
+        gpu = ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER)
+      }
+    } catch { /* GPU name is optional */ }
+    return {
+      backend: this.renderer.backendName, gpu, userAgent: navigator.userAgent,
+      viewport: [innerWidth, innerHeight], devicePixelRatio, renderPixelRatio: this.renderer.pixelRatio,
+      settings: { renderer, quality, postfx, track, opponents, timeOfDay },
+    }
+  }
+
   /** Feed from the on-screen touch controls. */
   setTouchInput(state: Partial<InputState>): void {
     this.input.setTouch(state)
@@ -1203,6 +1248,7 @@ export class Game {
       this.updateGuide(dt)
     }
     if (this.rivalTags.length > 0) this.updateRivalTags(phase === 'countdown' || phase === 'racing', dt)
+    this.benchmark?.frame()
     // Exhaust heat haze: every car, laid out after the camera moved this frame.
     if (gameStore.getState().settings.postfx) {
       this.hazeCars.length = 0
