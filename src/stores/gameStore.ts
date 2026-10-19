@@ -1,3 +1,4 @@
+import type { MinimapRaster } from '../world/MinimapData'
 import { sanitizeLivery, type LiveryDesign } from '../vehicles/LiveryDesign'
 import { driftEvent, type DriftEventId } from '../racing/driftEvents'
 import { createStore } from 'zustand/vanilla'
@@ -59,7 +60,7 @@ export interface GameState {
   /** 0..1 while a track is loading. */
   loadProgress: number
   /** Track outline for the minimap: the full centreline as [x, z] pairs, start line first. Set on track load. */
-  minimap: { points: [number, number][]; gates: [number, number][] } | null
+  minimap: { points: [number, number][]; gates: [number, number][]; overview?: MinimapRaster | null } | null
   error: string | null
   settings: Settings
   /** Garage customisation of the current car, applied by the engine on change. */

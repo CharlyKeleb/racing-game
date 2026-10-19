@@ -473,26 +473,17 @@ kbd { font-family: inherit; font-size: 11px; padding: 1px 6px; border: 1px solid
 /* Minimap bottom-left, opposite the speedometer (NFS-style). */
 .hud-bl { position: absolute; left: var(--gutter); bottom: var(--gutter); }
 .minimap { position: relative; width: clamp(150px, 17vw, 240px); }
-.minimap svg {
-  width: 100%; aspect-ratio: 1; display: block; overflow: hidden;
-  /* No frame: the map fades out into the scene, like NFS. */
-  -webkit-mask-image: radial-gradient(circle at 50% 62%, #000 42%, transparent 70%);
-  mask-image: radial-gradient(circle at 50% 62%, #000 42%, transparent 70%);
-}
-.minimap__edge { fill: none; stroke: rgba(0, 0, 0, 0.55); stroke-width: 7px; stroke-linejoin: round; }
-.minimap__track { fill: none; stroke: rgba(225, 236, 250, 0.85); stroke-width: 3px; stroke-linejoin: round; }
-.minimap__route {
-  fill: none; stroke: #3fdcff; stroke-width: 4px; stroke-linejoin: round; stroke-linecap: round;
-  filter: drop-shadow(0 0 3px rgba(63, 220, 255, 0.9));
-}
-.minimap__start { stroke: #fff; stroke-width: 3px; }
-.minimap__car circle { fill: rgba(10, 40, 60, 0.6); stroke: #3fdcff; stroke-width: 0.9; filter: drop-shadow(0 0 2px rgba(63, 220, 255, 0.9)); }
-.minimap__car path { fill: #fff; }
-.minimap__dist {
-  position: absolute; left: 0; right: 0; bottom: 4%; text-align: center;
-  font-size: clamp(15px, 1.5vw, 20px); font-weight: 600; color: #3fdcff; letter-spacing: 0.04em;
-  text-shadow: 0 0 8px rgba(63, 220, 255, 0.7), 0 1px 2px #000;
-}
+.minimap svg { width: 100%; aspect-ratio: 1; display: block; overflow: visible; filter: drop-shadow(0 5px 12px #0006); }
+.minimap__disc { fill: rgba(7, 15, 24, .94); }
+.minimap__rim { fill: none; stroke: rgba(172, 204, 219, .45); stroke-width: .65; }
+.minimap__ticks { fill: none; stroke: #b9d2de; stroke-width: .8; opacity: .65; }
+.minimap__edge { fill: none; stroke: #0b1720; stroke-width: 5px; stroke-linejoin: round; }
+.minimap__track { fill: none; stroke: #c6d4dc; stroke-opacity: .8; stroke-width: 2px; stroke-linejoin: round; }
+.minimap__route { fill: none; stroke: #42dbff; stroke-width: 3.5px; stroke-linejoin: round; stroke-linecap: round; filter: drop-shadow(0 0 2px #22cfff99); }
+.minimap__start { stroke: #fff; stroke-width: 2px; }
+.minimap__car circle { fill: #073f55; stroke: #59e6ff; stroke-width: .65; filter: drop-shadow(0 0 2px #3fdcff); }
+.minimap__car path { fill: #fff; stroke: #092230; stroke-width: .4; }
+.minimap__dist { position: absolute; left: 50%; bottom: 6%; transform: translateX(-50%); white-space: nowrap; padding: 3px 9px; border-radius: 12px; background: #07131be8; border: 1px solid #a5d3e329; font-size: clamp(10px, 1.1vw, 14px); font-weight: 600; color: #bdefff; letter-spacing: .05em; }
 
 /* ── Wrong way ──────────────────────────────────────────────────────── */
 .hud-wrongway {

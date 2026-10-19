@@ -1,4 +1,5 @@
-import { useMemo } from 'react'
+import { minimapRasterUrl } from './minimapRaster'
+import { useId, useMemo } from 'react'
 import { useGame, useTelemetry } from './hooks'
 
 /** viewBox is 100×100; the car sits below centre so more of the road ahead shows. */
@@ -10,13 +11,14 @@ const SCALE = 100 / 520
 const ROUTE_POINTS = 120
 
 /**
- * Need for Speed-style map: no frame, heading-up (it turns with the car, so
- * left on screen is left at the wheel), zoomed in on the car, with the road
+ * Heading-up road map in a circular instrument, with dimmed surface context.
+ * It turns with the car, so left on screen is left at the wheel. Zoomed in on the car, with the road
  * ahead lit cyan and the distance left to the finish underneath. The outline
  * path is built once per track; only the transform and the short route path
  * change at telemetry rate (20 Hz).
  */
 export function Minimap() {
+  const id = useId().replace(/:/g, '')
   const drift = useGame(s => s.settings.mode === 'drift')
   const gate = useTelemetry(s=>s.driftGate)
   const opponents = useTelemetry((s) => s.opponents)
@@ -26,6 +28,9 @@ export function Minimap() {
   const heading = useTelemetry((s) => s.heading)
   const index = useTelemetry((s) => s.trackIndex)
   const distanceLeft = useTelemetry((s) => s.distanceLeft)
+
+  const coverage = data?.overview
+  const overview = useMemo(() => coverage ? minimapRasterUrl(coverage) : '', [coverage])
 
   const outline = useMemo(() => {
     if (!data || data.points.length < 2) return null
@@ -59,8 +64,19 @@ export function Minimap() {
 
   return (
     <div className="minimap" aria-label="Track map">
-      <svg viewBox="0 0 100 100">
+      <svg viewBox="0 0 100 100" role="img" aria-label="Nearby roads and highlighted race route">
+        <defs>
+          <clipPath id={`${id}-clip`}><circle cx="50" cy="50" r="47" /></clipPath>
+          <radialGradient id={`${id}-shade`}>
+            <stop offset="55%" stopColor="#060d15" stopOpacity="0" />
+            <stop offset="100%" stopColor="#060d15" stopOpacity=".65" />
+          </radialGradient>
+        </defs>
+        <circle className="minimap__disc" cx="50" cy="50" r="48" />
+        <g clipPath={`url(#${id}-clip)`}>
         <g transform={world}>
+          {overview && data?.overview && <image href={overview} x={data.overview.x} y={data.overview.z}
+            width={data.overview.width * data.overview.cellSize} height={data.overview.height * data.overview.cellSize} /> }
           <path className="minimap__edge" d={outline.d} vectorEffect="non-scaling-stroke" />
           <path className="minimap__track" d={outline.d} vectorEffect="non-scaling-stroke" />
           <path className="minimap__route" d={route} vectorEffect="non-scaling-stroke" />
@@ -68,10 +84,14 @@ export function Minimap() {
           {drift && data?.gates.map(([x,z],i)=><circle key={i} cx={x} cy={z} r={i===(gate+1)%data.gates.length?8:4} fill={i===(gate+1)%data.gates.length?'#ffd447':'#24e7df'} opacity={i>gate||i===0?1:.25} />)}
           <line className="minimap__start" {...outline.start} vectorEffect="non-scaling-stroke" />
         </g>
+        <circle cx="50" cy="50" r="47" fill={`url(#${id}-shade)`} />
         <g className="minimap__car" transform={`translate(${CAR_X} ${CAR_Y})`}>
           <circle r="5.2" />
           <path d="M0,-3.6 L2.6,2.6 L0,1.2 L-2.6,2.6 Z" />
         </g>
+        </g>
+        <circle className="minimap__rim" cx="50" cy="50" r="48" />
+        <path className="minimap__ticks" d="M50 2v2 M98 50h-2 M50 98v-2 M2 50h2" />
       </svg>
       <div className="minimap__dist mono">{drift ? `${(distanceLeft / 1000).toFixed(2)} KM / TO FINISH` : `${(distanceLeft / 1000).toFixed(2)} km`}</div>
     </div>
