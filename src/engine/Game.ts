@@ -236,6 +236,9 @@ export class Game {
       render: (alpha, dt) => this.renderFrame(alpha, dt),
     })
     performanceCapture.setContext(() => ({ phase: gameStore.getState().phase, settings: gameStore.getState().settings }))
+    this.audio.onMenuMusicState = (playing) => {
+      if (gameStore.getState().musicPlaying !== playing) gameStore.setState({ musicPlaying: playing })
+    }
     this.unsubscribe = gameStore.subscribe((s, prev) => {
       if (s.settings.car !== prev.settings.car && this.vehicle) void this.switchCar(s.settings.car)
       if (s.settings.track !== prev.settings.track && this.track) void this.switchTrack(s.settings.track)
@@ -1538,6 +1541,7 @@ export class Game {
       this.renderer.setViewDistance(view.fogFar * 1.05)
     }
     this.audio.setVolume(s.masterVolume)
+    this.audio.setMenuMusic(s.musicTrack, s.menuMusic)
     if (this.camera) this.camera.mode = s.camera
     this.applyTimeOfDay(s.timeOfDay)
   }
@@ -1568,6 +1572,7 @@ export class Game {
     this.clearOpponents()
     this.input.dispose()
     this.audio.dispose()
+    this.audio.onMenuMusicState = null
     this.livery?.dispose()
     this.effects?.dispose()
     this.guide?.dispose()

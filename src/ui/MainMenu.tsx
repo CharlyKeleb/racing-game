@@ -15,6 +15,7 @@ import { TrackSelection } from './TrackSelection'
 import { TrackAerial } from './TrackAerial'
 import trackPreviews from './trackPreviews.json'
 import { RevButton } from './RevButton'
+import { MenuMusicBar } from './MenuMusicBar'
 import { TIME_PRESETS } from '../world/timeOfDay'
 
 export function MainMenu() {
@@ -22,10 +23,11 @@ export function MainMenu() {
   const [showSettings, setShowSettings] = useState(false)
   const [showRaceSetup, setShowRaceSetup] = useState(false)
   const settings = useGame((s) => s.settings)
-  // Browsers only start audio from a user gesture: the first click or key in
-  // the menu brings up the garage's room tone.
+  // Try immediately in case autoplay is allowed; otherwise the first click or
+  // key in the menu brings up the garage's room tone and the soundtrack.
   useEffect(() => {
     if (!game) return
+    game.unlockAudio()
     const start = () => game.unlockAudio()
     window.addEventListener('pointerdown', start, { once: true })
     window.addEventListener('keydown', start, { once: true })
@@ -53,6 +55,7 @@ export function MainMenu() {
           <CarPicker />
           <CarCard />
           <RevButton />
+          <MenuMusicBar />
         </div>
         <div className="menu-actions">
           <ModeSelect />

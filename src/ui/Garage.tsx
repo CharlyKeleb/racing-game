@@ -15,6 +15,7 @@ import { useGame } from './hooks'
 import { CarPicker } from './CarPicker'
 import { Button, Panel, ScreenHeader, Segmented } from './kit'
 import { CarCard } from './MainMenu'
+import { MenuMusicBar } from './MenuMusicBar'
 import { OrbitLayer } from './OrbitLayer'
 
 type Tab = 'paint' | 'wheels' | 'performance'
@@ -63,6 +64,7 @@ export function Garage() {
             Reset to stock
           </Button>
         </Panel>
+        <MenuMusicBar />
       </div>
 
       <CarPicker className="garage-carpicker" />
