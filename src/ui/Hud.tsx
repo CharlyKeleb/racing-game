@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import { hudLayoutStore, measureHudPanels } from '../stores/hudLayoutStore'
 import { DriftEventHud, DriftComboHud } from './DriftHud'
 import { formatTime } from '../racing/LapTimer'
@@ -18,7 +19,8 @@ function gearLabel(gear: number): string {
 
 export function Hud() {
   const root = useRef<HTMLDivElement>(null)
-  const t = useTelemetry((s) => s)
+  const t = useTelemetry(useShallow(s => ({ nitroActive: s.nitroActive, nitroPerfect: s.nitroPerfect })))
+  const fieldSize = useTelemetry(s => s.standings.length)
   const drift = useGame(s => s.settings.mode === 'drift')
   const phase = useGame((s) => s.phase)
   useLayoutEffect(() => {
@@ -34,18 +36,31 @@ export function Hud() {
       window.removeEventListener('resize', measure)
       hudLayoutStore.setState({ panels: [] })
     }
-  }, [drift, t.standings.length, phase])
-  // Shift light just under the redline; needles sweep once on the start countdown.
-  const shift = t.gear > 0 && t.rpm >= t.redlineRpm * 0.94
-  const sweep = phase === 'countdown'
-  // Lights out: flash GO for the first moments of the race.
-  const go = phase === 'racing' && t.lap === 1 && t.totalMs < 900
-
+  }, [drift, fieldSize, phase])
   return (
     <div ref={root} className={`hud${t.nitroActive ? ' hud--nitro' : ''}${t.nitroPerfect ? ' hud--nitro-perfect' : ''}`}>
       <div className="hud-speedlines" aria-hidden="true" />
+      <HudRaceInfo />
+      <HudLeaderboard />
+      <div className="hud-bl">
+        <Minimap />
+      </div>
+
+      <RivalTags />
+      <HudFeedback />
+      <HudStartLights />
+      <HudGauges />
+    </div>
+  )
+}
+
+function HudRaceInfo() {
+  const t = useTelemetry(useShallow(s => ({ bestLapMs: s.bestLapMs, currentLapMs: s.currentLapMs, lap: s.lap, fieldSize: s.standings.length, position: s.standings.find(entry => entry.player)?.position ?? 1, totalLaps: s.totalLaps })))
+  const drift = useGame(s => s.settings.mode === 'drift')
+  return (
+    <>
       <div className="hud-tl" data-tag-exclusion>
-        {t.standings.length > 1 && <div className="hud-lap" aria-label="Race position"><span className="eyebrow">Position</span><b>{t.standings.find(s => s.player)?.position ?? 1}</b><span className="hud-lap__total">/{t.standings.length}</span></div>}
+        {t.fieldSize > 1 && <div className="hud-lap" aria-label="Race position"><span className="eyebrow">Position</span><b>{t.position}</b><span className="hud-lap__total">/{t.fieldSize}</span></div>}
         {drift ? <DriftEventHud /> : <><div className="hud-lap">
           <span className="eyebrow">Lap</span>
           <b>{Math.max(t.lap, 1)}</b>
@@ -63,16 +78,29 @@ export function Hud() {
         </div>
         </>}
       </div>
+    </>
+  )
+}
+
+function HudLeaderboard() {
+  const t = useTelemetry(useShallow(s => ({ fps: s.fps, standings: s.standings })))
+  return (
+    <>
       <div className="hud-tr" data-tag-exclusion>
         <div className="hud-fps mono">{t.fps} FPS</div>
         {t.standings.length > 1 && <ol className="hud-field" aria-label="Race leaderboard">{t.standings.map(s => <li key={s.id} className={s.player ? 'hud-field__player' : ''}><b>{s.position}</b><span>{s.name.split(' · ')[0]}</span><small className="mono">{s.position === 1 ? 'LEADER' : s.gapMs !== null ? `+${(s.gapMs / 1000).toFixed(2)}s` : s.gapLaps > 0 ? `+${s.gapLaps} LAP` : `+${Math.round(s.gapMeters)}m`}</small></li>)}</ol>}
       </div>
-      <div className="hud-bl">
-        <Minimap />
-      </div>
+    </>
+  )
+}
 
-      <RivalTags />
-      {t.drafting > 0.15 && phase === 'racing' && <div className="hud-drafting"><span>Slipstream</span><b>Building nitro</b></div>}
+function HudFeedback() {
+  const t = useTelemetry(useShallow(s => ({ drafting: s.drafting > .15, driftActive: s.driftActive, driftBanked: s.driftBanked, driftScore: s.driftScore, nitroMissed: s.nitroMissed, nitroPerfect: s.nitroPerfect, nitroWindow: s.nitroWindow, wrongWay: s.wrongWay })))
+  const drift = useGame(s => s.settings.mode === 'drift')
+  const phase = useGame(s => s.phase)
+  return (
+    <>
+      {t.drafting && phase === 'racing' && <div className="hud-drafting"><span>Slipstream</span><b>Building nitro</b></div>}
       {t.wrongWay && <div className="hud-wrongway">Wrong way</div>}
 
       {drift ? <DriftComboHud /> : t.driftActive ? (
@@ -96,6 +124,16 @@ export function Hud() {
         <div className="hud-nitro-call hud-nitro-call--missed">Missed</div>
       ) : null}
 
+    </>
+  )
+}
+
+function HudStartLights() {
+  const t = useTelemetry(useShallow(s => ({ go: s.lap === 1 && s.totalMs < 900, startLightCount: s.startLightCount, startLights: s.startLights })))
+  const phase = useGame(s => s.phase)
+  const go = phase === 'racing' && t.go
+  return (
+    <>
       {(phase === 'countdown' || go) && (
         <div className={`start-lights${go ? ' start-lights--go' : ''}`} role="img" aria-label={go ? 'Go' : `${t.startLights} of ${t.startLightCount} start lights lit`}>
           <div className="start-lights__gantry">
@@ -107,6 +145,15 @@ export function Hud() {
         </div>
       )}
 
+    </>
+  )
+}
+
+function HudGauges() {
+  const t = useTelemetry(useShallow(s => ({ gear: s.gear, nitro: s.nitro, nitroActive: s.nitroActive, nitroCue: s.nitroCue, nitroPerfect: s.nitroPerfect, nitroReady: s.nitroReady, nitroWindow: s.nitroWindow, redlineRpm: s.redlineRpm, rpm: s.rpm, speedKmh: s.speedKmh })))
+  const sweep = useGame(s => s.phase === 'countdown')
+  const shift = t.gear > 0 && t.rpm >= t.redlineRpm * .94
+  return (
       <div className="speedo">
         <div className="speedo__side">
           <RpmGauge rpm={t.rpm} redlineRpm={t.redlineRpm} shift={shift} sweep={sweep} />
@@ -122,6 +169,5 @@ export function Hud() {
         </div>
         <Speedometer speedKmh={t.speedKmh} maxKmh={DIAL_MAX_KMH} gear={gearLabel(t.gear)} shift={shift} nitro={t.nitroActive} sweep={sweep} />
       </div>
-    </div>
   )
 }

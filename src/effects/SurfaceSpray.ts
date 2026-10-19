@@ -1,3 +1,5 @@
+import type { QualityPreset } from '../stores/gameStore'
+import { EFFECT_BUDGET } from './EffectBudget'
 import { Surface, surfaceProps } from '../vehicles/Surface'
 import type { WheelState } from '../vehicles/VehicleController'
 import { ParticlePool, type ParticleSpawn } from './Particles'
@@ -54,15 +56,25 @@ export class SurfaceSpray {
   private readonly grains = new ParticlePool(MAX_GRAINS, 'grain', 2, [0.8, 2])
   private readonly sheet = new ParticlePool(MAX_SHEET, 'spray', 2, [0.5, 1.6])
   private readonly dust = new ParticlePool(MAX_DUST, 'puff', 3, [1.5, 4])
+  private emission = 1
   private readonly grainDebt: number[] = []
   private readonly sheetDebt: number[] = []
   private readonly dustDebt: number[] = []
+
+  setQuality(quality: QualityPreset): void {
+    const budget = EFFECT_BUDGET[quality]
+    this.grains.setLimit(budget.grains)
+    this.sheet.setLimit(budget.sheet)
+    this.dust.setLimit(budget.dust)
+    this.emission = budget.emission
+  }
 
   get meshes() {
     return [this.grains.mesh, this.sheet.mesh, this.dust.mesh]
   }
 
   update(wheels: readonly WheelState[], carVelocity: { x: number; y: number; z: number }, dt: number): void {
+    const emissionDt = Math.min(dt, .05) * this.emission
     const speed = Math.hypot(carVelocity.x, carVelocity.z)
     // Direction of travel on the ground: material is thrown back along it.
     _dir.x = speed > 0.1 ? carVelocity.x / speed : 0
@@ -77,19 +89,19 @@ export class SurfaceSpray {
       }
       const amount = Math.min(1.5, churn / 22)
       const axle = w.cfg.position[2] < 0 ? REAR_SCALE : FRONT_SCALE
-      let g = (this.grainDebt[i] ?? 0) + GRAIN_RATE * loose * amount * axle * dt
+      let g = (this.grainDebt[i] ?? 0) + GRAIN_RATE * loose * amount * axle * emissionDt
       while (g >= 1) {
         this.spawnGrain(w, carVelocity, churn)
         g -= 1
       }
       this.grainDebt[i] = g
-      let sh = (this.sheetDebt[i] ?? 0) + SHEET_RATE * loose * loose * amount * axle * dt
+      let sh = (this.sheetDebt[i] ?? 0) + SHEET_RATE * loose * loose * amount * axle * emissionDt
       while (sh >= 1) {
         this.spawnSheet(w, carVelocity, churn, amount)
         sh -= 1
       }
       this.sheetDebt[i] = sh
-      let d = (this.dustDebt[i] ?? 0) + DUST_RATE * (0.3 + 0.7 * loose) * amount * axle * dt
+      let d = (this.dustDebt[i] ?? 0) + DUST_RATE * (0.3 + 0.7 * loose) * amount * axle * emissionDt
       while (d >= 1) {
         this.spawnDust(w, carVelocity, loose, amount)
         d -= 1

@@ -66,7 +66,10 @@ describe('GameLoop', () => {
     const loop = new GameLoop({ fixedUpdate: fixed, render: () => {} })
     expect(loop.advance(FIXED_DT * 3 + 0.001)).toBe(3)
     expect(fixed).toHaveBeenCalledWith(FIXED_DT)
-    // A 5 s hitch is clamped to 0.25 s worth of steps.
-    expect(loop.advance(5)).toBe(15)
+    // A hitch admits at most 0.25 s, serviced over bounded frames.
+    expect(loop.advance(5)).toBe(5)
+    expect(loop.advance(0)).toBe(5)
+    expect(loop.advance(0)).toBe(5)
+    expect(fixed).toHaveBeenCalledTimes(18)
   })
 })

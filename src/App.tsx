@@ -1,16 +1,17 @@
-import { useEffect, useRef, useState } from 'react'
-import { Game } from './engine/Game'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
+import type { Game } from './engine/Game'
 import { gameStore } from './stores/gameStore'
 import { GameContext } from './ui/GameContext'
-import { Garage } from './ui/Garage'
-import { Hud } from './ui/Hud'
 import { useGame } from './ui/hooks'
 import { MainMenu } from './ui/MainMenu'
-import { PauseMenu } from './ui/PauseMenu'
-import { RaceIntro } from './ui/RaceIntro'
-import { Results } from './ui/Results'
-import { TouchControls } from './ui/TouchControls'
 import { isTouchDevice } from './engine/device'
+
+const Garage = lazy(() => import('./ui/Garage').then(module => ({ default: module.Garage })))
+const Hud = lazy(() => import('./ui/Hud').then(module => ({ default: module.Hud })))
+const PauseMenu = lazy(() => import('./ui/PauseMenu').then(module => ({ default: module.PauseMenu })))
+const RaceIntro = lazy(() => import('./ui/RaceIntro').then(module => ({ default: module.RaceIntro })))
+const Results = lazy(() => import('./ui/Results').then(module => ({ default: module.Results })))
+const TouchControls = lazy(() => import('./ui/TouchControls').then(module => ({ default: module.TouchControls })))
 
 const touch = isTouchDevice()
 
@@ -23,13 +24,23 @@ export default function App() {
   const trackName = useGame((s) => s.trackName)
 
   useEffect(() => {
-    const g = new Game(containerRef.current!)
-    setGame(g)
-    g.init().catch((err: unknown) => {
+    let cancelled = false
+    let instance: Game | undefined
+    void import('./engine/Game').then(async ({ Game }) => {
+      if (cancelled) return
+      instance = new Game(containerRef.current!)
+      setGame(instance)
+      await instance.init()
+      if (cancelled) return
+      // Warm only the imminent race overlays after the first useful menu.
+      void Promise.all([import('./ui/Hud'), import('./ui/RaceIntro'),
+        ...(touch ? [import('./ui/TouchControls')] : [])]).catch(() => {})
+    }).catch((err: unknown) => {
+      if (cancelled) return
       console.error(err)
       gameStore.getState().setError(err instanceof Error ? err.message : String(err))
     })
-    return () => g.dispose()
+    return () => { cancelled = true; instance?.dispose() }
   }, [])
 
   return (
@@ -55,12 +66,14 @@ export default function App() {
           </div>
         )}
         {phase === 'menu' && <MainMenu />}
-        {phase === 'garage' && <Garage />}
-        {phase === 'intro' && <RaceIntro />}
-        {(phase === 'countdown' || phase === 'racing' || phase === 'paused' || phase === 'finished') && <Hud />}
-        {(phase === 'countdown' || phase === 'racing') && touch && <TouchControls />}
-        {phase === 'paused' && <PauseMenu />}
-        {phase === 'finished' && <Results />}
+        <Suspense fallback={<div className="boot" role="status">Loading…</div>}>
+          {phase === 'garage' && <Garage />}
+          {phase === 'intro' && <RaceIntro />}
+          {(phase === 'countdown' || phase === 'racing' || phase === 'paused' || phase === 'finished') && <Hud />}
+          {(phase === 'countdown' || phase === 'racing') && touch && <TouchControls />}
+          {phase === 'paused' && <PauseMenu />}
+          {phase === 'finished' && <Results />}
+        </Suspense>
       </div>
     </GameContext.Provider>
   )
