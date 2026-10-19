@@ -3,7 +3,11 @@
 This is an exploratory baseline, not P0 acceptance. One local and one Vercel
 capture per track establish that the measurement path works. The driving paths
 and capture lengths differ, so these are not controlled before/after results.
-No performance tuning was applied.
+No performance tuning was applied. **Local is an unoptimized comparison point,
+not a performance target or known-good reference.** Similar results across local
+and Vercel do not meet the issue's smoothness goals or reduce the P1 scope.
+P1 must address sustained rendering cost, streaming/simulation spikes and HUD/input
+responsiveness across both environments.
 
 ## Build and machine
 
