@@ -546,19 +546,18 @@ export class Game {
   /** Loads the GLB + config from the pipeline, falling back to the placeholder car. */
   private async loadCar(carId: string) {
     const entry = getCar(carId)
-    const json = await this.assets.loadJson<Partial<VehicleConfig>>(entry.configUrl)
-    const config = resolveVehicleConfig(json ?? undefined)
-    // Phones on Low get the simplified car: it's the single heaviest mesh on screen.
+    // Config and geometry are independent downloads: start both immediately.
     const low = gameStore.getState().settings.quality === 'low' && entry.modelUrlLow
     const url = low ? entry.modelUrlLow! : entry.modelUrl
-    let scene
-    if (await this.assets.exists(url)) {
-      try {
-        scene = await this.assets.loadModel(url)
-      } catch (err) {
+    const [json, loaded] = await Promise.all([
+      this.assets.loadJson<Partial<VehicleConfig>>(entry.configUrl),
+      this.assets.loadModel(url).catch((err: unknown) => {
         console.warn(`[Game] failed to load ${url}, using placeholder`, err)
-      }
-    }
+        return null
+      }),
+    ])
+    const config = resolveVehicleConfig(json ?? undefined)
+    let scene = loaded
     scene ??= buildPlaceholderCar(config)
     return { config, model: rigCarModel(scene, config) }
   }
