@@ -30,6 +30,33 @@ class PerformanceCapture {
       },
     } })
     this.start()
+    const mount = () => this.mountControls()
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mount, { once: true })
+    else mount()
+  }
+
+  private mountControls(): void {
+    const panel = document.createElement('details')
+    panel.style.cssText = 'position:fixed;top:8px;left:8px;z-index:10000;background:#111;color:#fff;padding:8px;font:12px monospace;max-width:340px'
+    const label = document.createElement('summary')
+    label.textContent = 'Performance capture'
+    panel.append(label)
+    const output = document.createElement('textarea')
+    output.setAttribute('aria-label', 'Performance capture JSON')
+    output.readOnly = true
+    output.style.cssText = 'display:block;width:300px;height:80px'
+    for (const [text, action] of [
+      ['Restart capture', () => { this.start(); output.value = '' }],
+      ['Stop and export capture', () => { this.stop(); output.value = JSON.stringify(this.report()) }],
+    ] as const) {
+      const button = document.createElement('button')
+      button.textContent = text
+      button.style.cssText = 'display:block;padding:6px;margin:4px;color:white;background:#333'
+      button.onclick = action
+      panel.append(button)
+    }
+    panel.append(output)
+    document.body.append(panel)
   }
 
   setContext(context: () => unknown): void { this.context = context }
