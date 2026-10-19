@@ -1,6 +1,7 @@
 import { Help } from './Help'
 import { useEffect, useRef, useState } from 'react'
 import { GiGears, GiSteeringWheel, GiSpeaker, GiGamepad, GiComputerFan } from 'react-icons/gi'
+import type { RendererKind } from '../engine/backend'
 import type { CameraMode, QualityPreset } from '../stores/gameStore'
 import { TIME_PRESETS, type TimeOfDay } from '../world/timeOfDay'
 import { useGame } from './hooks'
@@ -42,6 +43,8 @@ export function Settings({ onClose }: { onClose?: () => void }) {
           <SettingChoices<QualityPreset> preview={quality=><SettingScene quality={quality}/>} label="Visual quality" value={settings.quality} options={[[ 'low','Low'],['medium','Medium'],['high','High']]} onPick={quality=>update({quality})}/>
           <p className="settings__help">Illustrative previews. Low favors speed; High adds richer lighting and detail.</p>
           <SettingChoices<number> preview={v=><SettingScene effects={v===1}/>} label="Post effects" value={settings.postfx?1:0} options={[[1,'On'],[0,'Off']]} onPick={v=>update({postfx:v===1})}/>
+          <Segmented<RendererKind> help label="Renderer" value={settings.renderer} options={[['webgl','WebGL'],['webgpu','WebGPU (beta)']]} onPick={renderer=>{ if (renderer === settings.renderer) return; update({renderer}); window.location.reload() }}/>
+          <p className="settings__help">WebGPU is a trial: GPU particles, falls back to WebGL where it isn't supported. Switching reloads the game.</p>
         </>}
         {section === 'driving' && <>
           <SettingChoices<CameraMode> preview={camera=><SettingScene cockpit={camera==='cockpit'}/>} label="Camera" value={settings.camera} options={[[ 'chase','Chase'],['cockpit','Cockpit']]} onPick={camera=>update({camera})}/>

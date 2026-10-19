@@ -3,6 +3,8 @@ import { performanceCapture } from '../engine/PerformanceCapture'
 import RAPIER from '@dimforge/rapier3d-compat'
 import * as THREE from 'three'
 import { disposeGltf, type AssetManager } from '../engine/AssetManager'
+import { maxAnisotropy, type AnyRenderer } from '../engine/Renderer'
+import { backend } from '../engine/backend'
 import type { QualityPreset } from '../stores/gameStore'
 import { Surface } from '../vehicles/Surface'
 import type { SpawnPoint } from '../vehicles/Vehicle'
@@ -34,7 +36,7 @@ type Tier = 'high' | 'low'
 
 export interface LoadOptions {
   assets: AssetManager
-  renderer: THREE.WebGLRenderer
+  renderer: AnyRenderer
   camera: THREE.Camera
   /** The scene the track will live in — for shader precompilation. */
   scene: THREE.Scene
@@ -104,7 +106,7 @@ export class StreamedTrack implements RaceTrack {
   private readonly baseUrl: string
   private readonly manifest: TrackManifest
   private readonly assets: AssetManager
-  private readonly renderer: THREE.WebGLRenderer
+  private readonly renderer: AnyRenderer
   private readonly world: RAPIER.World
   private quality: QualityPreset
   private materialRequest = 0
@@ -221,7 +223,7 @@ export class StreamedTrack implements RaceTrack {
     // Merged far-LOD chunks: one untextured, vertex-coloured material for all of them.
     next.set(
       VERTEX_COLOR_MATERIAL,
-      tier === 'low'
+      tier === 'low' && backend.kind === 'webgl'
         ? new THREE.MeshLambertMaterial({ name: VERTEX_COLOR_MATERIAL, vertexColors: true })
         : new THREE.MeshStandardMaterial({ name: VERTEX_COLOR_MATERIAL, vertexColors: true, roughness: 0.95, metalness: 0 }),
     )
@@ -262,15 +264,22 @@ export class StreamedTrack implements RaceTrack {
 
   /**
    * Low tier swaps PBR for Lambert: per-vertex lighting, far cheaper on mobile
-   * GPUs, and the track is mostly diffuse surfaces anyway.
+   * GPUs, and the track is mostly diffuse surfaces anyway. Not under WebGPU:
+   * its node Lambert lights per pixel anyway and, unlike WebGL's, takes no
+   * diffuse light from the baked sky environment, which left the track at
+   * about a third of its brightness. A rough, non-metal PBR material matches.
    */
   private convertMaterial(src: THREE.MeshStandardMaterial, tier: Tier): THREE.Material {
     const layer = (src.userData.layer as string | undefined) ?? 'prop'
     if (src.map) {
-      src.map.anisotropy = tier === 'high' && (layer === 'road' || layer === 'decal') ? Math.min(4, this.renderer.capabilities.getMaxAnisotropy()) : 1
+      src.map.anisotropy = tier === 'high' && (layer === 'road' || layer === 'decal') ? Math.min(4, maxAnisotropy(this.renderer)) : 1
     }
     let m: THREE.Material
-    if (tier === 'low') {
+    if (tier === 'low' && backend.kind === 'webgpu') {
+      src.roughness = 1
+      src.metalness = 0
+      m = src
+    } else if (tier === 'low') {
       m = new THREE.MeshLambertMaterial({
         name: src.name,
         map: src.map,

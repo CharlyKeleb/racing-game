@@ -2,7 +2,7 @@ import type { QualityPreset } from '../stores/gameStore'
 import { EFFECT_BUDGET } from './EffectBudget'
 import { surfaceProps } from '../vehicles/Surface'
 import type { WheelState } from '../vehicles/VehicleController'
-import { ParticlePool, type ParticleSpawn } from './Particles'
+import { createParticles, particleBudget, type ParticleSpawn } from './Particles'
 
 const MAX_PARTICLES = 640
 /**
@@ -30,7 +30,17 @@ const _p: ParticleSpawn = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, life: 1, star
  * a hard, sustained slide; a brief skid leaves a thin grey wisp.
  */
 export class TireSmoke {
-  private readonly pool = new ParticlePool(MAX_PARTICLES, 'puff', 3)
+  private readonly pool = createParticles(MAX_PARTICLES, 'puff', 3)
+  /**
+   * GPU particles (#51): `budget` times the puffs, each fainter, living half
+   * as long again and growing a little bigger, so a drift leaves a thick
+   * cloud that billows and lingers rather than a trail of separate sprites.
+   */
+  private readonly budget = particleBudget()
+  private readonly rate = EMIT_RATE * this.budget
+  private readonly alphaScale = Math.pow(this.budget, -0.55)
+  private readonly lifeScale = this.budget > 1 ? 1.5 : 1
+  private readonly sizeScale = this.budget > 1 ? 1.25 : 1
   private emission = 1
   private cloudSize = 1
   private readonly emitDebt: number[] = []
@@ -56,7 +66,7 @@ export class TireSmoke {
         this.emitDebt[i] = 0
         continue
       }
-      let debt = (this.emitDebt[i] ?? 0) + EMIT_RATE * (0.25 + 0.75 * k) * Math.min(dt, .05) * this.emission
+      let debt = (this.emitDebt[i] ?? 0) + this.rate * (0.25 + 0.75 * k) * Math.min(dt, .05) * this.emission
       while (debt >= 1) {
         this.spawn(w, carVelocity, k)
         debt -= 1
@@ -75,10 +85,10 @@ export class TireSmoke {
     _p.vx = carVel.x * 0.3 + (Math.random() - 0.5) * 1.6
     _p.vy = 0.15 + Math.random() * 0.45
     _p.vz = carVel.z * 0.3 + (Math.random() - 0.5) * 1.6
-    _p.life = LIFE_MIN + Math.random() * (LIFE_MAX - LIFE_MIN)
+    _p.life = (LIFE_MIN + Math.random() * (LIFE_MAX - LIFE_MIN)) * this.lifeScale
     _p.startSize = 0.5 + 0.35 * Math.random()
-    _p.endSize = (3 + 2.2 * Math.random()) * (0.55 + 0.45 * k) * this.cloudSize
-    _p.alpha = 0.05 + 0.13 * k
+    _p.endSize = (3 + 2.2 * Math.random()) * (0.55 + 0.45 * k) * this.sizeScale * this.cloudSize
+    _p.alpha = (0.05 + 0.13 * k) * this.alphaScale
     // Faintly blue-grey, like vaporised rubber, not pure white.
     _p.r = shade
     _p.g = shade + 0.01

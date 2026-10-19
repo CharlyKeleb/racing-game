@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import type { AnyRenderer } from './Renderer'
 
 /** Upload geometry through the public renderer API before it becomes visible. */
 export class GeometryWarmup {
@@ -14,8 +15,9 @@ export class GeometryWarmup {
 
   private readonly renderer: THREE.WebGLRenderer
 
-  constructor(renderer: THREE.WebGLRenderer) {
-    this.renderer = renderer
+  /** Either renderer: WebGPURenderer has the same render-target / viewport / scissor API used here. */
+  constructor(renderer: AnyRenderer) {
+    this.renderer = renderer as THREE.WebGLRenderer
     this.mesh.frustumCulled = false
     this.scene.add(this.mesh)
   }

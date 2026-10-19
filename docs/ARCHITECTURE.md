@@ -15,7 +15,7 @@ McLaren on a beautiful circuit with arcade driving physics. It runs at a stable
 | Physics | Rapier 3D (`rapier3d-compat`, WASM) | Rigid bodies, collisions, raycasts |
 | Vehicle | Custom TypeScript | Raycast suspension, tires, drivetrain, steering |
 | State | Zustand (vanilla stores) | Phase, settings, HUD telemetry |
-| Post FX | `postprocessing` | Bloom, SMAA, ACES tone mapping |
+| Post FX | `postprocessing` (WebGL), TSL nodes (WebGPU trial) | Bloom, SMAA, ACES tone mapping |
 | Audio | Web Audio (+ Howler for SFX/mixer) | Engine, tire squeal, effects |
 | Input | Custom `InputManager` | Keyboard, gamepad (touch later) |
 | Assets | Blender → Blender MCP → GLB/glTF 2.0 | Cars and tracks |
@@ -83,7 +83,10 @@ flowchart TB
    run on an authoritative multiplayer server.
 4. **No per-tick allocation in hot paths.** `VehicleController` reuses module-level
    scratch vectors.
-5. **Assets are data-driven.** A car is a GLB plus a `vehicle-config.json`. Adding
+5. **Custom shaders have a node twin.** The WebGPU renderer (a beta setting, see
+   [WebGPU](WEBGPU.md)) runs no `ShaderMaterial` or `onBeforeCompile`. Each one
+   has a TSL version in `engine/nodes`, chosen by `backend.nodes`.
+6. **Assets are data-driven.** A car is a GLB plus a `vehicle-config.json`. Adding
    a car needs no code beyond a registry row (see [Asset pipeline](ASSET_PIPELINE.md)).
 
 ## Frame lifecycle
@@ -176,7 +179,8 @@ These match glTF, so Blender exports need no runtime fix-ups:
 
 ```
 src/
-├── engine/      Game (composition root), GameLoop, Renderer, PhysicsWorld, AssetManager
+├── engine/      Game (composition root), GameLoop, Renderer, PhysicsWorld, AssetManager,
+│                backend + nodes/ (lazy WebGPU chunk: node materials, GPU particles, TSL post)
 ├── vehicles/    VehicleConfig (data contract), Vehicle, VehicleController,
 │                Suspension, TirePhysics, Drivetrain, CarModel (GLB rigging), carRegistry
 ├── world/       RaceTrack (interface), Track (procedural), StreamedTrack (chunked GLB streaming),
@@ -186,7 +190,7 @@ src/
 │                Overtaking, Drafting, RaceStandings
 ├── input/       InputManager (keyboard + gamepad → InputState)
 ├── audio/       AudioManager (engine, tires, SFX, menu music + garage room tone)
-├── effects/     PostFX (bloom, SMAA, tone mapping)
+├── effects/     PostFX (bloom, SMAA, tone mapping), particles (smoke, spray, sparks), skid marks
 ├── stores/      gameStore, telemetryStore
 └── ui/          React overlay: MainMenu, Settings, Hud, PauseMenu, Results
 public/models/cars/<id>/   <id>.glb + vehicle-config.json   (from the Blender MCP pipeline)

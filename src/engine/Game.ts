@@ -15,6 +15,8 @@ import { startingGrid } from '../racing/StartingGrid'
 import { ChaseCamera, type ShowroomFraming } from '../camera/ChaseCamera'
 import { DirectionGuide } from '../effects/DirectionGuide'
 import { NitroFlames } from '../effects/NitroFlames'
+import { Sparks, type SparkContact } from '../effects/Sparks'
+import { backend } from './backend'
 import { DrivingEffects } from '../effects/DrivingEffects'
 import { Headlights } from '../effects/Headlights'
 import { TrackProgress } from '../racing/TrackProgress'
@@ -70,6 +72,12 @@ const _rivalOffset = new THREE.Vector3()
 const _listenerUp = new THREE.Vector3()
 const _listenerBack = new THREE.Vector3()
 const _relativeVelocity = new THREE.Vector3()
+const _sparkPoint = new THREE.Vector3()
+const _sparkNormal = new THREE.Vector3()
+const _sparkOrigin = new THREE.Vector3()
+const _sparkQuat = new THREE.Quaternion()
+/** Chassis contacts closer than this (m; negative = penetrating) are touching, not just predicted. */
+const SPARK_CONTACT_DIST = 0.02
 
 interface CarHits {
   car: number
@@ -102,6 +110,8 @@ function readTyres(ctrl: Vehicle['controller'], out: TyreBrakeInput): TyreBrakeI
 }
 /** Seconds of driving against the race direction before the HUD says so. */
 const WRONG_WAY_DELAY = 1.2
+/** Metres past an uncrossed gate before the HUD says the checkpoint was missed. */
+const MISSED_GATE_METRES = 40
 /** Garage turntable camera: distance (m) and lens (deg) when there's room. */
 const SHOWROOM_DISTANCE = 7.5
 const SHOWROOM_FOV = 42
@@ -172,6 +182,11 @@ export class Game {
   private livery!: CarLivery
   private showroom!: Showroom
   private effects!: DrivingEffects
+  /** Wall-scrape, crash and bottoming-out sparks for every car (#52). Built in init(), once the renderer is known. */
+  private sparks!: Sparks
+  private readonly sparkContact: SparkContact = { x: 0, y: 0, z: 0, nx: 0, ny: 0, nz: 0, vx: 0, vy: 0, vz: 0, dv: 0, groundY: 0 }
+  /** Change in speed per car from contact forces this tick (the spark burst size). */
+  private readonly tickHit = new Float32Array(16)
   private headlights!: Headlights
   private guide!: DirectionGuide
   private progress!: TrackProgress
@@ -232,7 +247,7 @@ export class Game {
   private readonly unsubscribe: () => void
 
   constructor(container: HTMLElement) {
-    this.renderer = new Renderer(container)
+    this.renderer = new Renderer(container, gameStore.getState().settings.renderer)
     this.introCamera = new RaceIntroCamera(this.renderer.camera)
     this.loop = new GameLoop({
       fixedUpdate: (dt) => this.fixedUpdate(dt),
@@ -267,6 +282,9 @@ export class Game {
     const { setPhase } = gameStore.getState()
     setPhase('loading')
     performance.mark('boot:start')
+    // WebGPU: device + node module. Before anything builds materials (they pick by backend).
+    await this.renderer.init()
+    if (this.disposed) return
     const settings = gameStore.getState().settings
     const progress = (p: number) => gameStore.setState({ loadProgress: p })
     gameStore.setState({ trackName: getTrack(settings.track).name })
@@ -314,6 +332,8 @@ export class Game {
     this.effects = new DrivingEffects(this.vehicle)
     this.effects.setQuality(gameStore.getState().settings.quality)
     scene.add(this.effects.group)
+    this.sparks = new Sparks()
+    scene.add(this.sparks.mesh)
 
     const spawn = this.track.spawn
     this.showroom.placeAt(spawn.position, spawn.heading)
@@ -356,8 +376,9 @@ export class Game {
    * Dev-only (window.__game): step frames by hand and read render cost —
    * works even when the tab is hidden and rAF is throttled.
    */
-  debugStep(frames = 60): { msPerFrame: number; calls: number; triangles: number; pixelRatio: number; track: unknown; car: number[] } {
-    const gl = this.renderer.renderer.getContext()
+  debugStep(frames = 60): { msPerFrame: number; calls: number; triangles: number; pixelRatio: number; backend: string; track: unknown; car: number[] } {
+    // WebGL: read a pixel to wait for the GPU. WebGPU timing is CPU submit time only.
+    const gl = backend.kind === 'webgl' ? (this.renderer.renderer as THREE.WebGLRenderer).getContext() : null
     const px = new Uint8Array(4)
     const info = this.renderer.renderer.info
     const t0 = performance.now()
@@ -368,15 +389,16 @@ export class Game {
         info.reset()
       }
       this.loop.advance(1 / 60)
-      gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px) // wait for the GPU
+      gl?.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px) // wait for the GPU
     }
     info.autoReset = true
     const p = this.vehicle.position
     return {
       msPerFrame: (performance.now() - t0) / frames,
-      calls: info.render.calls,
+      calls: this.renderer.drawCalls,
       triangles: info.render.triangles,
       pixelRatio: this.renderer.pixelRatio,
+      backend: this.renderer.backendName,
       track: (this.track as Partial<StreamedTrack>).stats,
       car: [p.x, p.y, p.z].map((v) => Math.round(v)),
     }
@@ -519,6 +541,7 @@ export class Game {
     this.race.state = 'idle'
     this.track.dispose()
     this.effects.clear()
+    this.sparks.clear()
     try {
       this.track = await this.loadTrack(id)
     } catch (err) {
@@ -640,6 +663,8 @@ export class Game {
       if (this.disposed || token !== this.opponentToken) return
       this.resetCar()
       this.effects.clear()
+      this.sparks.clear()
+      this.standings?.reset()
       this.playerEntry.finishMs = null
       this.playerEntry.lap = 0
       this.playerEntry.checkpoint = 0
@@ -939,6 +964,7 @@ export class Game {
     this.audio.resume()
     this.resetCar()
     this.effects.clear()
+    this.sparks.clear()
     gameStore.getState().setPhase('menu')
   }
 
@@ -1027,6 +1053,7 @@ export class Game {
     }
     this.physics.step(dt)
     this.collectHits(dt)
+    this.emitSparks(dt)
     this.vehicle.capture()
     for (const opponent of this.opponents) {
       if (!inMenu) opponent.capture(dt, this.traffic, this.recoverSpawn)
@@ -1166,6 +1193,7 @@ export class Game {
       this.camera.driftFraming = gameStore.getState().settings.mode === 'drift' ? .82 : .55
       this.camera.update(this.vehicle.model.root, this.vehicle.speedKmh, dt, this.vehicle.controller.nitro.intensity, this.vehicle.motion,gridFraming)
       this.effects.update(this.vehicle, dt)
+      this.sparks.update(dt)
       this.updateGuide(dt)
     }
     if (this.rivalTags.length > 0) this.updateRivalTags(phase === 'countdown' || phase === 'racing', dt)
@@ -1218,11 +1246,76 @@ export class Game {
   private collectHits(dt: number): void {
     const cars = this.opponents.length + 1
     while (this.carHits.length < cars) this.carHits.push({ car: 0, wall: 0, ground: 0, touching: false })
+    this.tickHit.fill(0)
     this.physics.drainContactForces((a, b, force, _dx, dy) => {
       const sa = this.carSlot(a), sb = this.carSlot(b)
       if (sa >= 0) this.recordHit(sa, sb >= 0, force, dy, dt)
       if (sb >= 0) this.recordHit(sb, sa >= 0, force, dy, dt)
     })
+  }
+
+  /**
+   * Sparks where a car's chassis touches a wall, another car or the road
+   * (bottoming out), from Rapier's contact manifolds: world-space solver
+   * points, the normal and the impulse. Plus the underside striking the road
+   * when a wheel's suspension slams into its bump stop at speed.
+   */
+  private emitSparks(dt: number): void {
+    const world = this.physics.world
+    const camera = this.renderer.camera.position
+    for (let slot = 0; slot <= this.opponents.length; slot++) {
+      const vehicle = slot === 0 ? this.vehicle : this.opponents[slot - 1].vehicle
+      if (vehicle.quietTicks > 0) continue
+      const p = vehicle.body.translation()
+      // Nobody sees sparks from a rival a long way off.
+      if (slot > 0 && (p.x - camera.x) ** 2 + (p.z - camera.z) ** 2 > 150 * 150) continue
+      const v = vehicle.body.linvel()
+      const c = this.sparkContact
+      c.vx = v.x; c.vy = v.y; c.vz = v.z
+      const chassis = vehicle.chassis
+      const ct = chassis.translation(), cq = chassis.rotation()
+      let hit = slot < this.tickHit.length ? this.tickHit[slot] : 0
+      world.contactPairsWith(chassis, other => {
+        world.contactPair(chassis, other, (manifold, flipped) => {
+          // The deepest touching point, on the chassis side (the manifold's
+          // "1" side unless flipped), in the chassis collider's frame.
+          let best = -1, depth = SPARK_CONTACT_DIST
+          for (let i = 0; i < manifold.numContacts(); i++) {
+            const d = manifold.contactDist(i)
+            if (d < depth) { depth = d; best = i }
+          }
+          if (best < 0) return
+          const lp = flipped ? manifold.localContactPoint2(best) : manifold.localContactPoint1(best)
+          const ln = flipped ? manifold.localNormal2() : manifold.localNormal1()
+          if (!lp || !ln) return
+          _sparkPoint.set(lp.x, lp.y, lp.z).applyQuaternion(_sparkQuat.set(cq.x, cq.y, cq.z, cq.w)).add(_sparkOrigin.set(ct.x, ct.y, ct.z))
+          // The chassis's outward normal, flipped: out of what was hit, toward the car.
+          _sparkNormal.set(-ln.x, -ln.y, -ln.z).applyQuaternion(_sparkQuat)
+          c.x = _sparkPoint.x; c.y = _sparkPoint.y; c.z = _sparkPoint.z
+          c.nx = _sparkNormal.x; c.ny = _sparkNormal.y; c.nz = _sparkNormal.z
+          // The tick's hit throws one burst, from the first contact.
+          c.dv = hit
+          hit = 0
+          c.groundY = c.ny > 0.75 ? c.y : p.y - 0.45
+          this.sparks.emit(c, dt, slot)
+        })
+      })
+      // Bottoming out: a suspension at the end of its travel, still compressing hard.
+      const speed = Math.hypot(v.x, v.z)
+      if (speed < 10) continue
+      for (const w of vehicle.controller.wheels) {
+        const s = w.suspension
+        if (!w.grounded || s.compression < vehicle.config.suspension.travel * 0.97 || s.velocity < 0.6) continue
+        // Under the floor, inboard of the tyre.
+        c.x = w.contactPoint.x + (p.x - w.contactPoint.x) * 0.4
+        c.y = w.contactPoint.y + 0.03
+        c.z = w.contactPoint.z + (p.z - w.contactPoint.z) * 0.4
+        c.nx = 0; c.ny = 1; c.nz = 0
+        c.dv = s.velocity * 0.9
+        c.groundY = w.contactPoint.y
+        this.sparks.emit(c, dt, slot)
+      }
+    }
   }
 
   /** 0 for the player's chassis collider, i + 1 for rival i's, -1 for anything else. */
@@ -1236,6 +1329,7 @@ export class Game {
     const vehicle = slot === 0 ? this.vehicle : this.opponents[slot - 1].vehicle
     if (vehicle.quietTicks > 0) return
     const dv = (force * dt) / vehicle.massKg
+    if (slot < this.tickHit.length) this.tickHit[slot] = Math.max(this.tickHit[slot], dv)
     const h = this.carHits[slot]
     if (otherIsCar) h.car = Math.max(h.car, dv)
     else if (Math.abs(dirY) > 0.75) h.ground = Math.max(h.ground, dv)
@@ -1490,6 +1584,7 @@ export class Game {
       trackIndex: this.progress.index,
       distanceLeft: this.distanceLeft(),
       wrongWay: this.wrongWayTime > WRONG_WAY_DELAY,
+      missedCheckpoint: this.race.state === 'racing' && !!this.standings && this.standings.overrun(this.playerEntry) > MISSED_GATE_METRES,
       standings,
       opponents: this.opponents.map(o => ({ id: o.id, x: o.vehicle.position.x, z: o.vehicle.position.z })),
     })
@@ -1612,6 +1707,7 @@ export class Game {
     this.audio.onMenuMusicState = null
     this.livery?.dispose()
     this.effects?.dispose()
+    this.sparks?.dispose()
     this.guide?.dispose()
     this.driftZones?.dispose()
     this.showroom?.dispose()

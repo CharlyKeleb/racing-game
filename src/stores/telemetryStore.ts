@@ -74,6 +74,8 @@ export interface Telemetry {
   distanceLeft: number
   /** Driving against the race direction for a moment. */
   wrongWay: boolean
+  /** Drove on past the next gate without crossing it: the race won't count progress until a reset. */
+  missedCheckpoint: boolean
 }
 
 export const initialTelemetry: Telemetry = {
@@ -132,6 +134,7 @@ export const initialTelemetry: Telemetry = {
   trackIndex: 0,
   distanceLeft: 0,
   wrongWay: false,
+  missedCheckpoint: false,
 }
 
 export const telemetryStore = createStore<Telemetry>()(() => initialTelemetry)

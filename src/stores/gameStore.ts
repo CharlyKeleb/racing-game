@@ -7,6 +7,7 @@ import { selectableCars } from '../vehicles/carRegistry'
 import { isAiDifficulty, type AiDifficulty } from '../racing/AiProfiles'
 import { isMusicTrack, MUSIC_TRACKS, type MusicTrackId } from '../audio/musicTracks'
 import { isTimeOfDay, type TimeOfDay } from '../world/timeOfDay'
+import type { RendererKind } from '../engine/backend'
 
 /**
  * Low-frequency game state shared by the engine and React.
@@ -22,6 +23,8 @@ export interface Settings {
   driftEvent: DriftEventId
   quality: QualityPreset
   postfx: boolean
+  /** WebGL, or the WebGPU trial (#50). Read once at startup: switching reloads the page. */
+  renderer: RendererKind
   masterVolume: number
   /** Menu/garage soundtrack on/off. */
   menuMusic: boolean
@@ -81,6 +84,7 @@ const defaultSettings: Settings = {
   driftEvent: 'flow',
   quality: defaultQuality(),
   postfx: !isMobile(),
+  renderer: 'webgl',
   masterVolume: 0.9,
   menuMusic: true,
   musicTrack: MUSIC_TRACKS[0].id,
@@ -103,6 +107,7 @@ function loadSettings(): Settings {
     if (!isAiDifficulty(merged.difficulty)) merged.difficulty = 'challenging'
     merged.opponents = [0, 1, 3].includes(merged.opponents) ? merged.opponents : 3
     if (!isTimeOfDay(merged.timeOfDay)) merged.timeOfDay = defaultSettings.timeOfDay
+    if (merged.renderer !== 'webgpu') merged.renderer = 'webgl'
     if (typeof merged.menuMusic !== 'boolean') merged.menuMusic = defaultSettings.menuMusic
     if (!isMusicTrack(merged.musicTrack)) merged.musicTrack = defaultSettings.musicTrack
     if (!selectableCars().some((c) => c.id === merged.car)) merged.car = defaultSettings.car

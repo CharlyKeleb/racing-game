@@ -71,4 +71,22 @@ describe('race standings', () => {
     const snap = standings.snapshot([car(1, 0, 100, 3), car(2, 0, 50, 1)])
     expect(snap[1].gapLaps).toBe(2)
   })
+
+  it('holds a place side by side until the other car is clearly ahead', () => {
+    const s = new RaceStandings(line, [gateAt(0, 0), gateAt(0, 300), gateAt(150, 400), gateAt(200, 100)])
+    expect(s.snapshot([car(1, 0, 100), car(2, 0, 99)]).map(e => e.id)).toEqual([1, 2])
+    // Car 2 noses ahead by less than the margin: no swap, and no flicker back.
+    expect(s.snapshot([car(1, 0, 100), car(2, 0, 100.4)]).map(e => e.id)).toEqual([1, 2])
+    expect(s.snapshot([car(1, 0, 100), car(2, 0, 101.5)]).map(e => e.id)).toEqual([2, 1])
+    expect(s.snapshot([car(1, 0, 101.8), car(2, 0, 101.5)]).map(e => e.id)).toEqual([2, 1])
+  })
+
+  it('reports how far a car has run past a gate it never crossed', () => {
+    // Validated sector 0 (start → gate at z=300), but tracked on to z=340.
+    const index = line.findIndex(p => p.x === 0 && p.z === 340)
+    const missed = { ...car(1, 0, 340), checkpoint: 0, index }
+    expect(standings.overrun(missed)).toBeCloseTo(40, 0)
+    const fine = { ...car(1, 0, 340), index }
+    expect(standings.overrun(fine)).toBe(0)
+  })
 })

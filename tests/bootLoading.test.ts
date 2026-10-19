@@ -33,6 +33,7 @@ function loadingGame(loadVisuals: () => Promise<void>) {
     audio: { unlock: vi.fn(), playStart: vi.fn(), clearOpponents: vi.fn(), setOpponentCars: vi.fn() },
     resetCar: vi.fn(),
     effects: { clear: vi.fn() },
+    sparks: { clear: vi.fn() },
     race: { start: vi.fn() },
   })
 }

@@ -501,6 +501,8 @@ kbd { font-family: inherit; font-size: 11px; padding: 1px 6px; border: 1px solid
   text-transform: uppercase; color: #141414; background: #ffb000; animation: wrongway 0.6s steps(2) infinite;
 }
 @keyframes wrongway { 50% { opacity: 0.35; } }
+.hud-wrongway--missed { display: flex; flex-direction: column; align-items: center; font-size: clamp(20px, 3.6vw, 34px); animation: none; background: #ff4060; color: #fff; }
+.hud-wrongway--missed small { font-size: 13px; letter-spacing: 0.2em; font-weight: 700; opacity: 0.85; }
 
 /* ── Small screens ──────────────────────────────────────────────────── */
 @media (max-width: 720px) {
@@ -516,6 +518,8 @@ kbd { font-family: inherit; font-size: 11px; padding: 1px 6px; border: 1px solid
   .garage-right .car-card { display: none; }
   .ui-btn--lg { height: 54px; font-size: 24px; min-width: 0; }
   .hud-lap b { font-size: 30px; }
+  .hud-pos__num { font-size: 30px; }
+  .hud-pos__roll { height: 34px; }
 }
 
 /* ── Track loading ──────────────────────────────────────────────────── */
@@ -811,11 +815,59 @@ button.menu-track:hover,button.menu-track:focus-visible { border-color:var(--acc
 .race-standings li { display: grid; grid-template-columns: 2rem 1fr auto; gap: .75rem; align-items: center; padding: .65rem .8rem; border-bottom: 1px solid #ffffff12; }
 .race-standings__player { color: var(--accent, #f9db39); background: #ffffff06; }
 
-.hud-field { list-style: none; margin: 4px 0 0; padding: 7px 10px; min-width: 172px; background: #0c1523e8; border-left: 2px solid var(--cyan, #32b8e9); transform: skewX(-6deg); }
-.hud-field li { display: grid; grid-template-columns: 15px 1fr auto; align-items: center; gap: 9px; padding: 5px 2px; font-size: 12px; }
+.hud-field { position: relative; list-style: none; margin: 4px 0 0; padding: 7px 10px; min-width: 172px; background: #0c1523e8; border-left: 2px solid var(--cyan, #32b8e9); transform: skewX(-6deg); box-sizing: border-box; }
+/* Rows sit in fixed 26 px slots (RacePosition ROW_PX) and slide between them on an overtake. */
+.hud-field li {
+  position: absolute; top: 7px; left: 10px; right: 10px; height: 26px; box-sizing: border-box;
+  display: grid; grid-template-columns: 15px 1fr auto; align-items: center; gap: 9px; padding: 0 2px; font-size: 12px;
+  transition: transform 0.55s cubic-bezier(0.22, 1.2, 0.36, 1);
+}
 .hud-field li > * { transform: skewX(6deg); }
 .hud-field small { color: #aab7c5; font-size: 10px; }
+.hud-field__player { z-index: 1; }
+.hud-field__player::before { content: ''; position: absolute; inset: 2px -6px; background: linear-gradient(90deg, #ffdc3d33, #ffdc3d08); border-left: 2px solid #ffdc3d; z-index: -1; }
 .hud-field__player, .hud-field__player small { color: #ffdc3d; }
+.hud-field__climb::after { content: ''; position: absolute; inset: 2px -6px; background: linear-gradient(90deg, transparent, #4dff9a66, transparent); background-size: 200% 100%; animation: field-climb 1.1s ease-out forwards; pointer-events: none; }
+@keyframes field-climb { from { background-position: 150% 0; opacity: 1; } to { background-position: -50% 0; opacity: 0; } }
+
+/* Race position badge: the numeral rolls to the new place, with a green / red sweep and a ▲/▼ chip. */
+.hud-pos {
+  --pos: var(--accent); position: relative; display: flex; align-items: baseline; gap: 6px; padding: 6px 18px; overflow: visible;
+  transform: skewX(var(--skew)); background: var(--glass-flat); border-left: 4px solid var(--pos); transition: border-color 0.3s;
+}
+.hud-pos > * { transform: skewX(var(--unskew)); }
+.hud-pos--lead { --pos: #ffd23d; }
+.hud-pos--gain { --pos: #3dff8b; animation: pos-flash-gain 1.4s ease-out; }
+.hud-pos--loss { --pos: #ff4060; animation: pos-flash-loss 1.4s ease-out; }
+@keyframes pos-flash-gain { 0% { box-shadow: 0 0 0 0 #3dff8b00, inset 0 0 0 0 #3dff8b00; } 12% { box-shadow: 0 0 28px 2px #3dff8b88, inset 0 0 40px #3dff8b55; } 100% { box-shadow: 0 0 0 0 #3dff8b00, inset 0 0 0 0 #3dff8b00; } }
+@keyframes pos-flash-loss { 0% { box-shadow: 0 0 0 0 #ff406000, inset 0 0 0 0 #ff406000; } 12% { box-shadow: 0 0 28px 2px #ff406088, inset 0 0 40px #ff406055; } 100% { box-shadow: 0 0 0 0 #ff406000, inset 0 0 0 0 #ff406000; } }
+.hud-pos__roll { position: relative; display: inline-grid; overflow: hidden; height: 44px; align-items: end; padding-right: 2px; }
+.hud-pos__num { grid-area: 1 / 1; font-style: italic; font-weight: 900; font-size: 40px; line-height: 1; color: var(--ink); }
+.hud-pos--lead .hud-pos__num { color: #ffd23d; text-shadow: 0 0 14px #ffb00088, 0 2px 10px rgba(0, 0, 0, 0.6); }
+.hud-pos__num sup { font-size: 15px; font-weight: 800; margin-left: 1px; vertical-align: 18px; letter-spacing: 0.02em; text-transform: uppercase; }
+.hud-pos__num--in-gain { animation: pos-in-up 0.5s cubic-bezier(0.2, 1.4, 0.4, 1) both; color: #3dff8b; transition: color 0.9s 0.5s; }
+.hud-pos__num--in-loss { animation: pos-in-down 0.5s cubic-bezier(0.2, 1.4, 0.4, 1) both; color: #ff5470; }
+.hud-pos__num--out-gain { animation: pos-out-up 0.4s ease-in both; }
+.hud-pos__num--out-loss { animation: pos-out-down 0.4s ease-in both; }
+@keyframes pos-in-up { from { transform: translateY(100%) scale(0.7); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes pos-in-down { from { transform: translateY(-100%) scale(0.7); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes pos-out-up { to { transform: translateY(-100%) scale(0.8); opacity: 0; } }
+@keyframes pos-out-down { to { transform: translateY(100%) scale(0.8); opacity: 0; } }
+.hud-pos__chip {
+  position: absolute; left: 16px; top: calc(100% + 6px); z-index: 2; padding: 3px 10px; font-weight: 900; font-style: italic; font-size: 15px; white-space: nowrap;
+  color: #07130c; background: #3dff8b; box-shadow: 0 4px 18px #3dff8b55; animation: pos-chip 1.4s ease-out both;
+}
+.hud-pos__chip--loss { color: #fff; background: #ff4060; box-shadow: 0 4px 18px #ff406055; }
+@keyframes pos-chip {
+  0% { transform: skewX(var(--unskew)) translateY(-10px); opacity: 0; }
+  12% { transform: skewX(var(--unskew)) translateY(0); opacity: 1; }
+  75% { transform: skewX(var(--unskew)) translateY(0); opacity: 1; }
+  100% { transform: skewX(var(--unskew)) translateY(8px); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hud-field li, .hud-pos { transition: none; }
+  .hud-pos__num, .hud-pos__chip, .hud-pos, .hud-field__climb::after { animation-duration: 0.01s !important; }
+}
 /* Rival tags (NFS-style): slanted chip on a stem above each rival's roof. Placed per frame by RivalTags. */
 .rival-tags { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
 .rival-tag {
@@ -861,7 +913,7 @@ button.menu-track:hover,button.menu-track:focus-visible { border-color:var(--acc
 .hud-drafting { position: absolute; bottom: 22%; left: 50%; transform: translateX(-50%) skewX(-7deg); padding: 7px 16px; background: #0c1523cf; border-left: 2px solid #32b8e9; text-align: center; text-transform: uppercase; }
 .hud-drafting span { display: block; font-size: 13px; letter-spacing: .16em; color: #53ccff; }
 .hud-drafting b { font-size: 9px; letter-spacing: .12em; color: #dbe4ef; }
-@media (max-width: 700px) { .hud-field { min-width: 120px; padding: 4px 6px; } .hud-field li { font-size: 10px; gap: 5px; padding: 3px 0; } .rival-tag__name { font-size: 12px; } .rival-tag__name small, .rival-tag__distance { display: none !important; } }
+@media (max-width: 700px) { .hud-field { min-width: 120px; padding: 4px 6px; } .hud-field li { font-size: 10px; gap: 5px; padding: 0; top: 4px; left: 6px; right: 6px; } .rival-tag__name { font-size: 12px; } .rival-tag__name small, .rival-tag__distance { display: none !important; } }
 
 .race-intro { position: fixed; inset: 0; pointer-events: none; font-family: var(--font-display); }
 .race-intro__bar { position: absolute; left: 0; right: 0; height: clamp(24px,6vh,64px); background: #050910; }
