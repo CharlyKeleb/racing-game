@@ -1,3 +1,4 @@
+import { minimapRoadLines, minimapRoadPath } from '../src/world/MinimapRoads'
 import { describe, expect, it } from 'vitest'
 import { buildMinimapRaster } from '../src/world/MinimapData'
 import { Surface } from '../src/vehicles/Surface'
@@ -36,4 +37,19 @@ describe('full minimap surface coverage', () => {
     expect(brightness(Surface.Asphalt)).toBeGreaterThan(brightness(Surface.Grass) * 2)
     expect(MINIMAP_PALETTE[Surface.None][3]).toBe(0)
   })
+})
+
+
+it('thins a broad junction while keeping all four road branches connected', () => {
+  const width = 21, cells = new Uint8Array(width * width)
+  for (let y = 0; y < width; y++) for (let x = 0; x < width; x++) if (Math.abs(x - 10) <= 2 || Math.abs(y - 10) <= 2) cells[y * width + x] = Surface.Asphalt
+  const data = { x: 0, z: 0, cellSize: 1, width, height: width, cells }
+  const lines = minimapRoadLines(data)
+  expect(lines[10 * width + 10]).toBe(1)
+  for (const i of [3 * width + 10, 17 * width + 10, 10 * width + 3, 10 * width + 17]) expect(lines[i]).toBe(1)
+  expect(lines.reduce((sum, value) => sum + value, 0)).toBeLessThan(70)
+  const path = minimapRoadPath(data)
+  expect(path).toContain('M')
+  expect(path).not.toMatch(/NaN|Infinity/)
+  expect(minimapRoadPath(data)).toBe(path)
 })

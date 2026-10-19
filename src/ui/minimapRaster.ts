@@ -2,8 +2,8 @@ import type { MinimapRaster } from '../world/MinimapData'
 
 /** Roads retain contrast; grass/runoff are deliberately muted and darker. */
 export const MINIMAP_PALETTE: readonly (readonly [number, number, number, number])[] = [
-  [0, 0, 0, 0], [107, 124, 137, 255], [120, 132, 140, 255],
-  [27, 43, 43, 255], [49, 46, 42, 255], [42, 48, 51, 255],
+  [0, 0, 0, 0], [59, 73, 83, 90], [65, 77, 86, 90],
+  [20, 31, 33, 48], [37, 36, 34, 40], [33, 40, 43, 40],
 ]
 export function minimapPixels(data: MinimapRaster): Uint8ClampedArray {
   const pixels = new Uint8ClampedArray(data.width * data.height * 4)

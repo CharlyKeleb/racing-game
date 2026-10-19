@@ -1,3 +1,4 @@
+import { minimapRoadPath } from '../world/MinimapRoads'
 import { minimapRasterUrl } from './minimapRaster'
 import { useId, useMemo } from 'react'
 import { useGame, useTelemetry } from './hooks'
@@ -31,6 +32,7 @@ export function Minimap() {
 
   const coverage = data?.overview
   const overview = useMemo(() => coverage ? minimapRasterUrl(coverage) : '', [coverage])
+  const roads = useMemo(() => coverage ? minimapRoadPath(coverage) : '', [coverage])
 
   const outline = useMemo(() => {
     if (!data || data.points.length < 2) return null
@@ -60,6 +62,7 @@ export function Minimap() {
   if (!outline) return null
   // Rotate the world so the car's forward (sin h, cos h) in map XZ points up the screen.
   const rot = -90 - (Math.atan2(Math.cos(heading), Math.sin(heading)) * 180) / Math.PI
+  const northAngle = rot * Math.PI / 180
   const world = `translate(${CAR_X} ${CAR_Y}) rotate(${rot.toFixed(2)}) scale(${SCALE}) translate(${(-carX).toFixed(2)} ${(-carZ).toFixed(2)})`
 
   return (
@@ -77,21 +80,24 @@ export function Minimap() {
         <g transform={world}>
           {overview && data?.overview && <image href={overview} x={data.overview.x} y={data.overview.z}
             width={data.overview.width * data.overview.cellSize} height={data.overview.height * data.overview.cellSize} /> }
+          {roads && <path className="minimap__roads" d={roads} vectorEffect="non-scaling-stroke" />}
           <path className="minimap__edge" d={outline.d} vectorEffect="non-scaling-stroke" />
           <path className="minimap__track" d={outline.d} vectorEffect="non-scaling-stroke" />
+        </g>
+        <circle cx="50" cy="50" r="47" fill={`url(#${id}-shade)`} />
+        <g transform={world}>
           <path className="minimap__route" d={route} vectorEffect="non-scaling-stroke" />
-          {opponents.map(o => <circle key={o.id} cx={o.x} cy={o.z} r={10} fill={['#27b8eb', '#ffd447', '#e64f67'][(o.id - 1) % 3]} stroke="#101820" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />)}
+          {opponents.map(o => <circle key={o.id} cx={o.x} cy={o.z} r={6} fill={['#27b8eb', '#ffd447', '#e64f67'][(o.id - 1) % 3]} stroke="#101820" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />)}
           {drift && data?.gates.map(([x,z],i)=><circle key={i} cx={x} cy={z} r={i===(gate+1)%data.gates.length?8:4} fill={i===(gate+1)%data.gates.length?'#ffd447':'#24e7df'} opacity={i>gate||i===0?1:.25} />)}
           <line className="minimap__start" {...outline.start} vectorEffect="non-scaling-stroke" />
         </g>
-        <circle cx="50" cy="50" r="47" fill={`url(#${id}-shade)`} />
         <g className="minimap__car" transform={`translate(${CAR_X} ${CAR_Y})`}>
-          <circle r="5.2" />
-          <path d="M0,-3.6 L2.6,2.6 L0,1.2 L-2.6,2.6 Z" />
+          <circle r="3.7" />
+          <path d="M0,-2.8 L2,2 L0,.9 L-2,2 Z" />
         </g>
         </g>
         <circle className="minimap__rim" cx="50" cy="50" r="48" />
-        <path className="minimap__ticks" d="M50 2v2 M98 50h-2 M50 98v-2 M2 50h2" />
+        <text className="minimap__north" x={50 + Math.sin(northAngle) * 40} y={50 - Math.cos(northAngle) * 40} textAnchor="middle" dominantBaseline="central">N</text>
       </svg>
       <div className="minimap__dist mono">{drift ? `${(distanceLeft / 1000).toFixed(2)} KM / TO FINISH` : `${(distanceLeft / 1000).toFixed(2)} km`}</div>
     </div>
