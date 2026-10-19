@@ -102,6 +102,7 @@ export class StreamedTrack implements RaceTrack {
   private readonly distances: Float32Array
   private readonly current: Int8Array
   private readonly ready: { index: number; lod: number; object: THREE.Object3D }[] = []
+  private readonly pending: number[] = []
   private inFlight = 0
   private planTimer = 0
   private body: RAPIER.RigidBody | null = null
@@ -358,23 +359,33 @@ export class StreamedTrack implements RaceTrack {
       if (this.wanted[i] === NOT_LOADED && this.chunks[i].shown !== NOT_LOADED) this.show(i, NOT_LOADED, null)
     }
 
-    // Fetch the nearest missing chunks first.
-    if (this.inFlight >= budget.concurrency) return
-    const pending: number[] = []
+    // Drop decoded chunks made obsolete by movement before scheduling more work.
+    for (let i = this.ready.length - 1; i >= 0; i--) {
+      const ready = this.ready[i]
+      if (this.wanted[ready.index] !== ready.lod) {
+        disposeObject(ready.object)
+        this.ready.splice(i, 1)
+      }
+    }
+
+    // Bound decoded-but-not-integrated resources together with active requests.
+    if (this.inFlight + this.ready.length >= budget.concurrency) return
+    const pending = this.pending
+    pending.length = 0
     for (let i = 0; i < this.chunks.length; i++) {
       const c = this.chunks[i]
       const w = this.wanted[i]
-      if (w !== NOT_LOADED && w !== c.shown && c.loading !== w && !this.ready.some((r) => r.index === i && r.lod === w)) pending.push(i)
+      if (w !== NOT_LOADED && w !== c.shown && c.loading === NOT_LOADED && !this.ready.some((r) => r.index === i && r.lod === w)) pending.push(i)
     }
     pending.sort((a, b) => this.distances[a] - this.distances[b])
     for (const i of pending) {
-      if (this.inFlight >= budget.concurrency) break
+      if (this.inFlight + this.ready.length >= budget.concurrency) break
       const lod = this.wanted[i]
       this.chunks[i].loading = lod
       this.inFlight++
       this.fetchChunk(i, lod)
         .then((object) => {
-          if (this.disposed) disposeObject(object)
+          if (this.disposed || this.wanted[i] !== lod) disposeObject(object)
           else this.ready.push({ index: i, lod, object })
         })
         .catch((err: unknown) => console.warn(`[StreamedTrack] chunk ${this.manifest.chunks[i].id} lod${lod} failed`, err))

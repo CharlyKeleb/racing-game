@@ -1277,7 +1277,13 @@ export class Game {
     const ctrl = this.vehicle.controller
     const t = this.race.timer
     const standings = this.standings?.snapshot(this.entries) ?? []
-    const rivalLabels = this.opponents.map(o => ({ id: o.id, name: o.driver.profile.name, style: o.driver.profile.style, position: standings.find(s => s.id === o.id)?.position ?? o.id }))
+    const previousLabels = telemetryStore.getState().rivalLabels
+    const labelsUnchanged = previousLabels.length === this.opponents.length && this.opponents.every((o, i) => {
+      const previous = previousLabels[i]
+      return previous.id === o.id && previous.name === o.driver.profile.name &&
+        previous.style === o.driver.profile.style && previous.position === (standings.find(s => s.id === o.id)?.position ?? o.id)
+    })
+    const rivalLabels = labelsUnchanged ? previousLabels : this.opponents.map(o => ({ id: o.id, name: o.driver.profile.name, style: o.driver.profile.style, position: standings.find(s => s.id === o.id)?.position ?? o.id }))
     telemetryStore.setState({
       rivalLabels,
       introShot: introShot(this.race.introDuration > 0 ? 1-this.race.introRemaining/this.race.introDuration : 0),
