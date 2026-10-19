@@ -1,3 +1,4 @@
+import { performanceCapture } from './PerformanceCapture'
 import { hudCoversPoint } from '../stores/hudLayoutStore'
 import { driftEvent, readDriftRecord, saveDriftRecord } from '../racing/driftEvents'
 import { DriftZones } from '../effects/DriftZones'
@@ -193,13 +194,17 @@ export class Game {
       fixedUpdate: (dt) => this.fixedUpdate(dt),
       render: (alpha, dt) => this.renderFrame(alpha, dt),
     })
+    performanceCapture.setContext(() => ({ phase: gameStore.getState().phase, settings: gameStore.getState().settings }))
     this.unsubscribe = gameStore.subscribe((s, prev) => {
       if (s.settings.car !== prev.settings.car && this.vehicle) void this.switchCar(s.settings.car)
       if (s.settings.track !== prev.settings.track && this.track) void this.switchTrack(s.settings.track)
       else if (s.settings !== prev.settings) this.applySettings(s.settings)
       // A car switch swaps in that car's build too; installCar applies it to the new car.
       if (s.build !== prev.build && s.settings.car === prev.settings.car) this.applyBuild(s.build, prev.build)
-      if (s.phase !== prev.phase) this.updateShowroom(s.phase)
+      if (s.phase !== prev.phase) {
+        this.updateShowroom(s.phase)
+        performanceCapture.event('phase', 0, { phase: s.phase, settings: s.settings })
+      }
     })
   }
 

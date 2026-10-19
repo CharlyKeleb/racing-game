@@ -1,3 +1,5 @@
+import { GpuTimer } from './GpuTimer'
+import { performanceCapture } from './PerformanceCapture'
 import * as THREE from 'three'
 import { PostFX } from '../effects/PostFX'
 import type { QualityPreset } from '../stores/gameStore'
@@ -7,6 +9,7 @@ export class Renderer {
   readonly renderer: THREE.WebGLRenderer
   readonly scene = new THREE.Scene()
   readonly camera = new THREE.PerspectiveCamera(60, 1, 0.1, 2000)
+  private gpuTimer?: GpuTimer
   private postfx: PostFX
   private postfxEnabled = true
   private readonly resizeObserver: ResizeObserver
@@ -98,8 +101,25 @@ export class Renderer {
   }
 
   render(): void {
+    const capture = performanceCapture.active
+    const info = this.renderer.info
+    const autoReset = info.autoReset
+    if (capture) {
+      if (!this.gpuTimer) {
+        this.gpuTimer = new GpuTimer(this.renderer.getContext() as WebGL2RenderingContext)
+        performanceCapture.event('gpu-timer-support', 0, this.gpuTimer.supported)
+      }
+      this.gpuTimer.begin()
+      info.autoReset = false; info.reset()
+    }
     if (this.postfxEnabled) this.postfx.render()
     else this.renderer.render(this.scene, this.camera)
+    if (capture) {
+      this.gpuTimer?.end()
+      performanceCapture.event('render', 0, { calls: info.render.calls, triangles: info.render.triangles,
+        textures: info.memory.textures, geometries: info.memory.geometries, pixelRatio: this.ratio })
+      info.autoReset = autoReset
+    }
   }
 
   private resize(): void {
@@ -113,6 +133,7 @@ export class Renderer {
 
   dispose(): void {
     this.resizeObserver.disconnect()
+    this.gpuTimer?.dispose()
     this.postfx.dispose()
     this.renderer.dispose()
     this.renderer.domElement.remove()
