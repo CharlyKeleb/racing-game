@@ -126,8 +126,12 @@ export class HeatHaze {
     this.scene.add(this.mesh)
   }
 
-  /** Lay out the puffs for this frame. `cars[0]` is the player; render-time, after the car meshes moved. */
-  update(cars: readonly Vehicle[], camera: THREE.Camera, dt: number): void {
+  /**
+   * Lay out the puffs for this frame. `cars[0]` is the player; render-time,
+   * after the car meshes moved. `alsoActive`: something else in `scene` (lens
+   * drops) needs the buffer drawn this frame.
+   */
+  update(cars: readonly Vehicle[], camera: THREE.Camera, dt: number, alsoActive = false): void {
     this.time.value += dt
     let n = 0
     for (let c = 0; c < cars.length && c < MAX_CARS; c++) {
@@ -166,7 +170,7 @@ export class HeatHaze {
       }
     }
     this.mesh.count = n
-    this.active = n > 0
+    this.active = n > 0 || alsoActive
     if (n > 0) {
       this.mesh.instanceMatrix.needsUpdate = true
       this.strength.needsUpdate = true

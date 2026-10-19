@@ -1,9 +1,10 @@
 import * as THREE from 'three/webgpu'
 import {
-  abs, attribute, clamp, cos, float, fwidth, length, materialColor, materialOpacity, max, min, mix, modelViewMatrix, normalize,
-  positionLocal, reference, reflector, select, sin, smoothstep, step, texture, uniform, uv, varying, vec2, vec3, vec4,
+  abs, attribute, cameraPosition, clamp, cos, cross, float, fwidth, length, materialColor, materialOpacity, max, min, mix, mod, modelViewMatrix, normalize,
+  positionGeometry, positionLocal, reference, reflector, select, sin, smoothstep, step, texture, uniform, uv, varying, vec2, vec3, vec4,
 } from 'three/tsl'
 import { SkyMesh } from 'three/addons/objects/SkyMesh.js'
+import { RAIN_BOX, RAIN_EXPOSURE, RAIN_FALL, RAIN_WIDTH } from '../../effects/Rain'
 
 /**
  * Node (TSL) versions of the game's custom WebGL materials, for
@@ -62,6 +63,8 @@ export function skyDome() {
       mieCoefficient: sky.mieCoefficient,
       mieDirectionalG: sky.mieDirectionalG,
       sunPosition: sky.sunPosition,
+      cloudCoverage: sky.cloudCoverage,
+      cloudDensity: sky.cloudDensity,
       uSkyExposure: exposure,
       uSkyTint: tint,
       uSkyMax: clampMax,
@@ -175,5 +178,50 @@ export function liveryPaintMaterial(u: LiveryUniforms): THREE.MeshPhysicalNodeMa
   const decalTex = texture(atlas, vec2(duv.x.mul(0.5).add(0.5), duv.y))
   color = mix(color, decalTex.rgb, decalTex.a.mul(side).mul(inside(duv)))
   material.colorNode = color
+  return material
+}
+
+/**
+ * Rain streaks (#53): the box-wrapped, camera-relative streaks of
+ * effects/Rain.ts, in world space (the mesh sits at the origin).
+ */
+export function rainMaterial() {
+  const uTime = uniform(0)
+  const cameraVelocity = new THREE.Vector3()
+  const uCameraVelocity = uniform(cameraVelocity)
+  const box = vec3(RAIN_BOX.x, RAIN_BOX.y, RAIN_BOX.z)
+  const seed = attribute('aSeed', 'vec4')
+  const fall = vec3(RAIN_FALL.x, RAIN_FALL.y, RAIN_FALL.z).mul(seed.w.mul(0.3).add(0.85))
+  const drop = cameraPosition.add(mod(seed.xyz.mul(box).add(fall.mul(uTime)).sub(cameraPosition), box)).sub(box.mul(0.5))
+  const along = fall.sub(uCameraVelocity).negate().mul(RAIN_EXPOSURE)
+  const mid = drop.add(along.mul(positionGeometry.y.add(0.5)))
+  const side = normalize(cross(along, mid.sub(cameraPosition))).mul(RAIN_WIDTH)
+  const material = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false })
+  material.positionNode = mid.add(side.mul(positionGeometry.x.mul(2)))
+  const dist = length(drop.sub(cameraPosition))
+  const fade = varying(smoothstep(0.6, 2, dist).mul(float(1).sub(smoothstep(0.35, 0.5, dist.div(RAIN_BOX.x)))), 'vRainFade')
+  const p = uv()
+  const across = float(1).sub(abs(p.x.sub(0.5)).mul(2))
+  material.colorNode = vec3(0.78, 0.84, 0.9)
+  material.opacityNode = across.mul(sin(p.y.mul(Math.PI))).mul(fade).mul(0.45)
+  material.alphaTest = 0.004
+  return { material, uniforms: { time: uTime, cameraVelocity: { value: cameraVelocity } } }
+}
+
+/**
+ * Lens drops (#53, cockpit view): each drop writes a lens-like inward offset
+ * into the distortion buffer, so the image behind it is refracted (and
+ * flipped) the way a water drop on glass does. Mirrors effects/LensDrops.ts.
+ */
+export function lensDropMaterial() {
+  const material = new THREE.MeshBasicNodeMaterial({ transparent: true, blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false })
+  material.toneMapped = false
+  material.fog = false
+  const strength = varying(attribute('aStrength', 'float'), 'vDrop')
+  const d = uv().sub(0.5).mul(2)
+  const r = length(d)
+  const inside = float(1).sub(smoothstep(0.8, 1, r))
+  material.colorNode = vec3(d.mul(inside).mul(strength).negate(), 0)
+  material.opacityNode = float(1)
   return material
 }

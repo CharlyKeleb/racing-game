@@ -17,6 +17,7 @@ import type { RendererKind } from '../engine/backend'
 export type GamePhase = 'boot' | 'menu' | 'garage' | 'loading' | 'intro' | 'countdown' | 'racing' | 'paused' | 'finished'
 export type QualityPreset = 'low' | 'medium' | 'high'
 export type CameraMode = 'chase' | 'cockpit'
+export type Weather = 'dry' | 'rain'
 
 export interface Settings {
   mode: 'quick' | 'drift'
@@ -40,6 +41,8 @@ export interface Settings {
   car: string
   /** Lighting preset, see world/timeOfDay.ts. */
   timeOfDay: TimeOfDay
+  /** Race weather (#37 / #53): rain brings rainfall, spray and an overcast sky. */
+  weather: Weather
 }
 
 export interface GameState {
@@ -95,6 +98,7 @@ const defaultSettings: Settings = {
   track: 'nurburgring',
   car: 'porsche911',
   timeOfDay: 'noon',
+  weather: 'dry',
 }
 
 function loadSettings(): Settings {
@@ -107,6 +111,7 @@ function loadSettings(): Settings {
     if (!isAiDifficulty(merged.difficulty)) merged.difficulty = 'challenging'
     merged.opponents = [0, 1, 3].includes(merged.opponents) ? merged.opponents : 3
     if (!isTimeOfDay(merged.timeOfDay)) merged.timeOfDay = defaultSettings.timeOfDay
+    if (merged.weather !== 'rain') merged.weather = 'dry'
     if (merged.renderer !== 'webgpu') merged.renderer = 'webgl'
     if (typeof merged.menuMusic !== 'boolean') merged.menuMusic = defaultSettings.menuMusic
     if (!isMusicTrack(merged.musicTrack)) merged.musicTrack = defaultSettings.musicTrack

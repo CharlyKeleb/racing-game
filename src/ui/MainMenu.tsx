@@ -62,7 +62,7 @@ export function MainMenu() {
           <ModeSelect />
           <TrackPicker />
           <Button size="sm" variant="ghost" onClick={() => setShowRaceSetup(true)}>
-            {settings.mode === 'drift' ? `Drift setup · ${driftEvent(settings.driftEvent).name}` : `Race setup · ${settings.laps} ${settings.laps === 1 ? 'lap' : 'laps'}`} · {TIME_PRESETS[settings.timeOfDay].label}
+            {settings.mode === 'drift' ? `Drift setup · ${driftEvent(settings.driftEvent).name}` : `Race setup · ${settings.laps} ${settings.laps === 1 ? 'lap' : 'laps'}`} · {TIME_PRESETS[settings.timeOfDay].label}{settings.weather === 'rain' ? ' · Rain' : ''}
           </Button>
           <Button size="md" className="menu-icon-action" disabled={switching} onClick={() => game?.openGarage()}>
             <GiHomeGarage aria-hidden="true"/> Garage

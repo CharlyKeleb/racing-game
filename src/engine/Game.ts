@@ -17,6 +17,9 @@ import { DirectionGuide } from '../effects/DirectionGuide'
 import { NitroFlames } from '../effects/NitroFlames'
 import { Sparks, type SparkContact } from '../effects/Sparks'
 import { HeatHaze } from '../effects/HeatHaze'
+import { LensDrops } from '../effects/LensDrops'
+import { Rain } from '../effects/Rain'
+import { RainSpray } from '../effects/RainSpray'
 import { Benchmark } from './Benchmark'
 import { backend } from './backend'
 import { DrivingEffects } from '../effects/DrivingEffects'
@@ -189,6 +192,10 @@ export class Game {
   /** Exhaust heat haze for every car (#56). Built in init(), once the renderer is known. */
   private haze!: HeatHaze
   private readonly hazeCars: Vehicle[] = []
+  /** Rain (#53): streaks around the camera, spray off every car, drops on the lens in cockpit view. Built in init(). */
+  private rain!: Rain
+  private rainSpray!: RainSpray
+  private lensDrops!: LensDrops
   /** `?bench=1`: autopiloted WebGL vs WebGPU frame-time comparison (#50). */
   private benchmark: Benchmark | null = null
   private readonly sparkContact: SparkContact = { x: 0, y: 0, z: 0, nx: 0, ny: 0, nz: 0, vx: 0, vy: 0, vz: 0, dv: 0, groundY: 0 }
@@ -309,6 +316,7 @@ export class Game {
     const scene = this.renderer.scene
 
     this.environment = new Environment(this.renderer.renderer)
+    this.environment.setRain(settings.weather === 'rain')
     this.environment.setTimeOfDay(settings.timeOfDay)
     scene.add(this.environment.group)
     this.environment.apply(scene)
@@ -343,6 +351,13 @@ export class Game {
     scene.add(this.sparks.mesh)
     this.haze = new HeatHaze()
     this.renderer.setHaze(this.haze)
+    this.rain = new Rain()
+    scene.add(this.rain.mesh)
+    this.rainSpray = new RainSpray()
+    scene.add(...this.rainSpray.meshes)
+    // Lens drops refract through the haze buffer: they live in its scene.
+    this.lensDrops = new LensDrops()
+    this.haze.scene.add(this.lensDrops.mesh)
 
     const spawn = this.track.spawn
     this.showroom.placeAt(spawn.position, spawn.heading)
@@ -552,6 +567,8 @@ export class Game {
     this.track.dispose()
     this.effects.clear()
     this.sparks.clear()
+    this.rainSpray?.clear()
+    this.lensDrops?.clear()
     try {
       this.track = await this.loadTrack(id)
     } catch (err) {
@@ -674,6 +691,8 @@ export class Game {
       this.resetCar()
       this.effects.clear()
       this.sparks.clear()
+      this.rainSpray?.clear()
+      this.lensDrops?.clear()
       this.standings?.reset()
       this.playerEntry.finishMs = null
       this.playerEntry.lap = 0
@@ -975,6 +994,8 @@ export class Game {
     this.resetCar()
     this.effects.clear()
     this.sparks.clear()
+    this.rainSpray?.clear()
+    this.lensDrops?.clear()
     gameStore.getState().setPhase('menu')
   }
 
@@ -1249,12 +1270,21 @@ export class Game {
     }
     if (this.rivalTags.length > 0) this.updateRivalTags(phase === 'countdown' || phase === 'racing', dt)
     this.benchmark?.frame()
-    // Exhaust heat haze: every car, laid out after the camera moved this frame.
-    if (gameStore.getState().settings.postfx) {
-      this.hazeCars.length = 0
-      this.hazeCars.push(this.vehicle)
-      for (const opponent of this.opponents) this.hazeCars.push(opponent.vehicle)
-      this.haze.update(this.hazeCars, this.renderer.camera, dt)
+    // Every car, for the haze and the spray.
+    this.hazeCars.length = 0
+    this.hazeCars.push(this.vehicle)
+    for (const opponent of this.opponents) this.hazeCars.push(opponent.vehicle)
+    // Rain outdoors only: not in the garage.
+    const { postfx, weather, camera: cameraMode } = gameStore.getState().settings
+    const wet = weather === 'rain' && phase !== 'menu' && phase !== 'garage' ? 1 : 0
+    const camera = this.renderer.camera
+    this.rain.update(camera, wet, dt)
+    this.rainSpray.update(this.hazeCars, camera.position, wet, dt)
+    // Exhaust heat haze and lens drops share the distortion buffer (post FX only).
+    if (postfx) {
+      const speed = Math.abs(this.vehicle.controller.forwardSpeed)
+      this.lensDrops.update(camera, cameraMode === 'cockpit' ? wet : 0, speed, dt)
+      this.haze.update(this.hazeCars, camera, dt, this.lensDrops.active)
     }
     this.renderer.setWhipBlur(phase === 'intro' ? this.introCamera.whip * 0.05 : 0)
     const staging = phase === 'intro' || phase === 'countdown'
@@ -1733,6 +1763,9 @@ export class Game {
     this.audio.setVolume(s.masterVolume)
     this.audio.setMenuMusic(s.musicTrack, s.menuMusic)
     if (this.camera) this.camera.mode = s.camera
+    this.rain?.setQuality(s.quality)
+    // Before the time of day: rain re-bakes the environment, applyTimeOfDay pushes it to the scene.
+    this.environment?.setRain(s.weather === 'rain')
     this.applyTimeOfDay(s.timeOfDay)
   }
 
@@ -1768,6 +1801,9 @@ export class Game {
     this.effects?.dispose()
     this.sparks?.dispose()
     this.haze?.dispose()
+    this.rain?.dispose()
+    this.rainSpray?.dispose()
+    this.lensDrops?.dispose()
     this.guide?.dispose()
     this.driftZones?.dispose()
     this.showroom?.dispose()
