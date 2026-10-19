@@ -122,6 +122,8 @@ export interface DriftInput {
   slipAngle: number
   /** True on the tick the gearbox shifted down. */
   downshift: boolean
+  /** Disable brake-tap drift entry for normal keyboard cornering. Handbrake is unaffected. */
+  allowBrakeTap?: boolean
 }
 
 export class Drift {
@@ -157,11 +159,11 @@ export class Drift {
       this.brakeArm = cfg.armTime
       // A short press made while already turning is a drift tap. A longer one,
       // or braking in a straight line before turning in, is just braking.
-      if (this.brakeHeld <= cfg.tapMaxSec && this.steeredWhileBraking) this.tapArm = cfg.armTime
+      if (i.allowBrakeTap !== false && this.brakeHeld <= cfg.tapMaxSec && this.steeredWhileBraking) this.tapArm = cfg.armTime
     }
     this.brakeHeld = braking ? this.brakeHeld + dt : 0
     this.steeredWhileBraking = braking && (this.steeredWhileBraking || Math.abs(i.steer) >= cfg.entryLock)
-    this.tapArm = Math.max(0, this.tapArm - dt)
+    this.tapArm = i.allowBrakeTap === false ? 0 : Math.max(0, this.tapArm - dt)
     this.wasBraking = braking
     if (i.downshift && i.throttle < 0.3) this.downshiftArm = cfg.armTime
     this.brakeArm = Math.max(0, this.brakeArm - dt)

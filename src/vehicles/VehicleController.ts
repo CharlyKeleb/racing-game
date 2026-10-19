@@ -1,3 +1,4 @@
+import { keyboardSteeringAngle } from './KeyboardSteering'
 import RAPIER from '@dimforge/rapier3d-compat'
 import * as THREE from 'three'
 import type { InputState } from '../input/InputManager'
@@ -45,6 +46,9 @@ const _vh = new THREE.Vector3()
 const _fh = new THREE.Vector3()
 const _cross = new THREE.Vector3()
 const _carve = new THREE.Vector3()
+const _roadNormal = new THREE.Vector3()
+const _roadForward = new THREE.Vector3()
+const _roadRight = new THREE.Vector3()
 /** Extra yaw the stability assist allows at full brake, as a share of the grip limit. */
 const TRAIL_BRAKE_ROTATION = 0.35
 /** Body slip angle (rad) above which a countersteered slide counts as a drift. */
@@ -111,6 +115,7 @@ export class VehicleController {
     this.steeringConfig = {
       wheelbase: this.wheelbase, maxSteerAngle: cfg.maxSteerAngle, steerFalloffSpeed: cfg.steerFalloffSpeed,
       grip: cfg.tires.grip, peakSlip: peakSlipAngle(cfg.tires),
+      arcade: cfg.arcade,
       downforcePerKg: cfg.downforceCoefficient / cfg.massKg, steerPeakSlipScale: cfg.steerPeakSlipScale,
     }
     this.frontAxleZ = Math.max(...zs)
@@ -164,9 +169,13 @@ export class VehicleController {
     const speedFactor = gripFactor + (Math.max(gripFactor, 0.55) - gripFactor) * this.drift.amount
     const available = steeringLimit(this.steeringConfig, speed, input.handbrake ? 1 : this.drift.amount, surfaceProps(this.surfaceAt(t.x,t.z)).grip)
     const targetSteer = -input.steer * available
-    const centering = Math.abs(targetSteer) < Math.abs(this.steerAngle) || targetSteer * this.steerAngle < 0
-    const maxDelta = cfg.steerSpeed * speedFactor * (centering ? cfg.steerReturnScale : 1) * dt
-    this.steerAngle += Math.max(-maxDelta, Math.min(maxDelta, targetSteer - this.steerAngle))
+    if (input.steerSource === 'keyboard') {
+      this.steerAngle = keyboardSteeringAngle(this.steerAngle, targetSteer, available, dt, cfg.keyboardSteering)
+    } else {
+      const centering = Math.abs(targetSteer) < Math.abs(this.steerAngle) || targetSteer * this.steerAngle < 0
+      const maxDelta = cfg.steerSpeed * speedFactor * (centering ? cfg.steerReturnScale : 1) * dt
+      this.steerAngle += Math.max(-maxDelta, Math.min(maxDelta, targetSteer - this.steerAngle))
+    }
 
     // Pedals ramp instead of stepping; brakes bite twice as fast as the throttle.
     this.throttle = approach(this.throttle, input.throttle, cfg.pedalRate * dt)
@@ -226,6 +235,8 @@ export class VehicleController {
         handbrake: input.handbrake,
         slipAngle: Math.atan2(sideways, Math.max(speed, 0.1)),
         downshift,
+        // Normal keyboard cornering must not switch to scripted drift on brake release.
+        allowBrakeTap: input.steerSource !== 'keyboard' || this.eventDrift !== null,
       },
       driftCfg,
       dt,
@@ -240,6 +251,10 @@ export class VehicleController {
 
     const massShare = cfg.massKg / this.wheels.length
 
+    let supportCount = 0
+    let supportGrip = 0
+    _roadNormal.set(0, 0, 0)
+    const arcadeBlend = cfg.arcade.enabled && !input.handbrake ? 1 - this.drift.amount : 0
     for (let i = 0; i < this.wheels.length; i++) {
       const w = this.wheels[i]
       const wc = w.cfg
@@ -248,7 +263,8 @@ export class VehicleController {
       _ray.origin = { x: _mount.x, y: _mount.y, z: _mount.z }
       _ray.dir = { x: -_up.x, y: -_up.y, z: -_up.z }
       const maxDist = cfg.suspension.restLength + wc.radius
-      const hit = this.world.castRay(_ray, maxDist, true, undefined, undefined, undefined, body)
+      const contact = this.world.castRayAndGetNormal(_ray, maxDist, true, undefined, undefined, undefined, body)
+      const hit = contact && contact.normal.x * _up.x + contact.normal.y * _up.y + contact.normal.z * _up.z > .35 ? contact : null
 
       const load = w.suspension.update(hit ? hit.timeOfImpact : null, wc.radius, dt)
       w.grounded = !!hit
@@ -262,6 +278,13 @@ export class VehicleController {
       w.contactPoint.copy(_mount).addScaledVector(_up, -hit.timeOfImpact)
       w.surface = this.surfaceAt(w.contactPoint.x, w.contactPoint.z)
       const ground = surfaceProps(w.surface)
+      if (load > 0) {
+        supportCount++
+        supportGrip += ground.grip
+        _roadNormal.x += hit.normal.x
+        _roadNormal.y += hit.normal.y
+        _roadNormal.z += hit.normal.z
+      }
 
       // Suspension pushes the chassis along its up axis.
       _impulse.copy(_up).multiplyScalar(load * dt)
@@ -298,6 +321,8 @@ export class VehicleController {
           dt,
           surfaceGrip: ground.grip,
           surfaceDrag: ground.drag,
+          arcadeGripScale: 1 + (cfg.arcade.lateralGripMultiplier - 1) * arcadeBlend * ground.grip,
+          postPeakGrip: cfg.arcade.postPeakGrip * arcadeBlend * ground.grip,
           // In a drift the guidance carves the path, so the tires' sideways grip steps back.
           lateralGripScale: (this.isRear[i] ? rearGrip : 1) * (1 - driftCfg.lateralRelief * this.drift.amount),
           combined: this.isRear[i] && combinedRear,
@@ -318,7 +343,11 @@ export class VehicleController {
       w.spin += (vLong / wc.radius) * dt
     }
 
-    this.applyStabilityAssist(input.handbrake, speed, lv, dt)
+    if (cfg.arcade.enabled) {
+      this.applyArcadeHandling(supportCount, supportGrip, arcadeBlend, lv, dt)
+    } else {
+      this.applyStabilityAssist(input.handbrake, speed, lv, dt)
+    }
     this.applyDriftGuidance(input.steer, groundedCount, dt)
 
     // Nitro is thrust at the center of mass, not tire force: the rears are
@@ -344,6 +373,36 @@ export class VehicleController {
       _point.set(0, comY, this.rearAxleZ).applyQuaternion(_q).add(_pos)
       body.applyImpulseAtPoint(_impulse.copy(_up).multiplyScalar(-down * (1 - cfg.downforceFrontShare)), _point, true)
     }
+  }
+
+  /** Grounded arcade yaw and trajectory support, bounded by the authored tune. */
+  private applyArcadeHandling(contacts: number, gripSum: number, blend: number, initial: RAPIER.Vector, dt: number): void {
+    const cfg = this.cfg.arcade
+    if (contacts < 3 || blend <= 0 || this.forwardSpeed < cfg.minSpeed) return
+    _roadNormal.normalize()
+    _roadForward.copy(_fwd).addScaledVector(_roadNormal, -_fwd.dot(_roadNormal)).normalize()
+    _roadRight.crossVectors(_roadForward, _roadNormal).normalize()
+    const grip = Math.max(.1, Math.min(1, gripSum / contacts))
+    const strength = blend * contacts / this.wheels.length
+    const forward = initial.x * _roadForward.x + initial.y * _roadForward.y + initial.z * _roadForward.z
+    const side = initial.x * _roadRight.x + initial.y * _roadRight.y + initial.z * _roadRight.z
+    const maxAcceleration = cfg.maxLateralG * 9.81 * grip
+    const yawLimit = maxAcceleration / Math.max(cfg.minSpeed, Math.abs(forward))
+    const target = Math.max(-yawLimit, Math.min(yawLimit, forward * Math.tan(this.steerAngle) / this.wheelbase))
+    const angular = this.body.angvel()
+    const yaw = angular.x * _roadNormal.x + angular.y * _roadNormal.y + angular.z * _roadNormal.z
+    const correction = (target - yaw) * (1 - Math.exp(-cfg.yawResponse * dt))
+    const maxChange = cfg.maxYawAcceleration * dt
+    _impulse.copy(_roadNormal).multiplyScalar(Math.max(-maxChange, Math.min(maxChange, correction)) * this.yawInertia * strength)
+    this.body.applyTorqueImpulse(_impulse, true)
+
+    // Supply only the lateral acceleration the tires have not already delivered.
+    const desired = Math.max(-maxAcceleration, Math.min(maxAcceleration, -forward * target - side * cfg.sidewaysRecovery)) * dt
+    const current = this.body.linvel()
+    const delivered = (current.x - initial.x) * _roadRight.x + (current.y - initial.y) * _roadRight.y + (current.z - initial.z) * _roadRight.z
+    const budget = cfg.assistMaxG * 9.81 * grip * dt
+    _impulse.copy(_roadRight).multiplyScalar(Math.max(-budget, Math.min(budget, desired - delivered)) * this.cfg.massKg * strength)
+    this.body.applyImpulse(_impulse, true)
   }
 
   /**
