@@ -96,3 +96,5 @@ node scripts/track/derive-from-chunks.mjs scripts/track/drift-park.config.mjs
 ```
 
 Set `DRIFT_TRACK_SOURCE` to use a different path to the same GLB.
+
+Normal driving uses arcade cornering assistance by default, including stronger steering at speed and sustained lateral grip. Handbrake drifting fades out this assistance. Per-car `arcade` tuning is merged over `DEFAULT_VEHICLE_CONFIG`; set `arcade.enabled` to `false` for the legacy handling.

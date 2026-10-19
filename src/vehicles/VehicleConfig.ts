@@ -1,3 +1,4 @@
+import type { ArcadeHandlingConfig } from './ArcadeHandling'
 import type { KeyboardSteeringConfig } from './KeyboardSteering'
 import { DEFAULT_DRIFT, type DriftConfig } from './Drift'
 
@@ -127,6 +128,7 @@ export interface VehicleConfig {
   /** How fast the wheels turn in, rad/s at standstill; slows with speed like the angle. */
   steerSpeed: number
   /** Digital-key response times; analog devices keep steerSpeed/steerReturnScale. */
+  arcade: ArcadeHandlingConfig
   keyboardSteering: KeyboardSteeringConfig
   /** Return-to-center is this much faster than turning in, so the car settles quickly. */
   steerReturnScale: number
@@ -215,6 +217,13 @@ export const DEFAULT_VEHICLE_CONFIG: VehicleConfig = {
   handbrakeForce: 9000,
   maxSteerAngle: 0.55,
   steerSpeed: 2.6,
+  arcade: {
+    enabled: true,
+    turnRadius: [[0, 4.5], [30, 6], [60, 10], [100, 22], [160, 40], [220, 70], [320, 125]],
+    lateralGripMultiplier: 2.6, postPeakGrip: .95,
+    maxLateralG: 5.5, assistMaxG: 4,
+    yawResponse: 10, maxYawAcceleration: 8, sidewaysRecovery: 8, minSpeed: 3,
+  },
   keyboardSteering: { turnInSec: .24, returnSec: .12, countersteerSec: .1 },
   steerReturnScale: 1.8,
   steerFalloffSpeed: 9,
@@ -255,6 +264,7 @@ export function resolveVehicleConfig(partial: Partial<VehicleConfig> | undefined
     ...d,
     ...partial,
     suspension: { ...d.suspension, ...partial.suspension },
+    arcade: { ...d.arcade, ...partial.arcade },
     keyboardSteering: { ...d.keyboardSteering, ...partial.keyboardSteering },
     tires: { ...d.tires, ...partial.tires },
     engine: { ...d.engine, ...partial.engine },
