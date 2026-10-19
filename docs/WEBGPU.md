@@ -32,7 +32,7 @@ performance captures record it with every frame:
   - `postfx.ts`: the post stack as TSL nodes. It has the same chain as the
     `postprocessing` one, which is WebGL only: bloom over a half-float scene
     pass, then ACES + sRGB (`renderOutput`), then SMAA (High) or FXAA, and the
-    intro whip-pan blur on top while active.
+    depth-aware per-object motion blur before bloom and grading (see [Motion blur](MOTION_BLUR.md)).
   - `materials.ts`: node twins of the game's custom WebGL materials:
 
     | WebGL | Node version |

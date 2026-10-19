@@ -23,6 +23,8 @@ export interface Settings {
   driftEvent: DriftEventId
   quality: QualityPreset
   postfx: boolean
+  /** Velocity blur amount, 0 disables both capture and blur. */
+  motionBlur: number
   /** WebGL, or the WebGPU trial (#50). Read once at startup: switching reloads the page. */
   renderer: RendererKind
   masterVolume: number
@@ -84,6 +86,7 @@ const defaultSettings: Settings = {
   driftEvent: 'flow',
   quality: defaultQuality(),
   postfx: !isMobile(),
+  motionBlur: typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : .65,
   renderer: 'webgl',
   masterVolume: 0.9,
   menuMusic: true,
@@ -107,6 +110,7 @@ function loadSettings(): Settings {
     if (!isAiDifficulty(merged.difficulty)) merged.difficulty = 'challenging'
     merged.opponents = [0, 1, 3].includes(merged.opponents) ? merged.opponents : 3
     if (!isTimeOfDay(merged.timeOfDay)) merged.timeOfDay = defaultSettings.timeOfDay
+    merged.motionBlur = typeof merged.motionBlur === 'number' && Number.isFinite(merged.motionBlur) ? Math.max(0, Math.min(1, merged.motionBlur)) : defaultSettings.motionBlur
     if (merged.renderer !== 'webgpu') merged.renderer = 'webgl'
     if (typeof merged.menuMusic !== 'boolean') merged.menuMusic = defaultSettings.menuMusic
     if (!isMusicTrack(merged.musicTrack)) merged.musicTrack = defaultSettings.musicTrack
