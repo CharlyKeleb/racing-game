@@ -637,6 +637,214 @@
           "decodedBytes": 79
         }
       ]
+    },
+    {
+      "label": "branch-after-routing-fix",
+      "capturedAt": "2026-10-19T14:28:35.356Z",
+      "origin": "https://racing-game-p0-preview-v9l1zbqx2-wyns-projects-93871df3.vercel.app",
+      "transport": "authenticated-vercel-cli",
+      "passed": true,
+      "checkCount": 35,
+      "failures": [],
+      "responses": [
+        {
+          "path": "/",
+          "requestHeaders": {},
+          "status": 200,
+          "headers": {
+            "content-type": "text/html; charset=utf-8",
+            "content-encoding": "br",
+            "cache-control": "public, max-age=0, must-revalidate",
+            "etag": "W/\"444293f03031de16acae08469cbcee6e\"",
+            "x-vercel-cache": "MISS",
+            "age": "0"
+          },
+          "wireBodyBytes": 669,
+          "decodedBytes": 1348
+        },
+        {
+          "path": "/assets/index-B6flUP9n.js",
+          "requestHeaders": {},
+          "status": 200,
+          "headers": {
+            "content-type": "application/javascript; charset=utf-8",
+            "content-encoding": "br",
+            "cache-control": "public, max-age=31536000, immutable",
+            "etag": "W/\"782df3c3c9d5f5916ac9075e2fca3df3\"",
+            "x-vercel-cache": "MISS",
+            "age": "0"
+          },
+          "wireBodyBytes": 94788,
+          "decodedBytes": 281486
+        },
+        {
+          "path": "/assets/index-8UqHb8j0.css",
+          "requestHeaders": {},
+          "status": 200,
+          "headers": {
+            "content-type": "text/css; charset=utf-8",
+            "content-encoding": "br",
+            "cache-control": "public, max-age=31536000, immutable",
+            "etag": "W/\"c0ccc708c7f721e201c2a7513234454d\"",
+            "x-vercel-cache": "MISS",
+            "age": "0"
+          },
+          "wireBodyBytes": 14957,
+          "decodedBytes": 63897
+        },
+        {
+          "path": "/assets/Game-ThfZdRDR.js",
+          "requestHeaders": {},
+          "status": 200,
+          "headers": {
+            "content-type": "application/javascript; charset=utf-8",
+            "content-encoding": "br",
+            "cache-control": "public, max-age=31536000, immutable",
+            "etag": "W/\"1031527ff17b79b9d3b47e93748d6328\"",
+            "x-vercel-cache": "MISS",
+            "age": "0"
+          },
+          "wireBodyBytes": 1917705,
+          "decodedBytes": 5409852
+        },
+        {
+          "path": "/assets/engineWorklet-B_-0Oipl.js",
+          "requestHeaders": {},
+          "status": 200,
+          "headers": {
+            "content-type": "application/javascript; charset=utf-8",
+            "content-encoding": "br",
+            "cache-control": "public, max-age=31536000, immutable",
+            "etag": "W/\"80a158c4a7cf99d347b1499a52b09c0f\"",
+            "x-vercel-cache": "MISS",
+            "age": "0"
+          },
+          "wireBodyBytes": 1090,
+          "decodedBytes": 2245
+        },
+        {
+          "path": "/models/tracks/nurburgring/track.json",
+          "requestHeaders": {},
+          "status": 200,
+          "headers": {
+            "content-type": "application/json; charset=utf-8",
+            "content-encoding": "br",
+            "cache-control": "public, max-age=0, must-revalidate",
+            "etag": "W/\"b65e53ad38a39d256e461771bd0af875\"",
+            "x-vercel-cache": "MISS",
+            "age": "0"
+          },
+          "wireBodyBytes": 19418,
+          "decodedBytes": 88805
+        },
+        {
+          "path": "/models/tracks/nurburgring/track.json",
+          "requestHeaders": {
+            "if-none-match": "W/\"b65e53ad38a39d256e461771bd0af875\""
+          },
+          "status": 304,
+          "headers": {
+            "cache-control": "public, max-age=0, must-revalidate",
+            "etag": "\"b65e53ad38a39d256e461771bd0af875\"",
+            "x-vercel-cache": "HIT"
+          },
+          "wireBodyBytes": 0,
+          "decodedBytes": 0
+        },
+        {
+          "path": "/models/cars/porsche911/porsche911_low.glb",
+          "requestHeaders": {},
+          "status": 200,
+          "headers": {
+            "content-type": "model/gltf-binary",
+            "content-encoding": "br",
+            "cache-control": "public, max-age=0, must-revalidate",
+            "etag": "W/\"6abb69bbdd6e1443335e6b4b16cc9e6f\"",
+            "x-vercel-cache": "MISS",
+            "age": "0"
+          },
+          "wireBodyBytes": 407949,
+          "decodedBytes": 563636
+        },
+        {
+          "path": "/previews/tracks/nurburgring.webp",
+          "requestHeaders": {},
+          "status": 200,
+          "headers": {
+            "content-type": "image/webp",
+            "cache-control": "public, max-age=0, must-revalidate",
+            "etag": "\"3a8bc8d3194f4c22812aa70f3bee8683\"",
+            "x-vercel-cache": "MISS",
+            "age": "0",
+            "accept-ranges": "bytes"
+          },
+          "wireBodyBytes": 110310,
+          "decodedBytes": 110310
+        },
+        {
+          "path": "/audio/porsche911/engine-bank.wav",
+          "requestHeaders": {
+            "range": "bytes=0-127",
+            "accept-encoding": "identity"
+          },
+          "status": 206,
+          "headers": {
+            "content-type": "audio/wave",
+            "cache-control": "public, max-age=0, must-revalidate",
+            "etag": "\"9a556d079b940da6eaf7f27952f36035\"",
+            "x-vercel-cache": "MISS",
+            "age": "0",
+            "accept-ranges": "bytes",
+            "content-range": "bytes 0-127/432732"
+          },
+          "wireBodyBytes": 128,
+          "decodedBytes": 128
+        },
+        {
+          "path": "/assets/__delivery_missing__-AbCd1234.js",
+          "requestHeaders": {},
+          "status": 404,
+          "headers": {
+            "content-type": "text/plain; charset=utf-8",
+            "cache-control": "no-store"
+          },
+          "wireBodyBytes": 79,
+          "decodedBytes": 79
+        },
+        {
+          "path": "/assets/__delivery_missing__-AbCd1234.wasm",
+          "requestHeaders": {},
+          "status": 404,
+          "headers": {
+            "content-type": "text/plain; charset=utf-8",
+            "cache-control": "no-store"
+          },
+          "wireBodyBytes": 79,
+          "decodedBytes": 79
+        },
+        {
+          "path": "/models/__delivery_missing__.glb",
+          "requestHeaders": {},
+          "status": 404,
+          "headers": {
+            "content-type": "text/plain; charset=utf-8",
+            "cache-control": "no-store"
+          },
+          "wireBodyBytes": 79,
+          "decodedBytes": 79
+        },
+        {
+          "path": "/previews/__delivery_missing__.webp",
+          "requestHeaders": {},
+          "status": 404,
+          "headers": {
+            "content-type": "text/plain; charset=utf-8",
+            "cache-control": "no-store"
+          },
+          "wireBodyBytes": 79,
+          "decodedBytes": 79
+        }
+      ]
     }
   ],
   "limitations": [
@@ -644,5 +852,8 @@
     "Rapier is embedded in engine JavaScript; successful standalone WASM delivery is not applicable.",
     "Meshopt worker execution was not browser-tested.",
     "Protected-preview requests use the official authenticated Vercel CLI; credentials and cookies are excluded."
-  ]
+  ],
+  "auditedRoutingRevision": "136bb57",
+  "routingConfigSha256": "301364f753ae78f13087f917abe9bbd83c2514652cf525780e26a63d8da8c999",
+  "vercelCliVersion": "64.5.0"
 }
