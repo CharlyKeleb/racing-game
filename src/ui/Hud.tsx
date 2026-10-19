@@ -4,6 +4,7 @@ import { DriftEventHud, DriftComboHud } from './DriftHud'
 import { formatTime } from '../racing/LapTimer'
 import { useGame, useTelemetry } from './hooks'
 import { Minimap } from './Minimap'
+import { Leaderboard, PositionBadge } from './RacePosition'
 import { RivalTags } from './RivalTags'
 import { NitroGauge, RpmGauge, Speedometer } from './Speedometer'
 
@@ -45,7 +46,7 @@ export function Hud() {
     <div ref={root} className={`hud${t.nitroActive ? ' hud--nitro' : ''}${t.nitroPerfect ? ' hud--nitro-perfect' : ''}`}>
       <div className="hud-speedlines" aria-hidden="true" />
       <div className="hud-tl" data-tag-exclusion>
-        {t.standings.length > 1 && <div className="hud-lap" aria-label="Race position"><span className="eyebrow">Position</span><b>{t.standings.find(s => s.player)?.position ?? 1}</b><span className="hud-lap__total">/{t.standings.length}</span></div>}
+        {t.standings.length > 1 && <PositionBadge position={t.standings.find(s => s.player)?.position ?? 1} total={t.standings.length} />}
         {drift ? <DriftEventHud /> : <><div className="hud-lap">
           <span className="eyebrow">Lap</span>
           <b>{Math.max(t.lap, 1)}</b>
@@ -65,7 +66,7 @@ export function Hud() {
       </div>
       <div className="hud-tr" data-tag-exclusion>
         <div className="hud-fps mono">{t.fps} FPS</div>
-        {t.standings.length > 1 && <ol className="hud-field" aria-label="Race leaderboard">{t.standings.map(s => <li key={s.id} className={s.player ? 'hud-field__player' : ''}><b>{s.position}</b><span>{s.name.split(' · ')[0]}</span><small className="mono">{s.position === 1 ? 'LEADER' : s.gapMs !== null ? `+${(s.gapMs / 1000).toFixed(2)}s` : s.gapLaps > 0 ? `+${s.gapLaps} LAP` : `+${Math.round(s.gapMeters)}m`}</small></li>)}</ol>}
+        {t.standings.length > 1 && <Leaderboard standings={t.standings} />}
       </div>
       <div className="hud-bl">
         <Minimap />
@@ -73,7 +74,7 @@ export function Hud() {
 
       <RivalTags />
       {t.drafting > 0.15 && phase === 'racing' && <div className="hud-drafting"><span>Slipstream</span><b>Building nitro</b></div>}
-      {t.wrongWay && <div className="hud-wrongway">Wrong way</div>}
+      {t.wrongWay ? <div className="hud-wrongway">Wrong way</div> : t.missedCheckpoint && <div className="hud-wrongway hud-wrongway--missed">Missed checkpoint<small>Press R to go back</small></div>}
 
       {drift ? <DriftComboHud /> : t.driftActive ? (
         <div className="hud-drift">

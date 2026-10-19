@@ -187,7 +187,8 @@ it('updates sub-waypoint overtakes and orders cars behind the start line', () =>
   const a: RaceEntry = { id:0, name:'You', player:true, lap:1, checkpoint:0, index:1, finishMs:null, x:0, z:4.2 }
   const b = { ...a, id:1, player:false, z:4.3 }
   expect(standings.snapshot([a,b])[0].id).toBe(1)
-  a.z = 4.4
+  // Still between waypoints (4 m apart), but clear of the side-by-side hold.
+  a.z = 5.2
   expect(standings.snapshot([a,b])[0].id).toBe(0)
   a.z = -9; b.z = -8
   expect(standings.snapshot([a,b])[0].id).toBe(1)

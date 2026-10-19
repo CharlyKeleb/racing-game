@@ -102,6 +102,8 @@ function readTyres(ctrl: Vehicle['controller'], out: TyreBrakeInput): TyreBrakeI
 }
 /** Seconds of driving against the race direction before the HUD says so. */
 const WRONG_WAY_DELAY = 1.2
+/** Metres past an uncrossed gate before the HUD says the checkpoint was missed. */
+const MISSED_GATE_METRES = 40
 /** Garage turntable camera: distance (m) and lens (deg) when there's room. */
 const SHOWROOM_DISTANCE = 7.5
 const SHOWROOM_FOV = 42
@@ -650,6 +652,7 @@ export class Game {
       if (this.disposed || token !== this.opponentToken) return
       this.resetCar()
       this.effects.clear()
+        this.standings?.reset()
       this.playerEntry.finishMs = null
       this.playerEntry.lap = 0
       this.playerEntry.checkpoint = 0
@@ -1452,6 +1455,7 @@ export class Game {
       trackIndex: this.progress.index,
       distanceLeft: this.distanceLeft(),
       wrongWay: this.wrongWayTime > WRONG_WAY_DELAY,
+      missedCheckpoint: this.race.state === 'racing' && !!this.standings && this.standings.overrun(this.playerEntry) > MISSED_GATE_METRES,
       standings,
       opponents: this.opponents.map(o => ({ id: o.id, x: o.vehicle.position.x, z: o.vehicle.position.z })),
     })

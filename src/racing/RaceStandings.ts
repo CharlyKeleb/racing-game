@@ -15,6 +15,12 @@ export interface RaceEntry {
 const HINT_RADIUS = 30
 /** Centreline metres either side of the tracked index searched for the exact projection. */
 const HINT_WINDOW = 80
+/**
+ * Metres a car must be ahead before it takes a place from the car that held it.
+ * Side by side, the projections of two cars cross back and forth every frame,
+ * and the HUD flickered between positions.
+ */
+const OVERTAKE_MARGIN = 0.75
 
 export interface Standing { id: number; name: string; player: boolean; position: number; finishMs: number | null; gapMeters: number; gapLaps: number; gapMs: number | null }
 
@@ -24,6 +30,8 @@ export class RaceStandings {
   private readonly sectorLengths: number[]
   readonly lapLength: number
   private readonly line: readonly Point3[]
+  /** Last snapshot's order (id → index), for overtake hysteresis. */
+  private readonly places = new Map<number, number>()
   constructor(line: readonly Point3[], checkpoints: readonly { position: Point3 }[]) {
     this.line = line
     this.gates = checkpoints.map(({ position }) => {
@@ -143,20 +151,55 @@ export class RaceStandings {
     for (let i = 0; i < entry.checkpoint; i++) distance += this.sectorLengths[i]
     return distance + this.sectorMetres(entry)
   }
+  /**
+   * Metres a car's tracked centreline position has run past the end of its
+   * validated sector: > 0 means it went on without passing the next gate.
+   */
+  overrun(entry: RaceEntry): number {
+    const n = this.line.length, count = this.gates.length
+    const start = this.gates[entry.checkpoint], end = this.gates[(entry.checkpoint + 1) % count]
+    const span = (end - start + n) % n || n
+    const k = (entry.index - start + n) % n
+    // Past the end, but nearer to it than to the sector start (i.e. not behind it).
+    if (k <= span || k - span > n - k) return 0
+    let metres = 0
+    for (let i = span; i < k; i++) metres += this.segment((start + i) % n)
+    return metres
+  }
+
   snapshot(entries: readonly RaceEntry[]): Standing[] {
+    const distances = new Map<number, number>()
+    for (const e of entries) distances.set(e.id, this.distance(e))
     const sorted = [...entries].sort((a, b) => {
       if (a.finishMs !== null || b.finishMs !== null) {
         if (a.finishMs === null) return 1
         if (b.finishMs === null) return -1
         return a.finishMs - b.finishMs || a.id - b.id
       }
-      return this.progress(b) - this.progress(a) || a.id - b.id
+      return distances.get(b.id)! - distances.get(a.id)! || a.id - b.id
     })
+    // A car keeps a place it held until the one behind is clearly past.
+    for (let i = 1; i < sorted.length; i++) {
+      const ahead = sorted[i - 1], behind = sorted[i]
+      if (ahead.finishMs !== null || behind.finishMs !== null) continue
+      const held = this.places.get(behind.id), other = this.places.get(ahead.id)
+      if (held === undefined || other === undefined || held > other) continue
+      if (distances.get(ahead.id)! - distances.get(behind.id)! < OVERTAKE_MARGIN) {
+        sorted[i - 1] = behind; sorted[i] = ahead
+      }
+    }
+    this.places.clear()
+    sorted.forEach((e, i) => this.places.set(e.id, i))
     const leader = sorted[0]
-    const leaderDistance = leader ? this.distance(leader) : 0
+    const leaderDistance = leader ? distances.get(leader.id)! : 0
     return sorted.map((e, i) => {
-      const gapMeters = Math.max(0, leaderDistance - this.distance(e))
+      const gapMeters = Math.max(0, leaderDistance - distances.get(e.id)!)
       return { id: e.id, name: e.name, player: e.player, position: i + 1, finishMs: e.finishMs, gapMeters, gapLaps: Math.floor(gapMeters / this.lapLength), gapMs: e.finishMs !== null && leader.finishMs !== null ? e.finishMs - leader.finishMs : null }
     })
+  }
+
+  /** Forget held places (a new race). */
+  reset(): void {
+    this.places.clear()
   }
 }
