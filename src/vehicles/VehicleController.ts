@@ -1,3 +1,4 @@
+import { keyboardSteeringAngle } from './KeyboardSteering'
 import RAPIER from '@dimforge/rapier3d-compat'
 import * as THREE from 'three'
 import type { InputState } from '../input/InputManager'
@@ -164,9 +165,13 @@ export class VehicleController {
     const speedFactor = gripFactor + (Math.max(gripFactor, 0.55) - gripFactor) * this.drift.amount
     const available = steeringLimit(this.steeringConfig, speed, input.handbrake ? 1 : this.drift.amount, surfaceProps(this.surfaceAt(t.x,t.z)).grip)
     const targetSteer = -input.steer * available
-    const centering = Math.abs(targetSteer) < Math.abs(this.steerAngle) || targetSteer * this.steerAngle < 0
-    const maxDelta = cfg.steerSpeed * speedFactor * (centering ? cfg.steerReturnScale : 1) * dt
-    this.steerAngle += Math.max(-maxDelta, Math.min(maxDelta, targetSteer - this.steerAngle))
+    if (input.steerSource === 'keyboard') {
+      this.steerAngle = keyboardSteeringAngle(this.steerAngle, targetSteer, available, dt, cfg.keyboardSteering)
+    } else {
+      const centering = Math.abs(targetSteer) < Math.abs(this.steerAngle) || targetSteer * this.steerAngle < 0
+      const maxDelta = cfg.steerSpeed * speedFactor * (centering ? cfg.steerReturnScale : 1) * dt
+      this.steerAngle += Math.max(-maxDelta, Math.min(maxDelta, targetSteer - this.steerAngle))
+    }
 
     // Pedals ramp instead of stepping; brakes bite twice as fast as the throttle.
     this.throttle = approach(this.throttle, input.throttle, cfg.pedalRate * dt)
@@ -226,6 +231,8 @@ export class VehicleController {
         handbrake: input.handbrake,
         slipAngle: Math.atan2(sideways, Math.max(speed, 0.1)),
         downshift,
+        // Normal keyboard cornering must not switch to scripted drift on brake release.
+        allowBrakeTap: input.steerSource !== 'keyboard' || this.eventDrift !== null,
       },
       driftCfg,
       dt,

@@ -1,3 +1,4 @@
+import type { KeyboardSteeringConfig } from './KeyboardSteering'
 import { DEFAULT_DRIFT, type DriftConfig } from './Drift'
 
 /**
@@ -125,6 +126,8 @@ export interface VehicleConfig {
   maxSteerAngle: number
   /** How fast the wheels turn in, rad/s at standstill; slows with speed like the angle. */
   steerSpeed: number
+  /** Digital-key response times; analog devices keep steerSpeed/steerReturnScale. */
+  keyboardSteering: KeyboardSteeringConfig
   /** Return-to-center is this much faster than turning in, so the car settles quickly. */
   steerReturnScale: number
   /** Speed (m/s) at which the steer angle and rate are halved. Lower = calmer at speed. */
@@ -212,6 +215,7 @@ export const DEFAULT_VEHICLE_CONFIG: VehicleConfig = {
   handbrakeForce: 9000,
   maxSteerAngle: 0.55,
   steerSpeed: 2.6,
+  keyboardSteering: { turnInSec: .24, returnSec: .12, countersteerSec: .1 },
   steerReturnScale: 1.8,
   steerFalloffSpeed: 9,
   steerPeakSlipScale: 0.5,
@@ -251,6 +255,7 @@ export function resolveVehicleConfig(partial: Partial<VehicleConfig> | undefined
     ...d,
     ...partial,
     suspension: { ...d.suspension, ...partial.suspension },
+    keyboardSteering: { ...d.keyboardSteering, ...partial.keyboardSteering },
     tires: { ...d.tires, ...partial.tires },
     engine: { ...d.engine, ...partial.engine },
     nitro: { ...d.nitro, ...partial.nitro },

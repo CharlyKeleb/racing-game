@@ -27,6 +27,10 @@ npm run dev
 | R | Reset car |
 | Esc / P | Pause |
 
+Keyboard steering builds progressively, with a quicker return through centre when
+changing direction. In normal races, a short brake tap while turning no longer
+activates guided drift on keyboard; use Space for a deliberate drift entry.
+
 On phones and tablets, on-screen touch controls appear: drag to steer on the
 left; Gas, Brake, N₂O and Drift are on the right.
 
