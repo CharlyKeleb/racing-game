@@ -20,12 +20,22 @@ export interface Standing { id: number; name: string; player: boolean; position:
 
 /** Gate-validated progress: skipping a corner cannot promote a car into a later sector. */
 export class RaceStandings {
+  private readonly segmentLengths: Float64Array
+  private readonly routeMetres: Float64Array
+  private readonly sectorStarts: Float64Array
   private readonly gates: number[]
   private readonly sectorLengths: number[]
   readonly lapLength: number
   private readonly line: readonly Point3[]
   constructor(line: readonly Point3[], checkpoints: readonly { position: Point3 }[]) {
     this.line = line
+    this.segmentLengths = new Float64Array(line.length)
+    this.routeMetres = new Float64Array(line.length + 1)
+    for (let i = 0; i < line.length; i++) {
+      const a = line[i], b = line[(i + 1) % line.length]
+      this.segmentLengths[i] = Math.hypot(b.x - a.x, b.z - a.z)
+      this.routeMetres[i + 1] = this.routeMetres[i] + this.segmentLengths[i]
+    }
     this.gates = checkpoints.map(({ position }) => {
       let best = 0, distance = Infinity
       for (let i = 0; i < line.length; i++) {
@@ -36,15 +46,11 @@ export class RaceStandings {
     })
     this.sectorLengths = this.gates.map((start, gate) => {
       const end = this.gates[(gate + 1) % this.gates.length]
-      let length = 0
-      for (let i = start; ; i = (i + 1) % line.length) {
-        const next = (i + 1) % line.length
-        length += Math.hypot(line[next].x - line[i].x, line[next].z - line[i].z)
-        if (next === end) break
-      }
-      return length
+      return this.metresFrom(start, (end - start + line.length) % line.length || line.length, 0)
     })
-    this.lapLength = this.sectorLengths.reduce((sum, length) => sum + length, 0)
+    this.sectorStarts = new Float64Array(this.gates.length + 1)
+    for (let i = 0; i < this.gates.length; i++) this.sectorStarts[i + 1] = this.sectorStarts[i] + this.sectorLengths[i]
+    this.lapLength = this.sectorStarts[this.gates.length]
   }
   /**
    * Metres travelled into the car's validated sector, measured along the
@@ -81,7 +87,7 @@ export class RaceStandings {
     for (let k = from; k < to; k++) {
       const a = this.line[(start + k) % n], b = this.line[(start + k + 1) % n]
       const dx = b.x - a.x, dz = b.z - a.z
-      const segment = Math.hypot(dx, dz)
+      const segment = this.segment((start + k) % n)
       const t = Math.max(0, Math.min(1, ((entry.x - a.x) * dx + (entry.z - a.z) * dz) / (segment * segment || 1)))
       const d = (entry.x - a.x - dx * t) ** 2 + (entry.z - a.z - dz * t) ** 2
       if (d < best) { best = d; metres = along + t * segment }
@@ -113,20 +119,18 @@ export class RaceStandings {
 
   /** Length of the centreline segment from point i to the next. */
   private segment(i: number): number {
-    const a = this.line[i], b = this.line[(i + 1) % this.line.length]
-    return Math.hypot(b.x - a.x, b.z - a.z)
+    return this.segmentLengths[i]
   }
 
-  /** Centreline metres from point `start` over `k` whole segments plus `t` of the next. */
+  /** Constant-time centreline distance, including a sector crossing the finish. */
   private metresFrom(start: number, k: number, t: number): number {
     const n = this.line.length
-    let metres = 0
-    for (let i = 0; i <= k && i < n; i++) {
-      const a = this.line[(start + i) % n], b = this.line[(start + i + 1) % n]
-      const segment = Math.hypot(b.x - a.x, b.z - a.z)
-      metres += i < k ? segment : t * segment
-    }
-    return metres
+    const steps = Math.min(n, Math.max(0, k))
+    const end = (start + steps) % n
+    const whole = steps === n ? this.routeMetres[n] : end >= start
+      ? this.routeMetres[end] - this.routeMetres[start]
+      : this.routeMetres[n] - this.routeMetres[start] + this.routeMetres[end]
+    return whole + (steps < n ? t * this.segmentLengths[end] : 0)
   }
 
   /** Sectors completed plus the share of the current one; ranks cars. */
@@ -140,22 +144,33 @@ export class RaceStandings {
   distance(entry: RaceEntry): number {
     if (entry.finishMs !== null) return Math.max(1, entry.lap) * this.lapLength
     let distance = (Math.max(1, entry.lap) - 1) * this.lapLength
-    for (let i = 0; i < entry.checkpoint; i++) distance += this.sectorLengths[i]
+    distance += this.sectorStarts[entry.checkpoint]
     return distance + this.sectorMetres(entry)
   }
   snapshot(entries: readonly RaceEntry[]): Standing[] {
-    const sorted = [...entries].sort((a, b) => {
-      if (a.finishMs !== null || b.finishMs !== null) {
-        if (a.finishMs === null) return 1
-        if (b.finishMs === null) return -1
-        return a.finishMs - b.finishMs || a.id - b.id
+    // Project each car once, rather than on every sort comparison and gap lookup.
+    const ranked = entries.map(entry => {
+      const sector = this.sectorMetres(entry)
+      return {
+        entry,
+        progress: (Math.max(1, entry.lap) - 1) * this.gates.length + entry.checkpoint + sector / (this.sectorLengths[entry.checkpoint] || 1),
+        distance: entry.finishMs !== null ? Math.max(1, entry.lap) * this.lapLength :
+          (Math.max(1, entry.lap) - 1) * this.lapLength + this.sectorStarts[entry.checkpoint] + sector,
       }
-      return this.progress(b) - this.progress(a) || a.id - b.id
     })
+    ranked.sort((a, b) => {
+      if (a.entry.finishMs !== null || b.entry.finishMs !== null) {
+        if (a.entry.finishMs === null) return 1
+        if (b.entry.finishMs === null) return -1
+        return a.entry.finishMs - b.entry.finishMs || a.entry.id - b.entry.id
+      }
+      return b.progress - a.progress || a.entry.id - b.entry.id
+    })
+    const sorted = ranked.map(row => row.entry)
     const leader = sorted[0]
-    const leaderDistance = leader ? this.distance(leader) : 0
+    const leaderDistance = ranked[0]?.distance ?? 0
     return sorted.map((e, i) => {
-      const gapMeters = Math.max(0, leaderDistance - this.distance(e))
+      const gapMeters = Math.max(0, leaderDistance - ranked[i].distance)
       return { id: e.id, name: e.name, player: e.player, position: i + 1, finishMs: e.finishMs, gapMeters, gapLaps: Math.floor(gapMeters / this.lapLength), gapMs: e.finishMs !== null && leader.finishMs !== null ? e.finishMs - leader.finishMs : null }
     })
   }

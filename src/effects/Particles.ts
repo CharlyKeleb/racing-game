@@ -131,6 +131,7 @@ export class ParticlePool {
   private readonly scalarState: readonly Float32Array[]
   private cursor = 0
   private live = 0
+  private limit: number
 
   /**
    * @param nearFade distance from the lens (m) where particles start / finish
@@ -139,6 +140,7 @@ export class ParticlePool {
    */
   constructor(max: number, look: ParticleLook, renderOrder = 2, nearFade: [number, number] = [1.5, 6]) {
     this.max = max
+    this.limit = max
     this.look = look
     this.pos = new Float32Array(max * 3)
     this.size = new Float32Array(max)
@@ -195,9 +197,9 @@ export class ParticlePool {
 
   /** `groundY`: grains stop and settle when they fall back to this height. */
   spawn(p: ParticleSpawn, groundY = -Infinity): void {
-    if (this.max === 0) return
-    const i = this.live < this.max ? this.live++ : this.cursor
-    this.cursor = (i + 1) % this.max
+    if (this.limit === 0) return
+    const i = this.live < this.limit ? this.live++ : this.cursor
+    this.cursor = (i + 1) % this.limit
     this.colorDirty = true
     const j = i * 3
     this.pos[j] = p.x
@@ -284,6 +286,14 @@ export class ParticlePool {
       this.color[target + axis] = this.color[source + axis]
     }
     this.colorDirty = true
+  }
+
+  setLimit(limit: number): void {
+    this.limit = Math.max(0, Math.min(this.max, Math.floor(limit)))
+    this.live = Math.min(this.live, this.limit)
+    this.cursor = this.limit > 0 ? this.cursor % this.limit : 0
+    this.geometry.instanceCount = this.live
+    this.mesh.visible = this.live > 0
   }
 
   clear(): void {

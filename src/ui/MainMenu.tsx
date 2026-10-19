@@ -1,6 +1,6 @@
 import { driftEvent } from '../racing/driftEvents'
 import { GiCheckeredFlag, GiStopwatch, GiRaceCar, GiRoad, GiHomeGarage, GiGears } from 'react-icons/gi'
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { buildStats, carClass, performanceRank } from '../vehicles/CarBuild'
 import { getCar } from '../vehicles/carRegistry'
 import { GAME_MODES } from '../racing/gameModes'
@@ -9,13 +9,14 @@ import { useGame } from './hooks'
 import { CarPicker } from './CarPicker'
 import { Button, ClassBadge, StatBar } from './kit'
 import { OrbitLayer } from './OrbitLayer'
-import { SettingsDialog } from './Settings'
 import { RaceSetup } from './RaceSetup'
 import { TrackSelection } from './TrackSelection'
 import { TrackAerial } from './TrackAerial'
 import trackPreviews from './trackPreviews.json'
 import { RevButton } from './RevButton'
 import { TIME_PRESETS } from '../world/timeOfDay'
+
+const SettingsDialog = lazy(() => import('./Settings').then(module => ({ default: module.SettingsDialog })))
 
 export function MainMenu() {
   const game = useGameInstance()
@@ -70,7 +71,7 @@ export function MainMenu() {
       </div>
 
       {showRaceSetup && <RaceSetup onClose={() => setShowRaceSetup(false)} />}
-      {showSettings && <SettingsDialog onClose={() => setShowSettings(false)} />}
+      {showSettings && <Suspense fallback={<div role="status">Loading settings…</div>}><SettingsDialog onClose={() => setShowSettings(false)} /></Suspense>}
     </div>
   )
 }

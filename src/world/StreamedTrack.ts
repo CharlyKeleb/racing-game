@@ -1,7 +1,8 @@
+import { GeometryWarmup } from '../engine/GeometryWarmup'
 import { performanceCapture } from '../engine/PerformanceCapture'
 import RAPIER from '@dimforge/rapier3d-compat'
 import * as THREE from 'three'
-import type { AssetManager } from '../engine/AssetManager'
+import { disposeGltf, type AssetManager } from '../engine/AssetManager'
 import type { QualityPreset } from '../stores/gameStore'
 import { Surface } from '../vehicles/Surface'
 import type { SpawnPoint } from '../vehicles/Vehicle'
@@ -56,6 +57,17 @@ const VERTEX_COLOR_MATERIAL = '__vertex_color'
 const PLAN_INTERVAL = 0.2
 /** Seconds of travel to prefetch ahead of the car. */
 const LOOKAHEAD = 2.5
+/** Soft limits: the renderer cannot interrupt an individual buffer upload. */
+const UPLOAD_MS = 2
+const UPLOAD_BYTES = 256 * 1024
+
+interface ReadyChunk {
+  index: number
+  lod: number
+  object: THREE.Object3D
+  geometries: THREE.BufferGeometry[]
+  uploaded: number
+}
 
 interface ChunkState {
   info: ChunkInfo
@@ -65,6 +77,9 @@ interface ChunkState {
   object: THREE.Object3D | null
   /** LOD being fetched, if any. */
   loading: number
+  request: AbortController | null
+  retryAt: number
+  failures: number
 }
 
 const _ahead = new THREE.Vector3()
@@ -92,6 +107,7 @@ export class StreamedTrack implements RaceTrack {
   private readonly renderer: THREE.WebGLRenderer
   private readonly world: RAPIER.World
   private quality: QualityPreset
+  private materialRequest = 0
   private materials = new Map<string, THREE.Material>()
   private readonly fallbackMaterial = new THREE.MeshLambertMaterial({ color: 0x777777 })
   private readonly chunks: ChunkState[]
@@ -101,7 +117,10 @@ export class StreamedTrack implements RaceTrack {
   private readonly wanted: Int8Array
   private readonly distances: Float32Array
   private readonly current: Int8Array
-  private readonly ready: { index: number; lod: number; object: THREE.Object3D }[] = []
+  private readonly ready: ReadyChunk[] = []
+  private readonly warmup: GeometryWarmup
+  private readonly planFocus: [number, number] = [0, 0]
+  private readonly planAhead: [number, number] = [0, 0]
   private readonly pending: number[] = []
   private inFlight = 0
   private planTimer = 0
@@ -120,6 +139,7 @@ export class StreamedTrack implements RaceTrack {
     this.manifest = manifest
     this.assets = opts.assets
     this.renderer = opts.renderer
+    this.warmup = new GeometryWarmup(opts.renderer)
     this.camera = opts.camera
     this.scene = opts.scene
     this.world = opts.world
@@ -142,6 +162,7 @@ export class StreamedTrack implements RaceTrack {
       shown: NOT_LOADED,
       object: null,
       loading: NOT_LOADED,
+      request: null, retryAt: 0, failures: 0,
     }))
     this.infos = this.chunks.map((c) => c.info)
     this.killY = Math.min(...manifest.chunks.map((c) => c.min[1])) - 60
@@ -169,13 +190,21 @@ export class StreamedTrack implements RaceTrack {
     this.visuals ??= (async () => {
       if (this.disposed) return
       onProgress(0.05)
-      await this.loadMaterials(BUDGET[this.quality].tier)
-      if (this.disposed) return
+      let tier: Tier
+      do {
+        tier = BUDGET[this.quality].tier
+        await this.loadMaterials(tier)
+        if (this.disposed) return
+      } while (tier !== BUDGET[this.quality].tier)
       onProgress(0.4)
       await this.loadBackdrop()
       if (this.disposed) return
       onProgress(0.5)
       await this.preload(this.spawn.position, (p) => onProgress(0.5 + p * 0.5))
+      while (!this.disposed && tier !== BUDGET[this.quality].tier) {
+        tier = BUDGET[this.quality].tier
+        await this.loadMaterials(tier)
+      }
       if (!this.disposed) this.visualsReady = true
     })()
     return this.visuals
@@ -184,6 +213,7 @@ export class StreamedTrack implements RaceTrack {
   // ── Setup ───────────────────────────────────────────────────────────────
 
   private async loadMaterials(tier: Tier): Promise<void> {
+    const request = ++this.materialRequest
     const gltf = await this.assets.loadGltf(this.baseUrl + this.manifest.materials[tier])
     const loaded = (await gltf.parser.getDependencies('material')) as THREE.MeshStandardMaterial[]
     const next = new Map<string, THREE.Material>()
@@ -196,7 +226,26 @@ export class StreamedTrack implements RaceTrack {
         : new THREE.MeshStandardMaterial({ name: VERTEX_COLOR_MATERIAL, vertexColors: true, roughness: 0.95, metalness: 0 }),
     )
 
-    if (this.disposed) {
+    if (this.disposed || request !== this.materialRequest) {
+      disposeMaterials(next)
+      return
+    }
+    // Upload shared textures before racing; yield between indivisible uploads.
+    const textures = new Set<THREE.Texture>()
+    for (const material of next.values()) {
+      for (const value of Object.values(material)) if (value instanceof THREE.Texture) textures.add(value)
+    }
+    for (const texture of textures) {
+      if (this.disposed || request !== this.materialRequest) {
+        disposeMaterials(next)
+        return
+      }
+      const started = performanceCapture.active ? performance.now() : 0
+      this.renderer.initTexture(texture)
+      if (performanceCapture.active) performanceCapture.event('texture-upload', performance.now() - started, { name: texture.name })
+      await new Promise<void>(resolve => setTimeout(resolve, 0))
+    }
+    if (this.disposed || request !== this.materialRequest) {
       disposeMaterials(next)
       return
     }
@@ -204,6 +253,9 @@ export class StreamedTrack implements RaceTrack {
     this.materials = next
     // Retarget already-streamed meshes, then free the previous tier's GPU memory.
     this.forEachTrackMesh((mesh) => (mesh.material = this.materialFor(mesh.userData.mat as string)))
+    for (const chunk of this.ready) chunk.object.traverse(node => {
+      if (node instanceof THREE.Mesh) node.material = this.materialFor(node.userData.mat as string)
+    })
     disposeMaterials(old)
     await this.precompile()
   }
@@ -262,7 +314,10 @@ export class StreamedTrack implements RaceTrack {
 
   private async loadCollision(): Promise<void> {
     const gltf = await this.assets.loadGltf(this.baseUrl + this.manifest.collision)
-    if (this.disposed) return
+    if (this.disposed) {
+      disposeGltf(gltf)
+      return
+    }
     this.body = this.world.createRigidBody(RAPIER.RigidBodyDesc.fixed())
     const v = new THREE.Vector3()
     gltf.scene.updateMatrixWorld(true)
@@ -285,8 +340,8 @@ export class StreamedTrack implements RaceTrack {
         .setRestitution(barrier ? 0.2 : 0)
       const collider = this.world.createCollider(desc, this.body!)
       if (mesh.name.startsWith('road')) this.roadColliders.add(collider.handle)
-      mesh.geometry.dispose()
     })
+    disposeGltf(gltf)
   }
 
   private async loadSurfaces(): Promise<void> {
@@ -328,7 +383,7 @@ export class StreamedTrack implements RaceTrack {
         onProgress(++done / jobs.length)
       }
     }
-    await Promise.all([worker(), worker(), worker(), worker()])
+    await Promise.all(Array.from({ length: BUDGET[this.quality].concurrency }, () => worker()))
   }
 
   // ── Streaming ───────────────────────────────────────────────────────────
@@ -336,14 +391,27 @@ export class StreamedTrack implements RaceTrack {
   update(position: THREE.Vector3, velocity: THREE.Vector3, dt: number): void {
     // Nothing to stream into until the materials are in (see loadVisuals).
     if (!this.visualsReady) return
-    // Integrate at most one finished chunk per frame: GPU upload of a fresh
-    // chunk is the main hitch source on mobile.
-    const next = this.ready.shift()
+    // Upload a bounded portion of the nearest ready chunk before swapping it in.
+    const next = this.ready[0]
     if (next) {
-      const started = performanceCapture.active ? performance.now() : 0
-      if (this.wanted[next.index] === next.lod) this.show(next.index, next.lod, next.object)
-      else disposeObject(next.object)
-      if (performanceCapture.active) performanceCapture.event('chunk-integration', performance.now() - started, { index: next.index, lod: next.lod })
+      if (this.wanted[next.index] !== next.lod) {
+        this.ready.shift()
+        disposeObject(next.object)
+      } else {
+        const started = performance.now()
+        let bytes = 0
+        while (next.uploaded < next.geometries.length) {
+          bytes += this.warmup.upload(next.geometries[next.uploaded++])
+          if (bytes >= UPLOAD_BYTES || performance.now() - started >= UPLOAD_MS) break
+        }
+        if (performanceCapture.active) performanceCapture.event('chunk-upload', performance.now() - started, { index: next.index, lod: next.lod, bytes, remaining: next.geometries.length - next.uploaded })
+        if (next.uploaded === next.geometries.length) {
+          this.ready.shift()
+          const integrationStarted = performanceCapture.active ? performance.now() : 0
+          this.show(next.index, next.lod, next.object)
+          if (performanceCapture.active) performanceCapture.event('chunk-integration', performance.now() - integrationStarted, { index: next.index, lod: next.lod })
+        }
+      }
     }
 
     this.planTimer -= dt
@@ -352,7 +420,15 @@ export class StreamedTrack implements RaceTrack {
 
     _ahead.copy(position).addScaledVector(velocity, LOOKAHEAD)
     const budget = BUDGET[this.quality]
-    planLods(this.infos, [position.x, position.z], [_ahead.x, _ahead.z], budget.radii, this.current, this.wanted, this.distances)
+    this.planFocus[0] = position.x; this.planFocus[1] = position.z
+    this.planAhead[0] = _ahead.x; this.planAhead[1] = _ahead.z
+    planLods(this.infos, this.planFocus, this.planAhead, budget.radii, this.current, this.wanted, this.distances)
+
+    // Cancel obsolete network transfers; a decode already underway is discarded on completion.
+    for (let i = 0; i < this.chunks.length; i++) {
+      const chunk = this.chunks[i]
+      if (chunk.request && chunk.loading !== this.wanted[i]) chunk.request.abort()
+    }
 
     // Unloads are cheap — do them all now.
     for (let i = 0; i < this.chunks.length; i++) {
@@ -371,36 +447,57 @@ export class StreamedTrack implements RaceTrack {
     // Bound decoded-but-not-integrated resources together with active requests.
     if (this.inFlight + this.ready.length >= budget.concurrency) return
     const pending = this.pending
+    const now = performance.now()
     pending.length = 0
     for (let i = 0; i < this.chunks.length; i++) {
       const c = this.chunks[i]
       const w = this.wanted[i]
-      if (w !== NOT_LOADED && w !== c.shown && c.loading === NOT_LOADED && !this.ready.some((r) => r.index === i && r.lod === w)) pending.push(i)
+      if (w !== NOT_LOADED && w !== c.shown && c.loading === NOT_LOADED && c.retryAt <= now && !this.ready.some((r) => r.index === i && r.lod === w)) pending.push(i)
     }
     pending.sort((a, b) => this.distances[a] - this.distances[b])
     for (const i of pending) {
       if (this.inFlight + this.ready.length >= budget.concurrency) break
       const lod = this.wanted[i]
-      this.chunks[i].loading = lod
+      const chunk = this.chunks[i]
+      const request = new AbortController()
+      chunk.request = request
+      chunk.loading = lod
       this.inFlight++
-      this.fetchChunk(i, lod)
+      this.fetchChunk(i, lod, request.signal)
         .then((object) => {
-          if (this.disposed || this.wanted[i] !== lod) disposeObject(object)
-          else this.ready.push({ index: i, lod, object })
+          chunk.failures = 0
+          chunk.retryAt = 0
+          if (this.disposed || request.signal.aborted || this.wanted[i] !== lod) disposeObject(object)
+          else {
+            const geometries: THREE.BufferGeometry[] = []
+            object.traverse(node => {
+              if (node instanceof THREE.Mesh && node.visible) geometries.push(node.geometry)
+            })
+            this.ready.push({ index: i, lod, object, geometries, uploaded: 0 })
+            this.ready.sort((a, b) => this.distances[a.index] - this.distances[b.index])
+          }
         })
-        .catch((err: unknown) => console.warn(`[StreamedTrack] chunk ${this.manifest.chunks[i].id} lod${lod} failed`, err))
+        .catch((err: unknown) => {
+          if (request.signal.aborted || this.disposed) return
+          chunk.failures++
+          chunk.retryAt = performance.now() + Math.min(10000, 500 * 2 ** Math.min(5, chunk.failures - 1))
+          console.warn(`[StreamedTrack] chunk ${this.manifest.chunks[i].id} lod${lod} failed; retry delayed`, err)
+        })
         .finally(() => {
           this.inFlight--
-          if (this.chunks[i].loading === lod) this.chunks[i].loading = NOT_LOADED
+          if (chunk.request === request) {
+            chunk.loading = NOT_LOADED
+            chunk.request = null
+          }
         })
     }
   }
 
-  private async fetchChunk(index: number, lod: number): Promise<THREE.Object3D> {
+  private async fetchChunk(index: number, lod: number, signal?: AbortSignal): Promise<THREE.Object3D> {
     const started = performanceCapture.active ? performance.now() : 0
-    const gltf = await this.assets.loadGltf(this.chunks[index].urls[lod])
+    const gltf = await this.assets.loadGltf(this.chunks[index].urls[lod], signal)
     const loaded = performanceCapture.active ? performance.now() : 0
-    const object = this.adopt(gltf.scene)
+    const object = await this.adoptChunk(gltf.scene, signal)
     if (performanceCapture.active && started) {
       performanceCapture.event('chunk-fetch-decode', loaded - started, { index, lod })
       performanceCapture.event('chunk-adopt', performance.now() - loaded, { index, lod })
@@ -418,31 +515,60 @@ export class StreamedTrack implements RaceTrack {
     c.object = object
     c.shown = lod
     this.current[index] = lod
-    if (object) this.group.add(object)
+    if (object) {
+      // A material tier may have changed while this chunk waited for upload.
+      const budget = BUDGET[this.quality]
+      object.traverse(node => {
+        if (!(node instanceof THREE.Mesh)) return
+        node.material = this.materialFor(node.userData.mat as string)
+        applyLayerFlags(node, budget)
+      })
+      this.group.add(object)
+    }
   }
 
   /**
    * Prepares freshly loaded geometry: shared materials by name, shadow flags
    * per layer, vegetation visibility, and frozen matrices (the track never moves,
-   * so skip per-frame matrix updates for thousands of nodes).
+   * so skip per-frame matrix updates for thousands of nodes). Node setup yields
+   * between short tasks; only a completed object enters the ready queue.
    */
-  private adopt(root: THREE.Object3D): THREE.Object3D {
-    const budget = BUDGET[this.quality]
-    root.traverse((o) => {
-      const mesh = o as THREE.Mesh
-      if (mesh.isMesh) {
-        const stub = mesh.material as THREE.Material
-        mesh.userData.mat = stub.name
-        mesh.material = this.materialFor(stub.name)
-        stub.dispose()
-        // Node names are 'layer__material' ('__' survives GLTFLoader's name sanitising).
-        const layer = mesh.name.split('__')[0]
-        mesh.userData.layer = layer
-        applyLayerFlags(mesh, budget)
+  private async adoptChunk(root: THREE.Object3D, signal?: AbortSignal): Promise<THREE.Object3D> {
+    const pending = [root]
+    let deadline = performance.now() + UPLOAD_MS
+    while (pending.length > 0) {
+      if (this.disposed || signal?.aborted) {
+        disposeObject(root)
+        throw new DOMException('Chunk preparation cancelled', 'AbortError')
       }
-      o.matrixAutoUpdate = false
-      o.updateMatrix()
-    })
+      const node = pending.pop()!
+      this.adoptNode(node)
+      node.updateWorldMatrix(false, false)
+      node.matrixWorldAutoUpdate = false
+      for (let i = node.children.length - 1; i >= 0; i--) pending.push(node.children[i])
+      if (performance.now() >= deadline && pending.length > 0) {
+        await new Promise<void>(resolve => setTimeout(resolve, 0))
+        deadline = performance.now() + UPLOAD_MS
+      }
+    }
+    return root
+  }
+
+  private adoptNode(node: THREE.Object3D): void {
+    if (node instanceof THREE.Mesh) {
+      const stub = node.material as THREE.Material
+      node.userData.mat = stub.name
+      node.material = this.materialFor(stub.name)
+      stub.dispose()
+      node.userData.layer = node.name.split('__')[0]
+      applyLayerFlags(node, BUDGET[this.quality])
+    }
+    node.matrixAutoUpdate = false
+    node.updateMatrix()
+  }
+
+  private adopt(root: THREE.Object3D): THREE.Object3D {
+    root.traverse(node => this.adoptNode(node))
     root.updateMatrixWorld(true)
     root.matrixWorldAutoUpdate = false
     return root
@@ -496,18 +622,20 @@ export class StreamedTrack implements RaceTrack {
   }
 
   /** Debug/HUD: how much of the track is resident. */
-  get stats(): { lod0: number; lod1: number; loading: number } {
+  get stats(): { lod0: number; lod1: number; loading: number; ready: number } {
     let lod0 = 0
     let lod1 = 0
     for (const c of this.chunks) {
       if (c.shown === 0) lod0++
       else if (c.shown === 1) lod1++
     }
-    return { lod0, lod1, loading: this.inFlight }
+    return { lod0, lod1, loading: this.inFlight, ready: this.ready.length }
   }
 
   dispose(): void {
     this.disposed = true
+    this.warmup.dispose()
+    for (const chunk of this.chunks) chunk.request?.abort()
     for (const r of this.ready) disposeObject(r.object)
     this.ready.length = 0
     for (let i = 0; i < this.chunks.length; i++) this.show(i, NOT_LOADED, null)
