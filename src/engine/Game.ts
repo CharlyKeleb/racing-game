@@ -1,3 +1,5 @@
+import { CockpitRig } from '../vehicles/CockpitRig'
+import { DEFAULT_COCKPIT_ADJUSTMENT } from '../vehicles/CockpitConfig'
 import { setTrackLook } from '../world/TrackLook'
 import { FinishSequence } from '../racing/FinishSequence'
 import { RaceFinishCamera } from '../camera/RaceFinishCamera'
@@ -350,7 +352,7 @@ export class Game {
     progress(0.3)
 
     const { config: base, model } = await carLoad
-    if (this.disposed) return
+    if (this.disposed) { model.cockpit?.dispose(); return }
     performance.measure('boot:car', 'boot:start')
     progress(0.6)
     const entry = getCar(carId)
@@ -667,7 +669,9 @@ export class Game {
     const config = resolveVehicleConfig(json ?? undefined)
     let scene = loaded
     scene ??= buildPlaceholderCar(config)
-    return { config, model: rigCarModel(scene, config) }
+    const model = rigCarModel(scene, config)
+    model.cockpit = new CockpitRig(model)
+    return { config, model }
   }
 
   // ── Commands (called by React) ─────────────────────────────────────────
@@ -940,7 +944,7 @@ export class Game {
       this.vehicle.model.root.visible = false
     }
     const { config, model } = await loading
-    if (token !== this.carSwapToken || this.disposed) return
+    if (token !== this.carSwapToken || this.disposed) { model.cockpit?.dispose(); return }
     this.installCar(entry, config, model)
     if (showroom) await new Promise<void>((done) => (this.showroomDrive = { mode: 'in', t: 0, spin: 0, done }))
     if (token !== this.carSwapToken) return
@@ -955,6 +959,7 @@ export class Game {
     this.effects.dispose()
     this.headlights.dispose()
     this.livery.dispose()
+    old.model.cockpit?.dispose()
     old.disposeMaterials()
     scene.remove(old.model.root)
     this.physics.world.removeRigidBody(old.body)
@@ -984,6 +989,9 @@ export class Game {
     this.audio.setCarAudio(entry.audioUrl, entry.firingPerRev, entry.noise)
     gameStore.setState({ carName: base.name })
     telemetryStore.setState({ redlineRpm: config.engine.redlineRpm })
+    this.camera.cockpitCar = entry.id
+    this.camera.cockpitAdjustment = gameStore.getState().settings.cockpits[entry.id] ?? DEFAULT_COCKPIT_ADJUSTMENT
+    this.camera.snap()
     this.vehicle.render(1)
   }
 
@@ -1356,9 +1364,9 @@ export class Game {
     } else if (phase !== 'paused') {
       // Creep in on the car as the lights build, then settle into the race camera after the start.
       const lightsT = Math.min(1, (COUNTDOWN_SEC - this.race.countdown) / COUNTDOWN_SEC)
-      const gridFraming = phase === 'countdown' ? 1 - 0.5 * lightsT * lightsT * (3 - 2 * lightsT) : this.camera.mode === 'chase' ? 0.5 * Math.max(0,1-this.race.timer.totalMs/1200) : 0
+      const gridFraming = this.camera.mode === 'cockpit' ? 0 : phase === 'countdown' ? 1 - 0.5 * lightsT * lightsT * (3 - 2 * lightsT) : this.camera.mode === 'chase' ? 0.5 * Math.max(0,1-this.race.timer.totalMs/1200) : 0
       this.camera.driftFraming = gameStore.getState().settings.mode === 'drift' ? .82 : .55
-      this.camera.update(this.vehicle.model.root, this.vehicle.speedKmh, dt, this.vehicle.controller.nitro.intensity, this.vehicle.motion,gridFraming)
+      this.camera.update(this.vehicle.model.root, this.vehicle.speedKmh, dt, this.vehicle.controller.nitro.intensity, this.vehicle.motion,gridFraming,this.vehicle.model.body)
       this.effects.update(this.vehicle, dt)
       this.sparks.update(dt)
       this.updateGuide(dt)
@@ -1418,9 +1426,11 @@ export class Game {
     sound.nitro = ctrl.nitro.intensity
     sound.nitroActive = ctrl.nitro.active
     sound.nitroPerfect = ctrl.nitro.perfect
+    this.vehicle.model.cockpit?.updateInstruments(sound.rpm, this.vehicle.speedKmh, ctrl.drivetrain.gear, this.vehicle.config.engine.redlineRpm, phase === 'paused' ? 0 : frameDt)
     this.audio.update(sound, readTyres(ctrl, this.tyreSound))
     this.audio.updateDriving(this.tyreSound.speed, this.tyreSound.paved, this.vehicle.motion.grounded,
       this.vehicle.motion.roadRoughness, cameraMode === 'cockpit', phase === 'racing' || phase === 'finished')
+    this.renderer.setViewOpacity(phase === 'racing' || phase === 'countdown' ? this.camera.viewOpacity : 1)
     this.renderer.render()
 
     this.fpsFrames++
@@ -1883,7 +1893,12 @@ export class Game {
     }
     this.audio.setVolume(s.masterVolume)
     this.audio.setMenuMusic(s.musicTrack, s.menuMusic)
-    if (this.camera) this.camera.mode = s.camera
+    if (this.camera) {
+      this.camera.mode = s.camera
+      this.camera.cameraMotion = s.cameraMotion
+      this.camera.cockpitCar = this.carId
+      this.camera.cockpitAdjustment = s.cockpits[this.carId] ?? DEFAULT_COCKPIT_ADJUSTMENT
+    }
     this.rain?.setQuality(s.quality)
     this.rainSurface?.setQuality(s.quality)
     this.wetReflections?.setQuality(s.quality)
@@ -1940,6 +1955,7 @@ export class Game {
     this.track?.dispose()
     this.headlights?.dispose()
     this.environment?.dispose()
+    this.vehicle?.model.cockpit?.dispose()
     this.vehicle?.disposeMaterials()
     this.physics?.dispose()
     this.assets.dispose()
