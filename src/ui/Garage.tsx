@@ -1,4 +1,5 @@
 import type { WheelId } from '../vehicles/VehicleConfig'
+import { SPOILERS } from '../vehicles/SpoilerCatalog'
 import { PLATE_STYLES, type PlateStyle } from '../vehicles/PlateStyles'
 import { DEFAULT_LIVERY, hasLivery, type LiveryDesign, type StripePattern, type NumberPanel, type LiveryDecal } from '../vehicles/LiveryDesign'
 import { GiPaintBrush, GiCarWheel, GiIdCard, GiAutoRepair, GiCheckeredFlag } from 'react-icons/gi'
@@ -21,16 +22,17 @@ import { CarCard } from './MainMenu'
 import { MenuMusicBar } from './MenuMusicBar'
 import { OrbitLayer } from './OrbitLayer'
 
-type Tab = 'paint' | 'wheels' | 'performance' | 'livery' | 'plates'
+type Tab = 'paint' | 'wheels' | 'performance' | 'livery' | 'plates' | 'spoilers'
 const TABS: [Tab, string][] = [
   ['paint', 'Paint'],
   ['wheels', 'Wheels'],
+  ['spoilers', 'Spoilers'],
   ['livery', 'Livery'],
   ['plates', 'Plates'],
   ['performance', 'Upgrades'],
 ]
 
-const tabIcons = { paint: GiPaintBrush, wheels: GiCarWheel, performance: GiAutoRepair, livery: GiCheckeredFlag, plates: GiIdCard }
+const tabIcons = { paint: GiPaintBrush, wheels: GiCarWheel, performance: GiAutoRepair, livery: GiCheckeredFlag, plates: GiIdCard, spoilers: GiAutoRepair }
 
 export function Garage() {
   const game = useGameInstance()
@@ -44,7 +46,7 @@ export function Garage() {
 
   // Detail tabs share the showroom camera's damped transition.
   useEffect(() => {
-    game?.setShowroomFocus(tab === 'wheels' ? `wheel-${wheel}` : tab === 'plates' ? (plateSide === 'front' ? 'plate-front' : 'plate-rear') : 'car')
+    game?.setShowroomFocus(tab === 'wheels' ? `wheel-${wheel}` : tab === 'plates' ? (plateSide === 'front' ? 'plate-front' : 'plate-rear') : tab === 'spoilers' ? 'spoiler' : 'car')
   }, [game, tab, plateSide, wheel])
   useEffect(() => () => game?.setShowroomFocus('car'), [game])
 
@@ -66,10 +68,11 @@ export function Garage() {
         <Panel className="garage-options">
           {tab === 'paint' && <PaintTab build={build} update={update} />}
           {tab === 'wheels' && <WheelsTab build={build} update={update} wheel={wheel} onWheel={setWheel} disabled={switching} />}
+          {tab === 'spoilers' && <SpoilersTab build={build} update={update} disabled={switching}/>}
           {tab === 'performance' && <PerformanceTab build={build} update={update} />}
           {tab === 'livery' && <LiveryTab build={build} update={update} disabled={switching} />}
           {tab === 'plates' && <PlatesTab build={build} update={update} disabled={switching} side={plateSide} onSide={setPlateSide} />}
-          {tab !== 'livery' && tab !== 'plates' && <Button size="sm" variant="ghost" onClick={reset}>
+          {tab !== 'livery' && tab !== 'plates' && tab !== 'spoilers' && <Button size="sm" variant="ghost" onClick={reset}>
             Reset to stock
           </Button>}
         </Panel>
@@ -79,7 +82,7 @@ export function Garage() {
       <CarPicker className="garage-carpicker" />
 
       <div className="garage-right">
-        {tab !== 'wheels' && tab !== 'plates' && <CarCard />}
+        {tab !== 'wheels' && tab !== 'plates' && tab !== 'spoilers' && <CarCard />}
         <Button size="lg" variant="primary" className="menu-icon-action" disabled={switching} onClick={() => game?.startRace()}>
           <GiCheckeredFlag aria-hidden="true"/> Race
         </Button>
@@ -91,6 +94,37 @@ export function Garage() {
 interface TabProps {
   build: CarBuild
   update(patch: Partial<CarBuild>): void
+}
+
+function SpoilersTab({build,update,disabled}:TabProps & {disabled:boolean}) {
+  const loading=useGame(s=>s.spoilerLoading),error=useGame(s=>s.spoilerError)
+  return <fieldset className="spoiler-editor" disabled={disabled}>
+    <legend>Rear spoiler</legend>
+    <p className="settings__help">Choose a profile. Drag the car to inspect the fit. Saved for this car.</p>
+    <details className="spoiler-design" open>
+      <summary>Color &amp; stripes</summary>
+      <Segmented<CarBuild['spoilerFinish']> label="Spoiler color" value={build.spoilerFinish} options={[[ 'carbon','Black'],['paint','Body'],['custom','Custom']]} onPick={spoilerFinish=>update({spoilerFinish})}/>
+      {build.spoilerFinish==='custom'&&<Swatches label="Spoiler paint" presets={PAINT_PRESETS} value={build.spoilerColor} onPick={spoilerColor=>update({spoilerColor})}/>}
+      <Segmented<CarBuild['spoilerPattern']> label="Spoiler stripes" value={build.spoilerPattern} options={[[ 'none','None'],['center','Center'],['twin','Twin'],['edges','Edges'],['diagonal','Slashes']]} onPick={spoilerPattern=>update({spoilerPattern})}/>
+      {build.spoilerPattern!=='none'&&<>
+        <Swatches label="Stripe color" presets={PAINT_PRESETS} value={build.spoilerStripeColor} onPick={spoilerStripeColor=>update({spoilerStripeColor})}/>
+        <label className="ui-field"><span className="ui-field__label">Stripe width <em>{Math.round(build.spoilerStripeWidth*100)}%</em></span>
+          <input aria-label="Spoiler stripe width" className="ui-range" type="range" min={.03} max={.18} step={.01} value={build.spoilerStripeWidth} onChange={e=>update({spoilerStripeWidth:Number(e.target.value)})}/></label>
+      </>}
+      <div className="livery-actions"><Button size="sm" variant="ghost" onClick={()=>update({spoilerPattern:'none'})}>Clear stripes</Button></div>
+    </details>
+    <div className="spoiler-grid" aria-label="Spoiler designs">
+      <button className="spoiler-option spoiler-option--stock" aria-pressed={build.spoiler==='stock'} onClick={()=>update({spoiler:'stock'})}>
+        <span className="spoiler-stock-mark" aria-hidden="true">—</span><strong>Stock</strong><small>Original rear styling</small>
+      </button>
+      {SPOILERS.map((part,i)=><button key={part.id} className="spoiler-option" aria-label={`${part.name} spoiler`} aria-pressed={build.spoiler===part.id} onClick={()=>update({spoiler:part.id})}>
+        <img src={`/models/parts/spoilers/${part.id}.svg`} alt="" width="160" height="85"/>
+        <strong><span>{String(i+1).padStart(2,'0')}</span> {part.name}</strong><small>{part.description}</small>
+      </button>)}
+    </div>
+    <p className="settings__help" role="status">{loading?'Fitting spoiler…':error??'Visual customization · handling stays the same.'}</p>
+    {error&&<Button size="sm" onClick={()=>update({spoiler:build.spoiler})}>Retry spoiler</Button>}
+  </fieldset>
 }
 
 function PaintTab({ build, update }: TabProps) {

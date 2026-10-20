@@ -64,6 +64,8 @@ export interface GameState {
   /** True while the garage swaps cars (one drives off, the next drives in). */
   trackSwitching: boolean
   carSwitching: boolean
+  spoilerLoading: boolean
+  spoilerError: string | null
   /** Display name of the loaded track, set by the engine. */
   trackName: string
   /** 0..1 while a track is loading. */
@@ -176,6 +178,8 @@ export const gameStore = createStore<GameState>()((set, get) => ({
   carName: '',
   trackSwitching: false,
   carSwitching: false,
+  spoilerLoading: false,
+  spoilerError: null,
   trackName: '',
   loadProgress: 0,
   minimap: null,

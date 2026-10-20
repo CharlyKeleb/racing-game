@@ -1171,3 +1171,22 @@ button.menu-track:hover,button.menu-track:focus-visible { border-color:var(--acc
 .cockpit-settings { min-width:0; margin:8px 0; padding:16px; border:1px solid var(--line); display:grid; gap:12px; }
 .cockpit-settings legend { padding:0 8px; font:700 16px var(--font-display); text-transform:uppercase; }
 .cockpit-settings .settings__help { margin:0; }
+
+.spoiler-editor { border:0; padding:0; margin:0; min-width:0; display:grid; gap:14px; }
+.spoiler-editor legend { font:700 20px var(--font-display); text-transform:uppercase; padding:0 0 10px; }
+.spoiler-editor .settings__help { margin:0; }
+.spoiler-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+.spoiler-option { position:relative; min-width:0; padding:6px 10px 10px; display:flex; flex-direction:column; text-align:left; background:#0c1420; border:1px solid var(--line); color:var(--ink); cursor:pointer; }
+.spoiler-option:hover { border-color:#93afbf; background:#172637; }
+.spoiler-option[aria-pressed=true] { border-color:var(--accent); box-shadow:inset 0 -3px var(--accent); background:#1b2b38; }
+.spoiler-option:focus-visible { outline:2px solid var(--ink); outline-offset:2px; }
+.spoiler-option img { width:100%; height:67px; object-fit:contain; }
+.spoiler-option strong { font:700 17px var(--font-display); text-transform:uppercase; }
+.spoiler-option strong span { color:var(--muted); margin-right:4px; }
+.spoiler-option small { color:var(--muted); font-size:11px; line-height:1.4; margin-top:3px; }
+.spoiler-stock-mark { height:67px; display:grid; place-items:center; font:300 42px system-ui; color:var(--muted); }
+.spoiler-editor:disabled .spoiler-option { opacity:.5; cursor:wait; }
+.spoiler-design { border-block:1px solid var(--line); padding:12px 0; }
+.spoiler-design summary { cursor:pointer; font:700 16px var(--font-display); text-transform:uppercase; }
+.spoiler-design[open] > :not(summary) { margin-top:14px; }
+.spoiler-design .ui-segmented { flex-wrap:wrap; }

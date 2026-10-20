@@ -1,5 +1,6 @@
 import { DEFAULT_LIVERY, sanitizeLivery, type LiveryDesign } from './LiveryDesign'
 import type { VehicleConfig } from './VehicleConfig'
+import { sanitizeSpoiler, type SpoilerId, type SpoilerFinish, type SpoilerPattern } from './SpoilerCatalog'
 
 /**
  * Player customisation picked in the garage before a race. Visual fields are
@@ -13,6 +14,12 @@ export type TireCompound = 'street' | 'sport' | 'race'
 export type SuspensionKit = 'stock' | 'sport' | 'race'
 
 export interface CarBuild {
+  spoiler: SpoilerId
+  spoilerFinish: SpoilerFinish
+  spoilerColor: string
+  spoilerPattern: SpoilerPattern
+  spoilerStripeColor: string
+  spoilerStripeWidth: number
   livery: LiveryDesign
   paint: string
   finish: PaintFinish
@@ -29,6 +36,12 @@ export interface CarBuild {
 }
 
 export const DEFAULT_BUILD: CarBuild = {
+  spoiler: 'stock',
+  spoilerFinish: 'carbon',
+  spoilerColor: '#20252b',
+  spoilerPattern: 'none',
+  spoilerStripeColor: '#ffd200',
+  spoilerStripeWidth: .08,
   livery: DEFAULT_LIVERY,
   paint: '#c8102e',
   finish: 'metallic',
@@ -154,6 +167,12 @@ export function sanitizeBuild(raw: unknown): CarBuild {
   const pick = <T,>(v: unknown, allowed: readonly T[], d: T) => (allowed.includes(v as T) ? (v as T) : d)
   const d = DEFAULT_BUILD
   return {
+    spoiler: sanitizeSpoiler(r.spoiler),
+    spoilerFinish: pick(r.spoilerFinish, ['carbon', 'paint', 'custom'] as const, d.spoilerFinish),
+    spoilerColor: hex(r.spoilerColor,d.spoilerColor),
+    spoilerPattern: pick(r.spoilerPattern,['none','center','twin','edges','diagonal'] as const,d.spoilerPattern),
+    spoilerStripeColor: hex(r.spoilerStripeColor,d.spoilerStripeColor),
+    spoilerStripeWidth: typeof r.spoilerStripeWidth==='number'&&Number.isFinite(r.spoilerStripeWidth)?Math.max(.03,Math.min(.18,r.spoilerStripeWidth)):d.spoilerStripeWidth,
     paint: hex(r.paint, d.paint),
     finish: pick(r.finish, ['gloss', 'metallic', 'matte', 'pearl'] as const, d.finish),
     rims: hex(r.rims, d.rims),
