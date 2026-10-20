@@ -15,24 +15,6 @@ import { RAIN_BOX, RAIN_EXPOSURE, RAIN_FALL, RAIN_WIDTH } from '../../effects/Ra
  * Each mirrors the GLSL it replaces; see the WebGL side for the reasoning.
  */
 
-/** SkidMarks: per-vertex alpha that fades out over `life` seconds after the vertex's birth time. */
-export function skidMarkMaterial(life: number, color: THREE.Color) {
-  const uTime = uniform(0)
-  const age = uTime.sub(attribute('aBirth', 'float'))
-  const material = new THREE.MeshBasicNodeMaterial({
-    transparent: true,
-    depthWrite: false,
-    side: THREE.DoubleSide,
-    polygonOffset: true,
-    polygonOffsetFactor: -2,
-    polygonOffsetUnits: -2,
-  })
-  material.colorNode = vec3(color.r, color.g, color.b)
-  material.opacityNode = attribute('aAlpha', 'float').mul(float(1).sub(smoothstep(life * 0.4, life, age)))
-  material.alphaTest = 0.004
-  return { material, time: uTime }
-}
-
 /**
  * DirectionGuide arrows: a MeshBasicMaterial whose opacity is also scaled by
  * a per-instance `instanceFade` attribute (instanceColor only tints rgb).
