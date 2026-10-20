@@ -1,4 +1,6 @@
 import { CockpitRig } from '../vehicles/CockpitRig'
+import { CarSpoiler } from '../vehicles/CarSpoiler'
+import { SPOILER_FIT } from '../vehicles/SpoilerCatalog'
 import { DEFAULT_COCKPIT_ADJUSTMENT } from '../vehicles/CockpitConfig'
 import { setTrackLook } from '../world/TrackLook'
 import { BRAKE_AT, FINISH_SECONDS, FinishSequence, finishDrive, shotAt, type FinishShot } from '../racing/FinishSequence'
@@ -75,7 +77,7 @@ interface StackedTag extends RivalTag {
   target: number
 }
 // Handbrake, not brake: brake at standstill would engage reverse.
-export type ShowroomFocus = 'car' | 'wheel' | `wheel-${WheelId}` | 'plate-front' | 'plate-rear'
+export type ShowroomFocus = 'car' | 'wheel' | `wheel-${WheelId}` | 'plate-front' | 'plate-rear' | 'spoiler'
 
 const LOCKED_INPUT: InputState = { throttle: 0, brake: 0, steer: 0, handbrake: true, nitro: false }
 /** Past the flag: brake to a stop in a straight line while the rivals finish. */
@@ -212,6 +214,7 @@ export class Game {
   private rivalTagFrame = 0
   private readonly racePosition = new THREE.Vector3()
   private livery!: CarLivery
+  private spoiler!: CarSpoiler
   private showroom!: Showroom
   private effects!: DrivingEffects
   /** Wall-scrape, crash and bottoming-out sparks for every car (#52). Built in init(), once the renderer is known. */
@@ -282,6 +285,7 @@ export class Game {
   private wheelYaw = 0
   private readonly carFraming: ShowroomFraming = { focus: new THREE.Vector3(0, 0.55, 0), distance: SHOWROOM_DISTANCE, height: 1.5, shift: 0, fov: SHOWROOM_FOV }
   private readonly plateFraming: ShowroomFraming = { focus: new THREE.Vector3(), distance: 2.1, height: .18, shift: .45, fov: 34 }
+  private readonly spoilerFraming: ShowroomFraming = { focus: new THREE.Vector3(), distance: 3.5, height: .9, shift: .65, fov: 42 }
   private readonly wheelFraming: ShowroomFraming = { focus: new THREE.Vector3(), distance: 2.9, height: 0.45, shift: 0.55, fov: 38 }
 
   private standingsPublishedAt = -Infinity
@@ -375,6 +379,8 @@ export class Game {
     this.vehicle.controller.surfaceAt = (x, z) => this.track.surfaceAt(x, z)
     this.livery = new CarLivery(model)
     this.livery.apply(build)
+    this.spoiler = new CarSpoiler(model, this.assets, (spoilerLoading,spoilerError)=>gameStore.setState({spoilerLoading,spoilerError}))
+    void this.spoiler.apply(build)
     scene.add(model.root)
     this.headlights = new Headlights(model, config)
     this.effects = new DrivingEffects(this.vehicle)
@@ -967,6 +973,7 @@ export class Game {
     this.carRain.dispose()
     this.effects.dispose()
     this.headlights.dispose()
+    this.spoiler.dispose()
     this.livery.dispose()
     old.model.cockpit?.dispose()
     old.disposeMaterials()
@@ -982,6 +989,8 @@ export class Game {
     this.vehicle.lightsOn = this.environment.current.headlights
     this.livery = new CarLivery(model)
     this.livery.apply(build)
+    this.spoiler = new CarSpoiler(model, this.assets, (spoilerLoading,spoilerError)=>gameStore.setState({spoilerLoading,spoilerError}))
+    void this.spoiler.apply(build)
     scene.add(model.root)
     this.carRain = new CarRain(model, this.rainSurface.uniforms)
     this.carRain.setQuality(gameStore.getState().settings.quality)
@@ -1384,7 +1393,12 @@ export class Game {
     if (phase === 'menu' || phase === 'garage') {
       const wheel = phase === 'garage' && (this.showroomFocus === 'wheel' || this.showroomFocus.startsWith('wheel-'))
       const plateFocus = phase === 'garage' && (this.showroomFocus === 'plate-front' || this.showroomFocus === 'plate-rear')
-      if (plateFocus) {
+      if (phase === 'garage' && this.showroomFocus === 'spoiler') {
+        const fit = SPOILER_FIT[this.carId] ?? SPOILER_FIT.porsche911
+        this.spoilerFraming.focus.fromArray(fit.position)
+        this.spoilerFraming.focus.y += .1
+        this.camera.showroom(this.showroomAnchor, Math.PI - .5 + this.wheelYaw, dt, this.spoilerFraming)
+      } else if (plateFocus) {
         const front = this.showroomFocus === 'plate-front'
         const plate = this.vehicle.model.body.getObjectByName(front ? 'CustomPlate_front' : 'CustomPlate_rear')
         if (plate) this.plateFraming.focus.copy(plate.position)
@@ -1935,6 +1949,7 @@ export class Game {
   private applyBuild(build: CarBuild, prev: CarBuild): void {
     if (!this.vehicle) return
     this.livery.apply(build)
+    void this.spoiler.apply(build)
     if (samePerformance(build, prev)) return
     // Upgrades change mass, springs and engine, so rebuild the physics car in place.
     const model = this.vehicle.model
@@ -2004,6 +2019,7 @@ export class Game {
     this.input.dispose()
     this.audio.dispose()
     this.audio.onMenuMusicState = null
+    this.spoiler?.dispose()
     this.livery?.dispose()
     this.effects?.dispose()
     this.sparks?.dispose()

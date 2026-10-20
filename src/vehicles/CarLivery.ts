@@ -90,6 +90,8 @@ export class CarLivery {
       const mesh = o as THREE.Mesh
       if (mesh.isMesh) {
         const originalMaterial = mesh.material
+        // Retain asset identity when paint aliases replace materials (bolt-on parts use it).
+        mesh.userData.garageMaterialNames = (Array.isArray(originalMaterial) ? originalMaterial : [originalMaterial]).map(m=>m.name)
         let painted = false
         const swap = (m: THREE.Material) => {
           const alias = placement?.paintAliases.includes(m.name) ?? false
