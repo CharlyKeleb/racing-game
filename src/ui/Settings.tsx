@@ -1,3 +1,4 @@
+import { CockpitSettings } from './CockpitSettings'
 import type { TrackLook } from '../world/TrackLook'
 import { Help } from './Help'
 import { useEffect, useRef, useState } from 'react'
@@ -55,7 +56,10 @@ export function Settings({ onClose }: { onClose?: () => void }) {
             <input aria-label="Motion blur" className="ui-range" type="range" min={0} max={1} step={.05} value={settings.motionBlur} onChange={e=>update({motionBlur:Number(e.target.value)})}/>
             <span className="settings__help">Speed-scaled road and wheel blur. Your car body and HUD stay sharp. Set to zero to turn off; requires Post effects.</span>
           </label>
+          <Segmented<number> label="Camera movement" value={settings.cameraMotion?1:0} options={[[1,'On'],[0,'Off']]} onPick={v=>update({cameraMotion:v===1})}/>
+          <p className="settings__help">Camera movement controls extra head motion, shake and view fades. Reduced-motion preference disables these too.</p>
           <SettingChoices<CameraMode> preview={camera=><SettingScene cockpit={camera==='cockpit'}/>} label="Camera" value={settings.camera} options={[[ 'chase','Chase'],['cockpit','Cockpit']]} onPick={camera=>update({camera})}/>
+          {settings.camera === 'cockpit' && <CockpitSettings/>}
           <SettingChoices<TimeOfDay> preview={time=><SettingScene time={time}/>} label="Time of day" value={settings.timeOfDay} options={(Object.keys(TIME_PRESETS) as TimeOfDay[]).map(id=>[id,TIME_PRESETS[id].label])} onPick={timeOfDay=>update({timeOfDay})}/>
           <Segmented<number> help label="Laps" value={settings.laps} options={[[1,'1'],[3,'3'],[5,'5']]} onPick={laps=>update({laps})}/>
         </>}

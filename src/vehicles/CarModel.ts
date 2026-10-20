@@ -1,3 +1,4 @@
+import type { CockpitRig } from './CockpitRig'
 import * as THREE from 'three'
 import type { VehicleConfig, WheelId } from './VehicleConfig'
 
@@ -11,6 +12,7 @@ export interface CarModel {
   /** Everything but the wheels: leaned for visual weight transfer while the wheels stay planted. */
   body: THREE.Object3D
   wheels: Record<WheelId, WheelRig>
+  cockpit?: CockpitRig
 }
 
 /** pivot (position + steer yaw) → spinner (roll around X) → original wheel mesh */

@@ -230,6 +230,7 @@ export class Vehicle {
     root.quaternion.slerpQuaternions(this.prevQuat, this.currQuat, alpha)
 
     const steer = this.prevSteer + (this.currSteer - this.prevSteer) * alpha
+    this.model.cockpit?.updateSteering(steer, dt)
     const wheels = this.controller.wheels
     for (let i = 0; i < wheels.length; i++) {
       const w = wheels[i]

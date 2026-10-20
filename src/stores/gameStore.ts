@@ -1,3 +1,4 @@
+import { sanitizeCockpit, type CockpitAdjustment } from '../vehicles/CockpitConfig'
 import type { TrackLook } from '../world/TrackLook'
 import type { MinimapRaster } from '../world/MinimapData'
 import { sanitizeLivery, type LiveryDesign } from '../vehicles/LiveryDesign'
@@ -39,6 +40,8 @@ export interface Settings {
   /** Track id from audio/musicTracks.ts. */
   musicTrack: MusicTrackId
   camera: CameraMode
+  cameraMotion: boolean
+  cockpits: Record<string, CockpitAdjustment>
   difficulty: AiDifficulty
   opponents: number
   laps: number
@@ -102,6 +105,8 @@ const defaultSettings: Settings = {
   menuMusic: true,
   musicTrack: MUSIC_TRACKS[0].id,
   camera: 'chase',
+  cameraMotion: !(typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches),
+  cockpits: {},
   difficulty: 'challenging',
   opponents: 3,
   laps: 3,
@@ -117,6 +122,10 @@ function loadSettings(): Settings {
     if (!raw) return defaultSettings
     const merged: Settings = { ...defaultSettings, ...JSON.parse(raw) }
     if (merged.trackLook !== 'default' && merged.trackLook !== 'road-focus') merged.trackLook = defaultSettings.trackLook
+    const savedCockpits = merged.cockpits
+    merged.cockpits = {}
+    for (const car of selectableCars()) if (savedCockpits && typeof savedCockpits === 'object' && Object.hasOwn(savedCockpits, car.id)) merged.cockpits[car.id] = sanitizeCockpit(savedCockpits[car.id], car.id)
+    if (typeof merged.cameraMotion !== 'boolean') merged.cameraMotion = defaultSettings.cameraMotion
     merged.tracksideVolume = typeof merged.tracksideVolume === 'number' && Number.isFinite(merged.tracksideVolume) ? Math.max(0, Math.min(1, merged.tracksideVolume)) : defaultSettings.tracksideVolume
     merged.driftEvent=driftEvent(merged.driftEvent).id
     if (merged.mode !== 'drift') merged.mode = 'quick'

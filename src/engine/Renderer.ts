@@ -215,6 +215,13 @@ export class Renderer {
     this.postfx?.setMotionBlur(exposure, player)
   }
 
+  private viewOpacity = 1
+  setViewOpacity(opacity: number): void {
+    if (opacity === this.viewOpacity) return
+    this.viewOpacity = opacity
+    this.renderer.domElement.style.opacity = String(opacity)
+  }
+
   render(): void {
     const capture = performanceCapture.active
     const info = this.renderer.info
