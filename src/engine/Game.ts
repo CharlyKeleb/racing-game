@@ -1,4 +1,7 @@
 import { CockpitRig } from '../vehicles/CockpitRig'
+import { AwarenessRoute, ProximityRadar, type AwarenessCar } from '../racing/ProximityRadar'
+import { proximityStore } from '../stores/proximityStore'
+import { clearProximityLine } from './ProximityQuery'
 import { CarSpoiler } from '../vehicles/CarSpoiler'
 import { SPOILER_FIT } from '../vehicles/SpoilerCatalog'
 import { DEFAULT_COCKPIT_ADJUSTMENT } from '../vehicles/CockpitConfig'
@@ -95,6 +98,7 @@ const _forward = new THREE.Vector3()
 const _listenerPosition = new THREE.Vector3()
 const _listenerRight = new THREE.Vector3()
 const _rivalOffset = new THREE.Vector3()
+const newAwarenessCar=():AwarenessCar=>({id:0,x:0,y:0,z:0,fx:0,fz:1,vx:0,vz:0,halfWidth:1,halfLength:2.2,route:0})
 const _listenerUp = new THREE.Vector3()
 const _listenerBack = new THREE.Vector3()
 const _relativeVelocity = new THREE.Vector3()
@@ -180,6 +184,7 @@ export class Game {
   private environment!: Environment
   private vehicle!: Vehicle
   private blurCamera = ''
+  private blurLookBack = false
   private camera!: ChaseCamera
   private driftZones?: DriftZones
   private driftPersonalBest = 0
@@ -295,6 +300,13 @@ export class Game {
 
   private standingsPublishedAt = -Infinity
   private telemetryTimer = 0
+  private readonly awareness=new ProximityRadar()
+  private awarenessRoute:AwarenessRoute|null=null
+  private readonly awarenessPlayer=newAwarenessCar()
+  private awarenessCars:AwarenessCar[]=[]
+  private awarenessFrame=0
+  private readonly awarenessRay=new RAPIER.Ray({x:0,y:0,z:0},{x:0,y:0,z:1})
+  private readonly awarenessConnected=(a:AwarenessCar,b:AwarenessCar):boolean=>clearProximityLine(this.physics.world,this.awarenessRay,a,b)
   private fpsFrames = 0
   private fpsTimer = 0
   private fps = 0
@@ -321,9 +333,11 @@ export class Game {
       // A car switch swaps in that car's build too; installCar applies it to the new car.
       if (s.build !== prev.build && s.settings.car === prev.settings.car) this.applyBuild(s.build, prev.build)
       if (s.phase !== prev.phase) {
+        this.clearAwareness()
         this.updateShowroom(s.phase)
         performanceCapture.event('phase', 0, { phase: s.phase, settings: s.settings })
       }
+      if(s.settings.proximityRadar!==prev.settings.proximityRadar||s.settings.spotterVisual!==prev.settings.spotterVisual||s.settings.spotterAudio!==prev.settings.spotterAudio)this.clearAwareness()
     })
   }
 
@@ -556,6 +570,7 @@ export class Game {
       },
     })
     this.progress = new TrackProgress(this.track.line)
+    this.awarenessRoute=new AwarenessRoute(this.track.line)
     this.renderer.scene.add(this.guide.group)
     const line = this.track.line
     // Every point: the minimap is zoomed in and highlights the route from the car's index.
@@ -727,6 +742,8 @@ export class Game {
   }
 
   private clearOpponents(): void {
+    this.clearAwareness()
+    this.awarenessCars=[]
     this.raceTransition = false
     this.audio.clearOpponents()
     this.rivalRevs = []
@@ -812,6 +829,7 @@ export class Game {
       }
 
       rivalTagStore.setState({ tags: this.rivalTags })
+      this.awarenessCars=this.opponents.map(o=>{const car=newAwarenessCar();car.id=o.id;return car})
       this.audio.setOpponentCars(rivals)
       this.audio.playStart()
       this.prepareRaceIntro()
@@ -975,6 +993,7 @@ export class Game {
 
   /** Swap the player car for a freshly loaded one, rebuilding everything tied to it. */
   private installCar(entry: CarEntry, base: VehicleConfig, model: CarModel): void {
+    this.clearAwareness()
     const scene = this.renderer.scene
     const old = this.vehicle
     this.carRain.dispose()
@@ -1102,6 +1121,7 @@ export class Game {
   }
 
   resetCar(): void {
+    this.clearAwareness()
     this.vehicle.respawn(this.track.spawn)
     this.camera.snap()
     this.progress?.reset()
@@ -1114,6 +1134,7 @@ export class Game {
    * validated, so a reset never skips a gate.
    */
   resetToCheckpoint(): void {
+    this.clearAwareness()
     this.driftChallenge.bust()
     this.playerEntry.checkpoint = this.race.lastCheckpoint
     this.playerEntry.index = this.progress.index
@@ -1394,6 +1415,7 @@ export class Game {
       dt *= this.loop.timeScale
     }
     if (phase === 'loading' && this.raceTransition) return
+    this.camera.lookBack=(phase==='racing'||phase==='countdown')&&!!this.input.state.lookBack
     for (const opponent of this.opponents) {
       opponent.vehicle.render(phase === 'paused' ? 1 : alpha, phase === 'paused' ? 0 : dt)
       this.opponentFlames.get(opponent.id)?.update(opponent.vehicle.controller.nitro.intensity, phase === 'paused' ? 0 : dt)
@@ -1482,6 +1504,7 @@ export class Game {
     const { postfx, weather, camera: cameraMode } = gameStore.getState().settings
     const wet = weather === 'rain' && phase !== 'menu' && phase !== 'garage' ? 1 : 0
     const camera = this.renderer.camera
+    this.effects.renderMarks(this.renderer.renderer, this.vehicle.model.root.position)
     this.rainSurface.update(this.renderer.renderer, this.renderer.scene, this.track.group, camera, wet, dt)
     this.wetRoads.update(this.track.group, wet, dt)
     this.vehicle.model.root.getWorldPosition(this.racePosition)
@@ -1500,7 +1523,7 @@ export class Game {
     let exposure = phase === 'racing' ? motionExposure(this.vehicle.speedKmh, blurAmount, dt)
       : phase === 'intro' ? motionExposure(160, blurAmount * this.introCamera.whip, dt)
       : phase === 'finished' && this.finish.active && !this.finish.reducedMotion ? motionExposure(this.vehicle.speedKmh, blurAmount * (1 - .7 * THREE.MathUtils.smoothstep(this.finish.progress, 0, .1)), dt) : 0
-    if (this.blurCamera !== cameraMode) { exposure = 0; this.blurCamera = cameraMode }
+    if (this.blurCamera !== cameraMode || this.blurLookBack !== this.camera.lookBack) { exposure = 0; this.blurCamera = cameraMode; this.blurLookBack = this.camera.lookBack }
     this.renderer.setMotionBlur(exposure, this.vehicle.model.body)
     const staging = phase === 'intro' || phase === 'countdown'
     if (staging) this.updateStaging(phase, dt)
@@ -1543,9 +1566,34 @@ export class Game {
     }
     this.telemetryTimer += frameDt
     if (this.telemetryTimer >= 1 / TELEMETRY_HZ) {
+      this.updateAwareness(this.telemetryTimer)
       this.telemetryTimer = 0
       this.publishTelemetry()
     }
+  }
+
+  private clearAwareness():void {
+    this.awareness.reset();this.audio.clearSpotter()
+    proximityStore.setState({radar:null,frame:++this.awarenessFrame})
+  }
+  private readAwareness(car:AwarenessCar,vehicle:Vehicle,index:number):void {
+    const p=vehicle.model.root.position,q=vehicle.model.root.quaternion,c=vehicle.config.chassisCenter
+    let fx=2*(q.x*q.z+q.w*q.y),fz=1-2*(q.x*q.x+q.y*q.y)
+    const length=Math.hypot(fx,fz)
+    if(length>.001){fx/=length;fz/=length}else{fx=car.fx;fz=car.fz}
+    car.fx=fx;car.fz=fz;car.x=p.x+fx*c[2]+fz*c[0];car.z=p.z+fz*c[2]-fx*c[0];car.y=p.y+c[1]
+    car.vx=vehicle.motion.velocity.x;car.vz=vehicle.motion.velocity.z
+    car.halfWidth=vehicle.config.chassisHalfExtents[0];car.halfLength=vehicle.config.chassisHalfExtents[2]
+    car.route=this.awarenessRoute!.project(car.x,car.z,index)
+  }
+  private updateAwareness(dt:number):void {
+    const s=gameStore.getState()
+    if(s.phase!=='racing'||!this.awarenessRoute||!this.awarenessCars.length||!(s.settings.proximityRadar||s.settings.spotterVisual||s.settings.spotterAudio))return
+    this.readAwareness(this.awarenessPlayer,this.vehicle,this.progress.index)
+    for(let i=0;i<this.awarenessCars.length;i++)this.readAwareness(this.awarenessCars[i],this.opponents[i].vehicle,this.opponents[i].driver.progress.index)
+    this.awareness.update(this.awarenessPlayer,this.awarenessCars,this.awarenessRoute.length,dt,this.awarenessConnected)
+    if(this.awareness.cue&&s.settings.spotterAudio)this.audio.playSpotter(this.awareness.cue)
+    proximityStore.setState({radar:this.awareness,frame:++this.awarenessFrame})
   }
 
   /**

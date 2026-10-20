@@ -24,6 +24,7 @@ npm run dev
 | A D / ← → | Steer |
 | Space | Handbrake |
 | C | Chase / cockpit camera |
+| Hold B | Look back; release to restore your camera |
 | R | Reset car |
 | Esc / P | Pause |
 
@@ -35,7 +36,8 @@ On phones and tablets, on-screen touch controls appear: drag to steer on the
 left; Gas, Brake, N₂O and Drift are on the right.
 
 Gamepads are supported: RT throttle, LT brake, left stick steer, A handbrake,
-Y camera, B reset and Start pause.
+Y camera, B reset and Start pause. Hold the right stick button (R3) to look back.
+On touch devices, hold **Rear** above the Drift button; releasing restores your view.
 
 Until `public/models/cars/mclaren/mclaren.glb` exists, the game drives a
 placeholder car with the same node names and physics.

@@ -1,4 +1,5 @@
 import { TracksideAmbience } from './TracksideAmbience'
+import type { SpotterCue } from '../racing/ProximityRadar'
 import type { TracksideEmitter } from '../world/atmospherePlan'
 import type { Camera } from 'three'
 import { DrivingSound } from './DrivingSound'
@@ -32,6 +33,26 @@ export type { CarSoundState }
  * Howler owns the global volume/unlock so one-shot SFX share the same mixer.
  */
 export class AudioManager {
+  private readonly spotterVoices=new Set<OscillatorNode>()
+  /** Cancel pending cue tones too, so pause/reset never leaves a queued warning. */
+  clearSpotter():void {
+    for(const voice of this.spotterVoices){voice.stop();voice.disconnect()}
+    this.spotterVoices.clear()
+  }
+  playSpotter(cue:SpotterCue):void {
+    const ctx=this.ctx
+    if(!ctx||this.paused||ctx.state!=='running')return
+    this.clearSpotter()
+    const clear=cue.startsWith('clear'),pan=cue.includes('left')||cue==='left'?-.7:cue.includes('right')||cue==='right'?.7:0
+    for(let i=0;i<2;i++){
+      const tone=ctx.createOscillator(),gain=ctx.createGain(),stereo=ctx.createStereoPanner(),time=ctx.currentTime+i*.1
+      tone.type='sine';tone.frequency.value=clear?650+i*280:cue==='both'?400:490
+      stereo.pan.value=pan;gain.gain.setValueAtTime(.0001,time);gain.gain.exponentialRampToValueAtTime(.15,time+.012);gain.gain.exponentialRampToValueAtTime(.0001,time+.12)
+      tone.connect(gain).connect(stereo).connect(this.fxBus);this.spotterVoices.add(tone)
+      tone.onended=()=>{tone.disconnect();gain.disconnect();stereo.disconnect();this.spotterVoices.delete(tone)}
+      tone.start(time);tone.stop(time+.14)
+    }
+  }
   private rivals: OpponentAudio[] = []
   private rivalNoise: CarNoiseProfile[] = []
   /** Reused for every rival's update (no per-frame allocation). */
@@ -456,6 +477,7 @@ export class AudioManager {
   }
 
   suspend(): void {
+    this.clearSpotter()
     this.paused = true
     void this.ctx?.suspend()
   }
@@ -532,6 +554,7 @@ export class AudioManager {
   }
 
   dispose(): void {
+    this.clearSpotter()
     this.clearOpponents()
     this.impacts?.dispose()
     this.driving?.dispose()

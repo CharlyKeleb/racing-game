@@ -61,10 +61,15 @@ export function Settings({ onClose }: { onClose?: () => void }) {
           <p className="settings__help">Camera movement controls extra head motion, shake and view fades. Reduced-motion preference disables these too.</p>
           <SettingChoices<CameraMode> preview={camera=><SettingScene cockpit={camera==='cockpit'}/>} label="Camera" value={settings.camera} options={[[ 'chase','Chase'],['cockpit','Cockpit']]} onPick={camera=>update({camera})}/>
           {settings.camera === 'cockpit' && <CockpitSettings/>}
+          <Segmented<number> label="Proximity radar" value={settings.proximityRadar?1:0} options={[[1,'On'],[0,'Off']]} onPick={v=>update({proximityRadar:v===1})}/>
+          <Segmented<number> label="Spotter text" value={settings.spotterVisual?1:0} options={[[1,'On'],[0,'Off']]} onPick={v=>update({spotterVisual:v===1})}/>
+          <p className="settings__help">Nearby rivals relative to your car. Amber marks a closing car; red marks overlap. Spotter text confirms left, right and clear.</p>
           <SettingChoices<TimeOfDay> preview={time=><SettingScene time={time}/>} label="Time of day" value={settings.timeOfDay} options={(Object.keys(TIME_PRESETS) as TimeOfDay[]).map(id=>[id,TIME_PRESETS[id].label])} onPick={timeOfDay=>update({timeOfDay})}/>
           <Segmented<number> help label="Laps" value={settings.laps} options={[[1,'1'],[3,'3'],[5,'5']]} onPick={laps=>update({laps})}/>
         </>}
         {section === 'audio' && <>
+          <Segmented<number> label="Spotter sounds" value={settings.spotterAudio?1:0} options={[[1,'On'],[0,'Off']]} onPick={v=>update({spotterAudio:v===1})}/>
+          <p className="settings__help">Directional tones for a car alongside; a rising tone when clear. Independent of the radar and text.</p>
           <label className="ui-field settings__volume">
             <span className="ui-field__label">Trackside ambience <em>{Math.round(settings.tracksideVolume * 100)}%</em></span>
             <input aria-label="Trackside ambience volume" className="ui-range" type="range" min={0} max={1} step={.05} value={settings.tracksideVolume} onChange={e=>update({tracksideVolume:Number(e.target.value)})}/>
@@ -85,6 +90,7 @@ export function Settings({ onClose }: { onClose?: () => void }) {
           <div><dt>Nitro</dt><dd><kbd>Shift</kbd></dd></div>
           <div><dt>Launch</dt><dd><kbd>Space</kbd> + <kbd>W</kbd>, let go at lights out</dd></div>
           <div><dt>Camera / reset / pause</dt><dd><kbd>C</kbd> <kbd>R</kbd> <kbd>Esc</kbd></dd></div>
+          <div><dt>Look back (hold)</dt><dd><kbd>B</kbd> / gamepad R3</dd></div>
         </dl>}
         {section === 'controls' && <p className="settings__help">Drift: tap brake or handbrake while turning. Tap nitro again on the cue for a perfect boost. On the grid, hold handbrake or brake, keep the revs in the green band and let go when the lights go out for a launch. Gamepads are supported.</p>}
       </div>

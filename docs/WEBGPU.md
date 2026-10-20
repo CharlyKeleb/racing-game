@@ -41,7 +41,7 @@ or removed), the game reloads on WebGL and stays there until the tab is closed
 
     | WebGL | Node version |
     | --- | --- |
-    | `SkidMarks` `ShaderMaterial` | `skidMarkMaterial` |
+    | `SkidMarks` stamp/fade passes + road sampling | `skidPaintMaterials` / `skidPaintColor` |
     | `DirectionGuide` `onBeforeCompile` per-arrow fade | `instanceFadeMaterial` |
     | `Environment` `Sky` with the exposure / tint / clamp patch | `skyDome` (`SkyMesh`) |
     | `Showroom` `Reflector` floor sheen | `floorSheen` (`reflector()` node) |
@@ -190,3 +190,31 @@ default needs these, all collected with `?bench=1`:
 
 If those hold, change the `renderer` default in `gameStore` to `'webgpu'`.
 WebGL stays as the automatic fallback.
+
+## GPU-painted tire marks (#54)
+
+Both renderers stamp new wheel contact quads into a world-space atlas, then
+sample it in track albedo before lighting. There is no historical segment mesh
+or segment cap: only the current frame's four stamps are uploaded. Rubber and
+loose-ground ruts share one RGBA16F texture (rubber intensity, contact height,
+rut intensity, unused). A full-screen multiplicative blend fades the two
+intensities with separate time constants, preserving height without a texture
+copy or CPU history scan. Pausing freezes decay; reset clears the atlas.
+
+Sixteen 32 m tiles cover a 128 m square around the car. Slots wrap through the
+atlas; entering a new tile clears only recycled slots. History in shared tiles
+survives. Low/Medium/High use 256/384/512 pixels per tile (8/18/32 MiB). This
+is a bounded local cache: marks outside it are evicted, and quality changes
+clear it. No claim of infinite whole-track history or measured speedup.
+
+The road itself supplies slope and lighting, so marks cannot float above banks
+or clip into inclines. Upward-normal and contact-height checks reject walls
+and other road levels. One height per texel means overlapping tire marks on
+two decks at the exact same XZ replace each other; both decks are never painted
+by the same stamp. Surface materials loaded later inherit the shared atlas
+binding, including far LOD and wet-road materials.
+
+`/src/dev/skid-paint.html` provides WebGL/WebGPU previews and GPU readback checks:
+slope height, rubber/ruts, history after 2800 fresh stamps, decay, shared tile
+preservation, recycled tile clearing, and race reset. The elevated slab should
+remain clean while rubber passes below it.

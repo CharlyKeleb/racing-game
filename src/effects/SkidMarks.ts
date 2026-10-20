@@ -1,263 +1,194 @@
 import * as THREE from 'three'
 import { backend } from '../engine/backend'
+import type { AnyRenderer } from '../engine/Renderer'
+import type { QualityPreset } from '../stores/gameStore'
 import { surfaceProps } from '../vehicles/Surface'
 import type { WheelState } from '../vehicles/VehicleController'
+import { TILE_COUNT, TILE_SIZE, skidPaint, tileSlot } from './SkidPaint'
 
-const MAX_SEGMENTS = 2400
-/**
- * Sliding speed of the contact patch (m/s, WheelState.slide) where marks start
- * and where they're darkest. A tire cornering hard but within its grip doesn't
- * slide, so it leaves nothing: marks mean a real slide, lock-up or wheelspin.
- */
 const MIN_SLIDE = 1.2
-const FULL_SLIDE = 8
-const MAX_OPACITY = 0.55
-/** Seconds a mark stays before it finishes fading out. */
-const LIFETIME = 24
-/** Shortest segment written, meters. Shorter steps wait for the wheel to move on. */
-const MIN_SEGMENT = 0.25
-/** A longer step means a respawn or teleport, so the trail restarts. */
+const MIN_SEGMENT = .15
 const MAX_SEGMENT = 4
-/** Above the contact point, clear of the road ribbon (y 0.01) and kerbs (0.015). */
-const LIFT = 0.025
-const NEVER = -1e9
-/** Ruts in loose ground: darker and longer-lived than rubber, scaled by how loose it is. */
-const RUT_OPACITY = 0.6
-const RUT_LIFETIME = 45
+const MAX_WHEELS = 4
+interface Trail { active: boolean; loose: boolean; center: THREE.Vector3; left: THREE.Vector3; right: THREE.Vector3; edges: boolean }
+const _side = new THREE.Vector3(), _left = new THREE.Vector3(), _right = new THREE.Vector3()
 
-interface Trail {
-  active: boolean
-  hasEdges: boolean
-  center: THREE.Vector3
-  left: THREE.Vector3
-  right: THREE.Vector3
-  alpha: number
-}
-
-const _p = new THREE.Vector3()
-const _side = new THREE.Vector3()
-const _l = new THREE.Vector3()
-const _r = new THREE.Vector3()
-
-const vertexShader = /* glsl */ `
-  attribute float aAlpha;
-  attribute float aBirth;
-  uniform float uTime;
-  uniform float uLife;
-  varying float vAlpha;
-  #include <fog_pars_vertex>
-  void main() {
-    float age = uTime - aBirth;
-    vAlpha = aAlpha * (1.0 - smoothstep(uLife * 0.4, uLife, age));
-    vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-    gl_Position = projectionMatrix * mvPosition;
-    #include <fog_vertex>
-  }
-`
-
-const fragmentShader = /* glsl */ `
-  uniform vec3 uColor;
-  varying float vAlpha;
-  #include <fog_pars_fragment>
-  void main() {
-    if (vAlpha < 0.004) discard;
-    gl_FragColor = vec4(uColor, vAlpha);
-    #include <tonemapping_fragment>
-    #include <colorspace_fragment>
-    #include <fog_fragment>
-  }
-`
-
-/**
- * Rubber left on the road by sliding tires — or, in `ruts` mode, the dark
- * compacted tracks a tyre ploughs through sand, gravel and grass. One
- * ring-buffered mesh holds every mark: each segment is a quad joined to the
- * previous one, so a slide draws a continuous strip. Each vertex stores its
- * birth time; the shader fades it out, so aging costs nothing on the CPU. Only
- * freshly written quads are uploaded.
- */
+/** GPU-painted surface history. Geometry holds ONLY this frame's four wheel stamps. */
 export class SkidMarks {
-  readonly mesh: THREE.Mesh
-  private readonly positions: Float32Array
-  private readonly alphas: Float32Array
-  private readonly births: Float32Array
-  private readonly posAttr: THREE.BufferAttribute
-  private readonly alphaAttr: THREE.BufferAttribute
-  private readonly birthAttr: THREE.BufferAttribute
-  private readonly material: THREE.Material
-  /** Seconds since start, driving the fade: a WebGL uniform or a node uniform. */
-  private readonly uTime: { value: number }
-  private readonly trails: Trail[] = []
-  private head = 0
-  private limit = MAX_SEGMENTS
-  private written = 0
-  private lastWrite = -Infinity
-  private time = 0
-  private readonly ruts: boolean
+  readonly target = new THREE.WebGLRenderTarget(1024, 1024, {
+    type: THREE.HalfFloatType, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter,
+    depthBuffer: false, stencilBuffer: false, generateMipmaps: false,
+  })
+  private readonly trails: Trail[] = Array.from({ length: MAX_WHEELS }, () => ({ active: false, loose: false, center: new THREE.Vector3(), left: new THREE.Vector3(), right: new THREE.Vector3(), edges: false }))
+  private readonly ownersX = new Float64Array(TILE_COUNT * TILE_COUNT).fill(Infinity)
+  private readonly ownersZ = new Float64Array(TILE_COUNT * TILE_COUNT).fill(Infinity)
+  private readonly positions = new THREE.BufferAttribute(new Float32Array(MAX_WHEELS * 12), 3).setUsage(THREE.DynamicDrawUsage)
+  private readonly values = new THREE.BufferAttribute(new Float32Array(MAX_WHEELS * 12), 3).setUsage(THREE.DynamicDrawUsage)
+  private readonly stampScene = new THREE.Scene()
+  private readonly fadeScene = new THREE.Scene()
+  private readonly camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1)
+  private readonly bounds = { value: new THREE.Vector2() }
+  private readonly decay = { value: new THREE.Vector2(1, 1) }
+  private readonly stamp: THREE.Mesh
+  private readonly fade: THREE.Mesh
+  private readonly clearColor = new THREE.Color()
+  private readonly viewport = new THREE.Vector4()
+  private readonly scissor = new THREE.Vector4()
+  private readonly stampBounds = new THREE.Box2()
+  private count = 0
+  private tilePixels = 256
+  private dirty = true
+  private elapsed = Infinity
+  private dt = 0
 
-  /** @param ruts mark loose ground wherever a tyre rolls through it, instead of rubber on tarmac. */
-  constructor({ ruts = false }: { ruts?: boolean } = {}) {
-    this.ruts = ruts
-    const verts = MAX_SEGMENTS * 4
-    this.positions = new Float32Array(verts * 3)
-    this.alphas = new Float32Array(verts)
-    this.births = new Float32Array(verts).fill(NEVER)
-
-    const index = new Uint32Array(MAX_SEGMENTS * 6)
-    for (let s = 0; s < MAX_SEGMENTS; s++) {
-      const v = s * 4
-      index.set([v, v + 2, v + 1, v + 1, v + 2, v + 3], s * 6)
+  constructor() {
+    this.target.texture.name = 'skids:rubber-height-ruts'
+    const geometry = new THREE.BufferGeometry()
+    geometry.setAttribute('position', this.positions)
+    geometry.setAttribute('aPaint', this.values)
+    geometry.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(MAX_WHEELS * 8), 2))
+    const index: number[] = []
+    for (let i = 0; i < MAX_WHEELS; i++) {
+      const v = i * 4
+      index.push(v, v + 1, v + 2, v + 2, v + 1, v + 3)
+      ;(geometry.getAttribute('uv') as THREE.BufferAttribute).array.set([0, 0, 1, 0, 0, 1, 1, 1], i * 8)
     }
-
-    const geo = new THREE.BufferGeometry()
-    this.posAttr = new THREE.BufferAttribute(this.positions, 3).setUsage(THREE.DynamicDrawUsage)
-    this.alphaAttr = new THREE.BufferAttribute(this.alphas, 1).setUsage(THREE.DynamicDrawUsage)
-    this.birthAttr = new THREE.BufferAttribute(this.births, 1).setUsage(THREE.DynamicDrawUsage)
-    geo.setAttribute('position', this.posAttr)
-    geo.setAttribute('aAlpha', this.alphaAttr)
-    geo.setAttribute('aBirth', this.birthAttr)
-    geo.setIndex(new THREE.BufferAttribute(index, 1))
-    geo.setDrawRange(0, 0)
-
-    // Ruts: damp, compacted sand under the dry surface — dark brown, not black.
-    const color = new THREE.Color(ruts ? 0x2e2216 : 0x0b0b0c)
-    const life = ruts ? RUT_LIFETIME : LIFETIME
-    if (backend.nodes) {
-      const node = backend.nodes.skidMarkMaterial(life, color)
-      this.material = node.material
-      this.uTime = node.time
-    } else {
-      const material = new THREE.ShaderMaterial({
-        uniforms: THREE.UniformsUtils.merge([
-          THREE.UniformsLib.fog,
-          { uTime: { value: 0 }, uLife: { value: life }, uColor: { value: color } },
-        ]),
-        vertexShader,
-        fragmentShader,
-        transparent: true,
-        depthWrite: false,
-        side: THREE.DoubleSide,
-        fog: true,
-        polygonOffset: true,
-        polygonOffsetFactor: -2,
-        polygonOffsetUnits: -2,
-      })
-      this.material = material
-      this.uTime = material.uniforms.uTime
+    geometry.setIndex(index)
+    const materials = backend.nodes ? backend.nodes.skidPaintMaterials(this.bounds, this.decay) : {
+      stamp: new THREE.ShaderMaterial({
+        uniforms: { uTile: this.bounds }, depthTest: false, depthWrite: false, side: THREE.DoubleSide, toneMapped: false,
+        vertexShader: `uniform vec2 uTile; attribute vec3 aPaint; varying vec3 vPaint; varying vec2 vUv;
+          void main(){vPaint=vec3(aPaint.x,position.y,aPaint.z);vUv=uv;
+          gl_Position=vec4((position.xz-uTile)/32.*2.-1.,0.,1.);}`,
+        fragmentShader: `varying vec3 vPaint; varying vec2 vUv; void main(){
+          float edge=smoothstep(0.,.12,vUv.x)*(1.-smoothstep(.88,1.,vUv.x));
+          gl_FragColor=vec4(vPaint.x*edge,vPaint.y,vPaint.z*edge,1.);}`,
+      }),
+      fade: new THREE.ShaderMaterial({
+        uniforms: { uDecay: this.decay }, depthTest: false, depthWrite: false, toneMapped: false,
+        vertexShader: 'void main(){gl_Position=vec4(position.xy,0.,1.);}',
+        fragmentShader: 'uniform vec2 uDecay; void main(){gl_FragColor=vec4(uDecay.x,1.,uDecay.y,1.);}',
+      }),
     }
-    this.mesh = new THREE.Mesh(geo, this.material)
-    this.mesh.frustumCulled = false
-    this.mesh.renderOrder = 1
-    this.mesh.visible = false
+    // Multiplication in the blend unit fades intensity without reading/copying the atlas.
+    materials.fade.transparent = true
+    materials.fade.blending = THREE.CustomBlending
+    materials.fade.blendSrc = THREE.ZeroFactor
+    materials.fade.blendDst = THREE.SrcColorFactor
+    materials.fade.blendSrcAlpha = THREE.ZeroFactor
+    materials.fade.blendDstAlpha = THREE.OneFactor
+    this.stamp = new THREE.Mesh(geometry, materials.stamp)
+    this.fade = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), materials.fade)
+    this.stamp.frustumCulled = this.fade.frustumCulled = false
+    this.stampScene.add(this.stamp); this.fadeScene.add(this.fade)
+    skidPaint.uSkidPaint.value = this.target.texture
+    backend.nodes?.setSkidPaintTexture(this.target.texture)
   }
 
-  update(wheels: readonly WheelState[], dt: number): void {
-    this.time += dt
-    this.uTime.value = this.time
-    this.mesh.visible = this.time - this.lastWrite < (this.ruts ? RUT_LIFETIME : LIFETIME)
-
-    for (let i = 0; i < wheels.length; i++) {
-      const w = wheels[i]
-      const trail = (this.trails[i] ??= {
-        active: false,
-        hasEdges: false,
-        center: new THREE.Vector3(),
-        left: new THREE.Vector3(),
-        right: new THREE.Vector3(),
-        alpha: 0,
-      })
-      // Rubber only marks tarmac when sliding; ruts mark loose ground whenever a tyre rolls through.
-      const loose = w.grounded ? surfaceProps(w.surface).loose : 0
-      const marks = this.ruts ? loose > 0 : w.grounded && w.slide >= MIN_SLIDE && loose === 0
-      if (!marks) {
-        trail.active = false
-        continue
-      }
-      _p.copy(w.contactPoint)
-      _p.y += LIFT
-      if (!trail.active) {
-        trail.active = true
-        trail.hasEdges = false
-        trail.center.copy(_p)
-        continue
-      }
-
-      const dx = _p.x - trail.center.x
-      const dz = _p.z - trail.center.z
-      const len = Math.hypot(dx, dz)
-      if (len < MIN_SEGMENT) continue
-      if (len > MAX_SEGMENT) {
-        trail.hasEdges = false
-        trail.center.copy(_p)
-        continue
-      }
-
-      const alpha = this.ruts
-        ? RUT_OPACITY * loose * Math.min(1, 0.6 + w.slide / FULL_SLIDE)
-        : MAX_OPACITY * Math.min(1, 0.2 + (0.8 * (w.slide - MIN_SLIDE)) / (FULL_SLIDE - MIN_SLIDE))
-      const half = w.cfg.width * (this.ruts ? 0.5 : 0.45)
-      _side.set(-dz / len, 0, dx / len).multiplyScalar(half)
-      if (!trail.hasEdges) {
-        trail.left.copy(trail.center).add(_side)
-        trail.right.copy(trail.center).sub(_side)
-        trail.alpha = alpha
-        trail.hasEdges = true
-      }
-      _l.copy(_p).add(_side)
-      _r.copy(_p).sub(_side)
-      this.writeSegment(trail.left, trail.right, _l, _r, trail.alpha, alpha)
-      trail.left.copy(_l)
-      trail.right.copy(_r)
-      trail.center.copy(_p)
-      trail.alpha = alpha
-    }
-  }
-
-  private writeSegment(l0: THREE.Vector3, r0: THREE.Vector3, l1: THREE.Vector3, r1: THREE.Vector3, a0: number, a1: number): void {
-    const s = this.head
-    this.head = (this.head + 1) % this.limit
-    this.written = Math.min(this.limit, this.written + 1)
-    this.lastWrite = this.time
-    this.mesh.visible = true
-    this.mesh.geometry.setDrawRange(0, this.written * 6)
-    const v = s * 4
-    const p = this.positions
-    l0.toArray(p, v * 3)
-    r0.toArray(p, v * 3 + 3)
-    l1.toArray(p, v * 3 + 6)
-    r1.toArray(p, v * 3 + 9)
-    this.alphas[v] = this.alphas[v + 1] = a0
-    this.alphas[v + 2] = this.alphas[v + 3] = a1
-    this.births.fill(this.time, v, v + 4)
-
-    this.posAttr.addUpdateRange(v * 3, 12)
-    this.alphaAttr.addUpdateRange(v, 4)
-    this.birthAttr.addUpdateRange(v, 4)
-    this.posAttr.needsUpdate = this.alphaAttr.needsUpdate = this.birthAttr.needsUpdate = true
-  }
-
-  setLimit(limit: number): void {
-    const next = Math.max(1, Math.min(MAX_SEGMENTS, Math.floor(limit)))
-    if (next === this.limit) return
-    this.limit = next
+  setQuality(quality: QualityPreset): void {
+    const pixels = quality === 'high' ? 512 : quality === 'medium' ? 384 : 256
+    if (pixels === this.tilePixels) return
+    this.tilePixels = pixels
+    this.target.setSize(pixels * TILE_COUNT, pixels * TILE_COUNT)
     this.clear()
   }
 
-  /** Wipes every mark (new race). */
-  clear(): void {
-    this.head = 0
-    this.written = 0
-    this.lastWrite = -Infinity
-    this.mesh.geometry.setDrawRange(0, 0)
-    this.mesh.visible = false
-    this.births.fill(NEVER)
-    this.birthAttr.clearUpdateRanges()
-    this.birthAttr.needsUpdate = true
-    for (const t of this.trails) t.active = false
+  update(wheels: readonly WheelState[], dt: number): void {
+    this.dt += Math.max(0, dt)
+    this.elapsed += Math.max(0, dt)
+    this.count = 0
+    this.stampBounds.makeEmpty()
+    for (let i = 0; i < Math.min(wheels.length, MAX_WHEELS); i++) {
+      const w = wheels[i], trail = this.trails[i]
+      const loose = surfaceProps(w.surface).loose
+      if (!w.grounded || (!loose && w.slide < MIN_SLIDE)) { trail.active = false; continue }
+      const p = w.contactPoint
+      if (!trail.active || trail.loose !== (loose > 0)) {
+        trail.active = true; trail.edges = false; trail.loose = loose > 0; trail.center.copy(p); continue
+      }
+      const dx = p.x - trail.center.x, dz = p.z - trail.center.z, length = Math.hypot(dx, dz)
+      if (length < MIN_SEGMENT) continue
+      if (length > MAX_SEGMENT || Math.abs(p.y - trail.center.y) > 2) { trail.edges = false; trail.center.copy(p); continue }
+      _side.set(-dz / length, 0, dx / length).multiplyScalar(w.cfg.width * .45)
+      if (!trail.edges) { trail.left.copy(trail.center).add(_side); trail.right.copy(trail.center).sub(_side); trail.edges = true }
+      _left.copy(p).add(_side); _right.copy(p).sub(_side)
+      const strength = loose ? .6 * loose * Math.min(1, .6 + w.slide / 8) : .55 * Math.min(1, .2 + .8 * (w.slide - MIN_SLIDE) / (8 - MIN_SLIDE))
+      const offset = this.count * 12
+      trail.left.toArray(this.positions.array, offset); trail.right.toArray(this.positions.array, offset + 3)
+      _left.toArray(this.positions.array, offset + 6); _right.toArray(this.positions.array, offset + 9)
+      for (let v = 0; v < 4; v++) {
+        this.values.setXYZ(this.count * 4 + v, loose ? 0 : strength, 0, loose ? strength : 0)
+        const x = this.positions.array[offset + v * 3], z = this.positions.array[offset + v * 3 + 2]
+        this.stampBounds.min.x = Math.min(this.stampBounds.min.x, x); this.stampBounds.min.y = Math.min(this.stampBounds.min.y, z)
+        this.stampBounds.max.x = Math.max(this.stampBounds.max.x, x); this.stampBounds.max.y = Math.max(this.stampBounds.max.y, z)
+      }
+      this.count++; this.elapsed = 0
+      trail.center.copy(p); trail.left.copy(_left); trail.right.copy(_right)
+    }
+    this.positions.needsUpdate = this.values.needsUpdate = this.count > 0
+    this.stamp.geometry.setDrawRange(0, this.count * 6)
   }
 
+  /** Called before the main scene draw; nothing is drawn while the history is empty. */
+  render(renderer: AnyRenderer, position: THREE.Vector3): void {
+    if (!this.dirty && this.elapsed > 60 && !this.count) { this.dt = 0; return }
+    const minX = Math.floor(position.x / TILE_SIZE) - 2, minZ = Math.floor(position.z / TILE_SIZE) - 2
+    const target = renderer.getRenderTarget(), autoClear = renderer.autoClear
+    const alpha = renderer.getClearAlpha(), scissorTest = renderer.getScissorTest()
+    renderer.getClearColor(this.clearColor); renderer.getViewport(this.viewport); renderer.getScissor(this.scissor)
+    try {
+      renderer.autoClear = false
+      renderer.setRenderTarget(this.target)
+      renderer.setClearColor(0, 0)
+      this.target.scissorTest = false
+      renderer.setScissorTest(false)
+      this.target.viewport.set(0, 0, this.target.width, this.target.height)
+      renderer.setViewport(this.target.viewport)
+      if (this.dirty) renderer.clear()
+      else if (this.dt > 0) {
+        this.decay.value.set(Math.exp(-this.dt / 6), Math.exp(-this.dt / 11))
+        renderer.render(this.fadeScene, this.camera)
+      }
+      this.target.scissorTest = true
+      renderer.setScissorTest(true)
+      for (let z = minZ; z < minZ + TILE_COUNT; z++) for (let x = minX; x < minX + TILE_COUNT; x++) {
+        const slot = tileSlot(x, z), px = slot % TILE_COUNT * this.tilePixels, py = Math.floor(slot / TILE_COUNT) * this.tilePixels
+        this.target.viewport.set(px, py, this.tilePixels, this.tilePixels)
+        this.target.scissor.copy(this.target.viewport)
+        renderer.setViewport(this.target.viewport)
+        renderer.setScissor(px, py, this.tilePixels, this.tilePixels)
+        if (this.ownersX[slot] !== x || this.ownersZ[slot] !== z) {
+          if (!this.dirty) {
+            // WebGPU render-pass clears ignore scissors: draw a zero multiplier instead.
+            this.decay.value.set(0, 0)
+            renderer.render(this.fadeScene, this.camera)
+          }
+          this.ownersX[slot] = x; this.ownersZ[slot] = z
+        }
+        if (!this.count || this.stampBounds.max.x < x * TILE_SIZE || this.stampBounds.min.x > (x + 1) * TILE_SIZE
+          || this.stampBounds.max.y < z * TILE_SIZE || this.stampBounds.min.y > (z + 1) * TILE_SIZE) continue
+        this.bounds.value.set(x * TILE_SIZE, z * TILE_SIZE)
+        renderer.render(this.stampScene, this.camera)
+      }
+      skidPaint.uSkidBounds.value.set(minX * TILE_SIZE, minZ * TILE_SIZE)
+      skidPaint.uSkidReady.value = 1
+      this.dirty = false; this.count = 0; this.dt = 0
+    } finally {
+      renderer.setRenderTarget(target as THREE.WebGLRenderTarget | null)
+      renderer.setViewport(this.viewport); renderer.setScissor(this.scissor); renderer.setScissorTest(scissorTest)
+      renderer.setClearColor(this.clearColor, alpha); renderer.autoClear = autoClear
+    }
+  }
+
+  clear(): void {
+    this.dirty = true; this.count = 0; this.dt = 0; this.elapsed = Infinity
+    this.ownersX.fill(Infinity); this.ownersZ.fill(Infinity)
+    skidPaint.uSkidReady.value = 0
+    for (const trail of this.trails) trail.active = false
+  }
   dispose(): void {
-    this.mesh.geometry.dispose()
-    this.material.dispose()
+    if (skidPaint.uSkidPaint.value === this.target.texture) skidPaint.uSkidReady.value = 0
+    this.target.dispose()
+    for (const mesh of [this.stamp, this.fade]) { mesh.geometry.dispose(); (mesh.material as THREE.Material).dispose() }
   }
 }

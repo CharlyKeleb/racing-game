@@ -16,6 +16,8 @@ export interface InputState {
   handbrake: boolean
   /** Nitro boost held. */
   nitro: boolean
+  /** Temporary rear-facing camera while held; omitted by AI/replays. */
+  lookBack?: boolean
 }
 
 /** Edge-triggered actions, consumed once per press. */
@@ -31,7 +33,7 @@ const KEY_ACTIONS: Record<string, InputAction> = {
 
 const GAMEPAD_DEADZONE = 0.12
 /** Standard mapping button indices. */
-const PAD = { A: 0, B: 1, X: 2, Y: 3, RB: 5, LT: 6, RT: 7, START: 9 } as const
+const PAD = { A: 0, B: 1, X: 2, Y: 3, RB: 5, LT: 6, RT: 7, START: 9, R3: 11 } as const
 
 export class InputManager {
   readonly state: InputState = { throttle: 0, brake: 0, steer: 0, handbrake: false, nitro: false }
@@ -59,6 +61,7 @@ export class InputManager {
     if (left || right) this.steerSource = 'keyboard'
     let handbrake = k.has('Space')
     let nitro = k.has('ShiftLeft') || k.has('ShiftRight')
+    let lookBack = k.has('KeyB')
 
     const pad = navigator.getGamepads?.().find((p) => p?.connected)
     if (pad) {
@@ -71,6 +74,7 @@ export class InputManager {
       brake = Math.max(brake, pad.buttons[PAD.LT]?.value ?? 0)
       handbrake ||= !!pad.buttons[PAD.A]?.pressed
       nitro ||= !!pad.buttons[PAD.X]?.pressed || !!pad.buttons[PAD.RB]?.pressed
+      lookBack ||= !!pad.buttons[PAD.R3]?.pressed
       this.edge(pad, PAD.A, 'skip')
       this.edge(pad, PAD.START, 'pause')
       this.edge(pad, PAD.Y, 'camera')
@@ -86,6 +90,7 @@ export class InputManager {
     }
     handbrake ||= t.handbrake
     nitro ||= t.nitro
+    lookBack ||= !!t.lookBack
 
     this.state.throttle = throttle
     this.state.brake = brake
@@ -93,6 +98,7 @@ export class InputManager {
     this.state.steerSource = this.steerSource
     this.state.handbrake = handbrake
     this.state.nitro = nitro
+    this.state.lookBack = lookBack
   }
 
   /** Feed from the touch overlay (via Game.setTouchInput). */
@@ -130,7 +136,8 @@ export class InputManager {
 
   private onBlur = (): void => {
     this.keys.clear()
-    Object.assign(this.touch, { throttle: 0, brake: 0, steer: 0, handbrake: false, nitro: false })
+    Object.assign(this.touch, { throttle: 0, brake: 0, steer: 0, handbrake: false, nitro: false, lookBack: false })
+    this.state.lookBack = false
   }
 
   dispose(): void {
