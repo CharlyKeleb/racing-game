@@ -53,6 +53,7 @@ export function Hud() {
       <ProximityDisplay />
       <HudFeedback />
       <HudStartLights />
+      <HudLaunch />
       <HudGauges />
     </div>
   )
@@ -151,6 +152,37 @@ function HudStartLights() {
 
     </>
   )
+}
+
+const LAUNCH_CALLS: Record<string, string> = { perfect: 'Perfect launch', good: 'Good launch', poor: 'Bogged down', early: 'Too early' }
+
+/** Grid rev band + how-to during the countdown, then the launch grade at lights-out (#91). */
+function HudLaunch() {
+  const t = useTelemetry(useShallow(s => ({ armed: s.launchArmed, flash: s.launchFlash, grade: s.launchGrade, high: s.launchBandHigh, low: s.launchBandLow, revs: s.launchRevs })))
+  const phase = useGame(s => s.phase)
+  const assist = useGame(s => s.settings.launchAssist)
+  const inBand = t.revs >= t.low && t.revs <= t.high
+  if (phase === 'countdown') {
+    return (
+      <div className={`launch-cue${t.armed ? ' is-armed' : ''}${inBand ? ' is-in-band' : ''}`}>
+        {!assist && (
+          <div className="launch-cue__meter" role="meter" aria-label="Launch revs" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(t.revs * 100)}>
+            <span className="launch-cue__band" style={{ left: `${t.low * 100}%`, width: `${(t.high - t.low) * 100}%` }} />
+            <span className="launch-cue__needle" style={{ left: `${Math.min(1, Math.max(0, t.revs)) * 100}%` }} />
+          </div>
+        )}
+        <p className="launch-cue__hint">
+          {assist
+            ? <>Launch assist · hold <kbd>↑</kbd> throttle</>
+            : t.armed ? <>Revs in the green · <b>let go at lights out</b></> : <>Hold <kbd>Space</kbd> or brake · rev into the green · let go at lights out</>}
+        </p>
+      </div>
+    )
+  }
+  if (phase === 'racing' && t.flash && LAUNCH_CALLS[t.grade]) {
+    return <div className={`hud-nitro-call launch-call launch-call--${t.grade}`}>{LAUNCH_CALLS[t.grade]}</div>
+  }
+  return null
 }
 
 function HudGauges() {

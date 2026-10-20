@@ -42,6 +42,7 @@ import { DrivingEffects } from '../effects/DrivingEffects'
 import { Headlights } from '../effects/Headlights'
 import { TrackProgress } from '../racing/TrackProgress'
 import { InputManager, type InputState } from '../input/InputManager'
+import { LaunchControl } from '../racing/LaunchControl'
 import { COUNTDOWN_SEC, RaceManager, START_LIGHTS, startLightsLit } from '../racing/RaceManager'
 import { draftingStrength } from '../racing/Drafting'
 import { Opponent } from '../racing/Opponent'
@@ -82,6 +83,8 @@ interface StackedTag extends RivalTag {
 // Handbrake, not brake: brake at standstill would engage reverse.
 export type ShowroomFocus = 'car' | 'wheel' | `wheel-${WheelId}` | 'plate-front' | 'plate-rear' | 'spoiler'
 
+/** How long the PERFECT / GOOD launch call stays up, seconds. */
+const LAUNCH_FLASH_SEC = 1.6
 const LOCKED_INPUT: InputState = { throttle: 0, brake: 0, steer: 0, handbrake: true, nitro: false }
 /** Past the flag: brake to a stop in a straight line while the rivals finish. */
 const FINISH_COAST_INPUT: InputState = { throttle: 0, brake: 0, steer: 0, handbrake: false, nitro: false }
@@ -269,6 +272,8 @@ export class Game {
   private showroomRev: { rpm: number; throttle: number } | null = null
   /** Grid revs before lights out (sound and tach only), player and per rival. */
   private readonly playerRevs = new StagingRevs(0)
+  /** Skill launch at lights-out, graded in fixedUpdate (#91). */
+  private readonly launch = new LaunchControl()
   private rivalRevs: StagingRevs[] = []
   /** Intro seconds as of the last frame, so each cut's sound cue fires once. */
   private introCueAt = 0
@@ -843,6 +848,8 @@ export class Game {
   private prepareRaceIntro(): void {
     this.finish.reset(); this.loop.timeScale = 1; this.audio.setFinishMix(false)
     this.playerRevs.reset(this.vehicle.config.engine.idleRpm)
+    this.launch.setConfig(this.vehicle.config.launch)
+    this.launch.reset()
     this.introCueAt = 0
     this.lightsShown = 0
     this.updateShowroom('intro')
@@ -1094,6 +1101,7 @@ export class Game {
       this.audio.resume()
     } else if (phase === 'racing' || phase === 'countdown' || phase === 'intro') {
       setPhase('paused')
+      this.launch.interrupt()
       this.audio.suspend()
     }
   }
@@ -1245,6 +1253,7 @@ export class Game {
       ? drive.mode === 'coast' ? FINISH_COAST_INPUT : drive.mode === 'parked' ? LOCKED_INPUT : drive.yawRate > 0 ? FINISH_SLIDE_INPUT : FINISH_BRAKE_INPUT
       : Math.abs(this.vehicle.controller.forwardSpeed) <= 1.2 ? LOCKED_INPUT
       : this.finish.active ? (this.finish.elapsed < 1.5 ? FINISH_COAST_INPUT : FINISH_GENTLE_INPUT) : FINISHED_INPUT
+    this.vehicle.controller.launchPush = controls && phase === 'racing' ? this.launch.push : 0
     this.vehicle.fixedUpdate(phase === 'finished' ? finishInput : controls ? this.input.state : LOCKED_INPUT, dt)
     if (drive && drive.mode !== 'coast') this.applyFinishDrive(drive.mode === 'parked' ? 0 : drive.speed, drive.mode === 'parked' ? 0 : drive.yawRate, drive.drift)
     const playerDistance = this.standings.distance(this.playerEntry)
@@ -1314,7 +1323,20 @@ export class Game {
     this.driftLastX=body.x; this.driftLastZ=body.z
     const position = this.vehicle.body.translation()
     this.racePosition.set(position.x, position.y, position.z)
+    // Grid revs tick here, not in render, so the launch grade can't depend on frame rate.
+    const engine = this.vehicle.config.engine
+    if (this.race.state === 'intro' || this.race.state === 'countdown') {
+      this.playerRevs.update(dt, engine.idleRpm, engine.redlineRpm, 0, this.race.state === 'countdown' ? this.input.state.throttle : -1)
+    }
     this.race.update(dt, this.racePosition)
+    const input = this.input.state
+    this.launch.update(dt, {
+      phase: this.race.state === 'countdown' ? 'staging' : this.race.state === 'racing' ? 'go' : 'other',
+      revs: (this.playerRevs.rpm - engine.idleRpm) / (engine.redlineRpm - engine.idleRpm),
+      throttle: input.throttle,
+      hold: input.handbrake || input.brake > 0.5,
+      assist: gameStore.getState().settings.launchAssist,
+    })
     this.playerEntry.lap = this.race.lap
     this.playerEntry.checkpoint = this.race.lastCheckpoint
     this.playerEntry.index = this.progress.update(position.x, position.z)
@@ -1828,8 +1850,6 @@ export class Game {
     this.lightsShown = lit
     // Rivals hold more revs with every light; your revs are yours on the throttle.
     const hold = phase === 'countdown' ? 0.12 + 0.3 * (COUNTDOWN_SEC - this.race.countdown) / COUNTDOWN_SEC : 0
-    const engine = this.vehicle.config.engine
-    this.playerRevs.update(dt, engine.idleRpm, engine.redlineRpm, 0, phase === 'countdown' ? this.input.state.throttle : -1)
     for (let i = 0; i < this.rivalRevs.length; i++) {
       const config = this.opponents[i]?.vehicle.config.engine
       if (config) this.rivalRevs[i].update(dt, config.idleRpm, config.redlineRpm, hold)
@@ -1925,6 +1945,12 @@ export class Game {
       countdown: this.race.countdown,
       startLights: this.race.state === 'countdown' ? startLightsLit(this.race.countdown) : 0,
       startLightCount: START_LIGHTS,
+      launchRevs: (this.playerRevs.rpm - this.vehicle.config.engine.idleRpm) / (this.vehicle.config.engine.redlineRpm - this.vehicle.config.engine.idleRpm),
+      launchBandLow: this.vehicle.config.launch.bandLow,
+      launchBandHigh: this.vehicle.config.launch.bandHigh,
+      launchArmed: this.launch.armed,
+      launchGrade: this.launch.grade,
+      launchFlash: this.launch.sinceGrade < LAUNCH_FLASH_SEC,
       fps: this.fps,
       carX: this.vehicle.position.x,
       carZ: this.vehicle.position.z,

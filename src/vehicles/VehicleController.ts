@@ -69,6 +69,8 @@ export class VehicleController {
   readonly wheels: WheelState[]
   readonly drivetrain: Drivetrain
   drafting = 0
+  /** Launch push along the car this tick, m/s² (LaunchControl.push); the race sets it. */
+  launchPush = 0
   readonly nitro: Nitro
   readonly drift = new Drift()
   private eventDrift: DriftConfig | null = null
@@ -358,6 +360,15 @@ export class VehicleController {
       body.applyImpulse(_impulse, true)
     }
 
+    // Launch: like nitro, a push at the centre of mass, so it isn't lost to
+    // wheelspin. A reward needs the throttle in a forward gear; a bog only
+    // slows a car that's already rolling forward, so it can never pull it back.
+    const launch = this.launchPush
+    if (launch !== 0 && groundedCount > 0 && this.drivetrain.gear > 0 && (launch > 0 ? driveThrottle > 0.1 : this.forwardSpeed > 1)) {
+      _impulse.copy(_fwd).multiplyScalar(launch * cfg.massKg * dt)
+      body.applyImpulse(_impulse, true)
+    }
+
     // Aerodynamics: quadratic drag through the centre of mass, downforce
     // (from airflow along the car, so forward speed) split over the axles by
     // the car's aero balance — a rear wing pins the rear, not the middle.
@@ -497,6 +508,7 @@ export class VehicleController {
     this.forwardSpeed = 0
     this.steerAngle = 0
     this.drafting = 0
+    this.launchPush = 0
     this.throttle = 0
     this.brake = 0
     this.braking = 0

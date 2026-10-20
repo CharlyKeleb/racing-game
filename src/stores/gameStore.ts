@@ -41,6 +41,8 @@ export interface Settings {
   musicTrack: MusicTrackId
   camera: CameraMode
   cameraMotion: boolean
+  /** Launch assist (#91): a good launch at lights-out from the throttle alone. */
+  launchAssist: boolean
   proximityRadar: boolean
   spotterVisual: boolean
   spotterAudio: boolean
@@ -115,6 +117,7 @@ const defaultSettings: Settings = {
   spotterVisual: true,
   spotterAudio: false,
   cockpits: {},
+  launchAssist: false,
   difficulty: 'challenging',
   opponents: 3,
   laps: 3,
@@ -134,6 +137,7 @@ function loadSettings(): Settings {
     merged.cockpits = {}
     for (const car of selectableCars()) if (savedCockpits && typeof savedCockpits === 'object' && Object.hasOwn(savedCockpits, car.id)) merged.cockpits[car.id] = sanitizeCockpit(savedCockpits[car.id], car.id)
     if (typeof merged.cameraMotion !== 'boolean') merged.cameraMotion = defaultSettings.cameraMotion
+    if (typeof merged.launchAssist !== 'boolean') merged.launchAssist = defaultSettings.launchAssist
     for(const key of ['proximityRadar','spotterVisual','spotterAudio'] as const)if(typeof merged[key]!=='boolean')merged[key]=defaultSettings[key]
     merged.tracksideVolume = typeof merged.tracksideVolume === 'number' && Number.isFinite(merged.tracksideVolume) ? Math.max(0, Math.min(1, merged.tracksideVolume)) : defaultSettings.tracksideVolume
     merged.driftEvent=driftEvent(merged.driftEvent).id
