@@ -141,6 +141,7 @@ describe('race cinematic handoff', () => {
       updateShowroom:()=>order.push('scene'),
       vehicle:{render:()=>order.push('player'),position:{},model:{root:{}},config:{engine:{idleRpm:900}}},
       playerRevs:{reset:()=>{}},
+      launch:{setConfig:()=>{},reset:()=>{}},
       opponents:[{vehicle:{render:()=>order.push('rival'),model:{root:{}}}}],
       environment:{follow:()=>{}},
       physics:{world:{}},

@@ -1,6 +1,7 @@
 import type { ArcadeHandlingConfig } from './ArcadeHandling'
 import type { KeyboardSteeringConfig } from './KeyboardSteering'
 import { DEFAULT_DRIFT, type DriftConfig } from './Drift'
+import { DEFAULT_LAUNCH, type LaunchConfig } from '../racing/LaunchControl'
 
 /**
  * Data contract between the asset pipeline (Blender MCP → vehicle-config.json)
@@ -158,6 +159,8 @@ export interface VehicleConfig {
   /** Share of downforce on the front axle (aero balance), 0..1. */
   downforceFrontShare: number
   nitro: NitroConfig
+  /** Skill launch at lights-out (see racing/LaunchControl.ts). */
+  launch: LaunchConfig
   /** Drift entries and how loose the rear goes (see Drift.ts). */
   drift: DriftConfig
   /**
@@ -236,6 +239,7 @@ export const DEFAULT_VEHICLE_CONFIG: VehicleConfig = {
   downforceCoefficient: 1.6,
   downforceFrontShare: 0.42,
   drift: DEFAULT_DRIFT,
+  launch: DEFAULT_LAUNCH,
   nitro: {
     durationSec: 4,
     fillRate: 0.25,
@@ -269,6 +273,7 @@ export function resolveVehicleConfig(partial: Partial<VehicleConfig> | undefined
     tires: { ...d.tires, ...partial.tires },
     engine: { ...d.engine, ...partial.engine },
     nitro: { ...d.nitro, ...partial.nitro },
+    launch: { ...d.launch, ...partial.launch },
     drift: { ...d.drift, ...partial.drift },
     wheels: partial.wheels ?? d.wheels,
   }

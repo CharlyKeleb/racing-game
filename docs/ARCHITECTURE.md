@@ -187,7 +187,7 @@ src/
 │                streaming/ChunkPlanner (pure LOD planning), Environment (sky, sun, fog), tracks
 ├── camera/      ChaseCamera (chase + cockpit, speed FOV)
 ├── racing/      RaceManager, CheckpointManager, LapTimer, AiDriver, AiProfiles,
-│                Overtaking, Drafting, RaceStandings
+│                Overtaking, Drafting, RaceStandings, LaunchControl (skill start)
 ├── input/       InputManager (keyboard + gamepad → InputState)
 ├── audio/       AudioManager (engine, tires, SFX, menu music + garage room tone)
 ├── effects/     PostFX (bloom, SMAA, tone mapping), particles (smoke, spray, sparks), skid marks

@@ -390,6 +390,26 @@ kbd { font-family: inherit; font-size: 11px; padding: 1px 6px; border: 1px solid
   100% { opacity: 0; transform: skewX(var(--skew)) scale(1.06); }
 }
 
+/* Launch (#91): rev band under the gantry through the countdown, then the grade call. */
+.launch-cue {
+  position: absolute; top: 58%; left: 50%; transform: translateX(-50%); width: min(360px, calc(100vw - 32px));
+  display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none;
+}
+.launch-cue__meter {
+  position: relative; width: 100%; height: 12px; border-radius: 999px; overflow: hidden;
+  background: rgba(7, 9, 13, 0.75); border: 1px solid #2a3240; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+}
+.launch-cue__band { position: absolute; top: 0; bottom: 0; background: rgba(45, 255, 90, 0.35); border-inline: 2px solid #2dff5a; }
+.launch-cue__needle { position: absolute; top: -2px; bottom: -2px; width: 4px; margin-left: -2px; background: #fff; box-shadow: 0 0 10px rgba(255, 255, 255, 0.9); }
+.launch-cue.is-in-band .launch-cue__needle { background: #2dff5a; box-shadow: 0 0 12px rgba(45, 255, 90, 0.95); }
+.launch-cue__hint { margin: 0; font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; color: #e8edf5; text-shadow: 0 2px 0 #000; text-align: center; }
+.launch-cue__hint kbd { font-size: 0.85em; }
+.launch-cue.is-armed .launch-cue__hint b { color: #2dff5a; }
+.launch-call { top: 58%; }
+.launch-call--perfect { color: #2dff5a; -webkit-text-stroke: 2px #032a0c; paint-order: stroke fill; text-shadow: 0 0 24px rgba(40, 255, 90, 0.9), 0 4px 0 #021a07; animation: nitro-perfect 0.5s ease-out both; }
+.launch-call--good { color: #e8edf5; text-shadow: 0 0 18px rgba(255, 255, 255, 0.5), 0 3px 0 #000; animation: nitro-perfect 0.4s ease-out both; }
+.launch-call--poor, .launch-call--early { color: var(--muted); text-shadow: 0 3px 0 #000; animation: nitro-perfect 0.4s ease-out both; }
+
 .speedo { position: absolute; right: var(--gutter); bottom: var(--gutter); display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
 
 /* ── Instrument cluster (NFS-style neon) ───────────────────────────── */

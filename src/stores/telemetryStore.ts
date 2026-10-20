@@ -1,5 +1,6 @@
 import type { Standing } from '../racing/RaceStandings'
 import { createStore } from 'zustand/vanilla'
+import type { LaunchGrade } from '../racing/LaunchControl'
 
 /**
  * High-frequency values for the HUD. The engine publishes at a throttled rate
@@ -70,6 +71,15 @@ export interface Telemetry {
   /** Start gantry: red lights lit now, out of how many. */
   startLights: number
   startLightCount: number
+  /** Grid revs as a share of idle→redline, and the launch target band (#91). */
+  launchRevs: number
+  launchBandLow: number
+  launchBandHigh: number
+  /** Launch held on the grid (handbrake / brake). */
+  launchArmed: boolean
+  launchGrade: LaunchGrade
+  /** The PERFECT / GOOD / … call is showing. */
+  launchFlash: boolean
   fps: number
   /** Car position on the XZ plane and yaw (0 = facing +Z), for the minimap. */
   carX: number
@@ -139,6 +149,12 @@ export const initialTelemetry: Telemetry = {
   countdown: 0,
   startLights: 0,
   startLightCount: 5,
+  launchRevs: 0,
+  launchBandLow: 0.6,
+  launchBandHigh: 0.84,
+  launchArmed: false,
+  launchGrade: 'none',
+  launchFlash: false,
   fps: 0,
   carX: 0,
   carZ: 0,

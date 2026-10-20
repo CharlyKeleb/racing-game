@@ -57,6 +57,7 @@ export function Settings({ onClose }: { onClose?: () => void }) {
             <span className="settings__help">Speed-scaled road and wheel blur. Your car body and HUD stay sharp. Set to zero to turn off; requires Post effects.</span>
           </label>
           <Segmented<number> label="Camera movement" value={settings.cameraMotion?1:0} options={[[1,'On'],[0,'Off']]} onPick={v=>update({cameraMotion:v===1})}/>
+          <Segmented<number> help label="Launch assist" value={settings.launchAssist?1:0} options={[[0,'Off'],[1,'On']]} onPick={v=>update({launchAssist:v===1})}/>
           <p className="settings__help">Camera movement controls extra head motion, shake and view fades. Reduced-motion preference disables these too.</p>
           <SettingChoices<CameraMode> preview={camera=><SettingScene cockpit={camera==='cockpit'}/>} label="Camera" value={settings.camera} options={[[ 'chase','Chase'],['cockpit','Cockpit']]} onPick={camera=>update({camera})}/>
           {settings.camera === 'cockpit' && <CockpitSettings/>}
@@ -82,9 +83,10 @@ export function Settings({ onClose }: { onClose?: () => void }) {
           <div><dt>Steer</dt><dd><kbd>A</kbd> <kbd>D</kbd> / <kbd>←</kbd> <kbd>→</kbd></dd></div>
           <div><dt>Handbrake</dt><dd><kbd>Space</kbd></dd></div>
           <div><dt>Nitro</dt><dd><kbd>Shift</kbd></dd></div>
+          <div><dt>Launch</dt><dd><kbd>Space</kbd> + <kbd>W</kbd>, let go at lights out</dd></div>
           <div><dt>Camera / reset / pause</dt><dd><kbd>C</kbd> <kbd>R</kbd> <kbd>Esc</kbd></dd></div>
         </dl>}
-        {section === 'controls' && <p className="settings__help">Drift: tap brake or handbrake while turning. Tap nitro again on the cue for a perfect boost. Gamepads are supported.</p>}
+        {section === 'controls' && <p className="settings__help">Drift: tap brake or handbrake while turning. Tap nitro again on the cue for a perfect boost. On the grid, hold handbrake or brake, keep the revs in the green band and let go when the lights go out for a launch. Gamepads are supported.</p>}
       </div>
     </div>
     <footer className="settings__footer"><span>Changes save automatically</span>{onClose && <Button variant="primary" onClick={onClose}>Done</Button>}</footer>
