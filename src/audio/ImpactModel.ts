@@ -1,13 +1,4 @@
-/**
- * How a hit sounds, from what happened: numbers in, numbers out (ImpactSound
- * plays the result). Pure, so the thresholds are tested.
- *
- *   car     body panels meeting: a hollow thud, a metallic crunch, the panels
- *           ringing, and on a big one plastic and glass going
- *   wall    concrete or armco: a heavier, deader thud and a lower crunch
- *   ground  bottoming out or landing: a deep thump and a short scrape
- *   curb    a wheel striking a raised kerb or city curb: a tyre-and-rim thunk
- */
+/** Pure contact-to-feedback thresholds. ImpactPCM owns the procedural sound assets. */
 export type ImpactKind = 'car' | 'wall' | 'ground' | 'curb'
 
 /** Below this change in speed it's a brush, not a hit, m/s. */
@@ -37,35 +28,4 @@ export function curbStrength(compressionRate: number, speed: number): number {
 export function scrapeLevel(contactThisTick: boolean, slidingSpeed: number): number {
   if (!contactThisTick || slidingSpeed < 1.5) return 0
   return Math.min(1, (slidingSpeed - 1.5) / 18)
-}
-
-export interface ImpactLayers {
-  /** Low body thud: start pitch, Hz, level 0..1 and decay, s. */
-  thudHz: number
-  thud: number
-  thudDecay: number
-  /** Metallic crunch: band centre, Hz, level and decay. */
-  crunchHz: number
-  crunch: number
-  crunchDecay: number
-  /** Panel ring (inharmonic partials), level 0..1. */
-  ring: number
-  /** Plastic and glass going, level 0..1 (only on big hits). */
-  debris: number
-}
-
-/** The layers for one hit: the kind sets the character, strength scales and lengthens it. */
-export function impactLayers(kind: ImpactKind, strength: number): ImpactLayers {
-  const s = Math.max(0, Math.min(1, strength))
-  const big = Math.max(0, (s - 0.55) / 0.45)
-  switch (kind) {
-    case 'car':
-      return { thudHz: 110, thud: 0.7 + 0.3 * s, thudDecay: 0.25 + 0.25 * s, crunchHz: 2200, crunch: 0.4 + 0.6 * s, crunchDecay: 0.18 + 0.4 * s, ring: 0.3 + 0.7 * s, debris: big }
-    case 'wall':
-      return { thudHz: 75, thud: 0.85 + 0.15 * s, thudDecay: 0.3 + 0.3 * s, crunchHz: 1300, crunch: 0.35 + 0.65 * s, crunchDecay: 0.15 + 0.4 * s, ring: 0.15 * s, debris: big * 0.8 }
-    case 'ground':
-      return { thudHz: 60, thud: 1, thudDecay: 0.25 + 0.2 * s, crunchHz: 700, crunch: 0.35 * s, crunchDecay: 0.12, ring: 0, debris: 0 }
-    case 'curb':
-      return { thudHz: 95, thud: 1, thudDecay: 0.12 + 0.08 * s, crunchHz: 1800, crunch: 0.25 * s, crunchDecay: 0.05, ring: 0.1 * s, debris: 0 }
-  }
 }

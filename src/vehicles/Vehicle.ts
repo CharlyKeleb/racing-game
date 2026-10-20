@@ -1,3 +1,4 @@
+import { FeedbackSpring } from '../effects/FeedbackSpring'
 import RAPIER from '@dimforge/rapier3d-compat'
 import * as THREE from 'three'
 import type { InputState } from '../input/InputManager'
@@ -22,8 +23,8 @@ const ROLL_PER_ACCEL = 0.36
 const MAX_SQUAT = 1.2
 const MAX_DIVE = 2.5
 const MAX_ROLL = 4.5
-const LEAN_FREQ = 9 // rad/s
-const LEAN_DAMPING = 0.5
+const LEAN_FREQ = 11 // rad/s
+const LEAN_DAMPING = 0.7
 /** Acceleration low-pass, 1/s: tick-to-tick contact noise would make the body buzz. */
 const ACCEL_SMOOTHING = 9
 const DEG = Math.PI / 180
@@ -43,6 +44,11 @@ export interface VehicleMotion {
   accelLat: number
   /** World velocity, m/s. */
   velocity: THREE.Vector3
+  /** Signed mean compression speed, m/s, and filtered travel activity, 0..1. */
+  suspensionVelocity: number
+  roadRoughness: number
+  /** Share of the wheels touching any surface. */
+  grounded: number
 }
 
 export interface SpawnPoint {
@@ -79,15 +85,14 @@ export class Vehicle {
   private currSteer = 0
   private readonly prevOffset: number[]
   private readonly currOffset: number[]
-  readonly motion: VehicleMotion = { accelLong: 0, accelLat: 0, velocity: new THREE.Vector3() }
+  readonly motion: VehicleMotion = { accelLong: 0, accelLat: 0, velocity: new THREE.Vector3(), suspensionVelocity: 0, roadRoughness: 0, grounded: 0 }
   private readonly lastVel = new THREE.Vector3()
   // Body lean spring state, radians and rad/s.
   /** Body lean pivot height: the axle line (mean wheel radius). */
   private readonly pivotHeight: number
-  private pitch = 0
-  private pitchVel = 0
-  private roll = 0
-  private rollVel = 0
+  private readonly pitch = new FeedbackSpring(LEAN_FREQ, LEAN_DAMPING)
+  private readonly roll = new FeedbackSpring(LEAN_FREQ, LEAN_DAMPING)
+  private readonly heave = new FeedbackSpring(18, .65)
   /** Tail-light materials (owned copies), lit up under braking. */
   private readonly taillights: THREE.MeshStandardMaterial[] = []
   /** Headlight lens materials (owned copies), lit at night. */
@@ -204,6 +209,15 @@ export class Vehicle {
     m.accelLong += (THREE.MathUtils.clamp(_a.dot(_f), -25, 25) - m.accelLong) * k
     m.accelLat += (THREE.MathUtils.clamp(_a.dot(_l), -25, 25) - m.accelLat) * k
     m.velocity.copy(_v)
+    let compressionSpeed = 0, activity = 0, grounded = 0
+    for (const wheel of wheels) if (wheel.grounded) {
+      const rate = THREE.MathUtils.clamp(wheel.suspension.velocity, -3, 3)
+      compressionSpeed += rate; activity += Math.abs(rate); grounded++
+    }
+    m.grounded = grounded / wheels.length
+    m.suspensionVelocity = this.quietTicks > 0 || !grounded ? 0 : compressionSpeed / grounded
+    const roughness = this.quietTicks > 0 || !grounded ? 0 : Math.min(1, activity / grounded / 1.6)
+    m.roadRoughness += (roughness - m.roadRoughness) * (1 - Math.exp(-14 * TICK))
   }
 
   /**
@@ -233,19 +247,17 @@ export class Vehicle {
       const pitchTarget = THREE.MathUtils.clamp(-this.motion.accelLong * PITCH_PER_ACCEL, -MAX_SQUAT, MAX_DIVE) * DEG
       // Cornering rolls the body to the outside: turning left lifts the left (+X) side.
       const rollTarget = THREE.MathUtils.clamp(this.motion.accelLat * ROLL_PER_ACCEL, -MAX_ROLL, MAX_ROLL) * DEG
-      const w2 = LEAN_FREQ * LEAN_FREQ
-      const c = 2 * LEAN_DAMPING * LEAN_FREQ
-      this.pitchVel += (w2 * (pitchTarget - this.pitch) - c * this.pitchVel) * h
-      this.pitch += this.pitchVel * h
-      this.rollVel += (w2 * (rollTarget - this.roll) - c * this.rollVel) * h
-      this.roll += this.rollVel * h
+      const pitch = this.pitch.step(pitchTarget, h)
+      const roll = this.roll.step(rollTarget, h)
+      const heave = this.heave.step(THREE.MathUtils.clamp(-this.motion.suspensionVelocity * .012, -.035, .025), h)
       // Lean about the axle line, not the ground under the car: pivoting at
       // ground level swung the whole body up and away from its wheels.
       const body = this.model.body
-      _euler.set(this.pitch, 0, this.roll)
+      _euler.set(pitch, 0, roll)
       body.rotation.copy(_euler)
       _pivot.set(0, this.pivotHeight, 0)
       body.position.copy(_pivot).sub(_pivot.applyEuler(_euler))
+      body.position.y += heave
 
       // Kept near 1: ACES tone mapping washes brighter emissive out toward white.
       const running = this.lightsOn ? 0.45 : 0.15
@@ -279,7 +291,8 @@ export class Vehicle {
     this.lastVel.set(0, 0, 0)
     this.motion.accelLong = this.motion.accelLat = 0
     this.motion.velocity.set(0, 0, 0)
-    this.pitch = this.pitchVel = this.roll = this.rollVel = 0
+    this.pitch.reset(); this.roll.reset(); this.heave.reset()
+    this.motion.suspensionVelocity = this.motion.roadRoughness = this.motion.grounded = 0
     this.model.body.rotation.set(0, 0, 0)
     this.model.body.position.set(0, 0, 0)
   }

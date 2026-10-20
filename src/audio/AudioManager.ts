@@ -1,3 +1,4 @@
+import { DrivingSound } from './DrivingSound'
 import { Howler } from 'howler'
 import { CarSound, type CarSoundState } from './CarSound'
 import { OpponentAudio, type RivalSoundState } from './OpponentAudio'
@@ -46,6 +47,7 @@ export class AudioManager {
   /** The player's tyres and brakes, and what they're made of. */
   private tyres: TyreBrakeSound | null = null
   private impacts: ImpactSound | null = null
+  private driving: DrivingSound | null = null
   /** Dips the player's engine and tyres under a crash. */
   private duck!: GainNode
   private fxBus!: GainNode
@@ -146,6 +148,7 @@ export class AudioManager {
     this.tyres = new TyreBrakeSound(ctx, this.noiseProfile)
     this.tyres.output.connect(this.carBus)
     this.impacts = new ImpactSound(ctx, this.fxBus)
+    this.driving = new DrivingSound(ctx, this.carBus)
     this.ambience = new GarageAmbience(ctx, this.master)
     this.music = new MenuMusic(ctx, this.master, (playing) => this.onMenuMusicState?.(playing))
     this.music.setTrack(musicTrack(this.musicTrackId))
@@ -400,6 +403,10 @@ export class AudioManager {
     }
   }
 
+  updateDriving(speed: number, paved: number, grounded: number, roughness: number, cockpit: boolean, active: boolean): void {
+    this.driving?.update(speed, paved, grounded, roughness, cockpit, active && !this.paused)
+  }
+
   suspend(): void {
     this.paused = true
     void this.ctx?.suspend()
@@ -456,18 +463,18 @@ export class AudioManager {
   /** A hit on a car: `car` -1 is the player, otherwise the rival's index (heard where it is). */
   impact(car: number, kind: ImpactKind, strength: number): void {
     if (this.paused || strength <= 0) return
-    ;(car < 0 ? this.impacts : this.rivals[car]?.impacts)?.hit(kind, strength)
+    const played = (car < 0 ? this.impacts : this.rivals[car]?.impacts)?.hit(kind, strength)
+    if (!played) return
     const ctx = this.ctx
-    // Your own hit (not a curb thunk): the engine drops away, up to ~14 dB
-    // on a big one, holds for a quarter second and comes back over half a
-    // second, so the crash owns the moment.
+    // Your own hit (not a curb thunk): the engine drops away, up to ~8 dB
+    // on a big one, briefly holds the transient and then recovers, so the crash owns the moment.
     if (car < 0 && kind !== 'curb' && ctx && this.duck) {
       const t = ctx.currentTime
       const g = this.duck.gain
       g.cancelScheduledValues(t)
       g.setValueAtTime(g.value, t)
-      g.linearRampToValueAtTime(1 - 0.8 * strength, t + 0.012)
-      g.setTargetAtTime(1, t + 0.1 + 0.15 * strength, 0.2)
+      g.linearRampToValueAtTime(1 - 0.6 * strength, t + 0.012)
+      g.setTargetAtTime(1, t + 0.045 + 0.08 * strength, 0.13)
     }
   }
 
@@ -479,6 +486,7 @@ export class AudioManager {
   dispose(): void {
     this.clearOpponents()
     this.impacts?.dispose()
+    this.driving?.dispose()
     this.engineBank = null
     this.bankCache.clear()
     this.sound?.dispose()

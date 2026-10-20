@@ -1348,6 +1348,8 @@ export class Game {
     sound.nitroActive = ctrl.nitro.active
     sound.nitroPerfect = ctrl.nitro.perfect
     this.audio.update(sound, readTyres(ctrl, this.tyreSound))
+    this.audio.updateDriving(this.tyreSound.speed, this.tyreSound.paved, this.vehicle.motion.grounded,
+      this.vehicle.motion.roadRoughness, cameraMode === 'cockpit', phase === 'racing' || phase === 'finished')
     this.renderer.render()
 
     this.fpsFrames++
@@ -1479,13 +1481,19 @@ export class Game {
       const h = this.carHits[slot]
       if (live) {
         if (h) {
-          if (h.car > 0) this.audio.impact(car, 'car', impactStrength(h.car))
-          if (h.wall > 0) this.audio.impact(car, 'wall', impactStrength(h.wall))
-          if (h.ground > 0) this.audio.impact(car, 'ground', impactStrength(h.ground))
+          const hit = Math.max(h.car, h.wall, h.ground)
+          if (hit > 0) {
+            const strength = impactStrength(hit)
+            this.audio.impact(car, hit === h.car ? 'car' : hit === h.wall ? 'wall' : 'ground', strength)
+            if (slot === 0 && strength > 0) this.camera.jolt(strength)
+          }
           this.audio.scrape(car, scrapeLevel(h.touching, speed), speed)
         }
         const curb = vehicle.quietTicks > 0 ? 0 : curbStrength(peak, speed)
-        if (curb > 0) this.audio.impact(car, 'curb', curb)
+        if (curb > 0) {
+          this.audio.impact(car, 'curb', curb)
+          if (slot === 0) this.camera.jolt(curb, true)
+        }
       } else {
         this.audio.scrape(car, 0, 0)
       }
