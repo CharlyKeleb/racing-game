@@ -1,3 +1,4 @@
+import type { TrackLook } from '../world/TrackLook'
 import { Help } from './Help'
 import { useEffect, useRef, useState } from 'react'
 import { GiGears, GiSteeringWheel, GiSpeaker, GiGamepad, GiComputerFan } from 'react-icons/gi'
@@ -40,6 +41,8 @@ export function Settings({ onClose }: { onClose?: () => void }) {
       <div className="settings__content" key={section}>
         <span className="eyebrow">{active.label}</span><p className="settings__hint">{active.hint}</p>
         {section === 'graphics' && <>
+          <Segmented<TrackLook> label="Track appearance" value={settings.trackLook} options={[[ 'default','Track default'],['road-focus','Road focus']]} onPick={trackLook=>update({trackLook})}/>
+          <p className="settings__help">Road focus darkens neutral asphalt and softens terrain colours on every circuit. Markings, signs and lights stay readable.</p>
           <SettingChoices<QualityPreset> preview={quality=><SettingScene quality={quality}/>} label="Visual quality" value={settings.quality} options={[[ 'low','Low'],['medium','Medium'],['high','High']]} onPick={quality=>update({quality})}/>
           <p className="settings__help">Illustrative previews. Low favors speed; High adds richer lighting and detail.</p>
           <SettingChoices<number> preview={v=><SettingScene effects={v===1}/>} label="Post effects" value={settings.postfx?1:0} options={[[1,'On'],[0,'Off']]} onPick={v=>update({postfx:v===1})}/>

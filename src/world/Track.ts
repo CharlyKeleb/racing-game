@@ -1,3 +1,4 @@
+import { withTrackLook } from './TrackLook'
 import { TrackAtmosphere } from './TrackAtmosphere'
 import { planEventSites } from './atmospherePlan'
 import type { QualityPreset } from '../stores/gameStore'
@@ -119,7 +120,7 @@ export class Track implements RaceTrack {
   private buildGround(): THREE.Mesh {
     const geo = this.track(new THREE.PlaneGeometry(GROUND_SIZE, GROUND_SIZE))
     geo.rotateX(-Math.PI / 2)
-    const mat = this.track(new THREE.MeshStandardMaterial({ color: 0x65745d, roughness: 1 }))
+    const mat = this.track(withTrackLook(new THREE.MeshStandardMaterial({ color: 0x65745d, roughness: 1 }), 'scenery'))
     const mesh = new THREE.Mesh(geo, mat)
     mesh.receiveShadow = true
     return mesh
@@ -159,7 +160,7 @@ export class Track implements RaceTrack {
 
   private buildRoad(width: number): THREE.Mesh {
     const tex = this.track(this.asphaltTexture())
-    const mat = this.track(new THREE.MeshStandardMaterial({ map: tex, roughness: 0.85, metalness: 0 }))
+    const mat = this.track(withTrackLook(new THREE.MeshStandardMaterial({ name: 'road:asphalt', map: tex, roughness: 0.85, metalness: 0 }), 'road'))
     mat.name = 'road:asphalt'
     mat.userData.layer = 'road'
     const mesh = new THREE.Mesh(this.ribbon(-width / 2, width / 2, 0.01, width), mat)
@@ -183,8 +184,8 @@ export class Track implements RaceTrack {
     const count = 700
     const trunkGeo = this.track(new THREE.CylinderGeometry(0.25, 0.35, 2.5, 6))
     const leafGeo = this.track(new THREE.ConeGeometry(2.2, 6, 7))
-    const trunkMat = this.track(new THREE.MeshStandardMaterial({ color: 0x5b3a21, roughness: 1 }))
-    const leafMat = this.track(new THREE.MeshStandardMaterial({ color: 0x374d3e, roughness: 1 }))
+    const trunkMat = this.track(withTrackLook(new THREE.MeshStandardMaterial({ color: 0x5b3a21, roughness: 1 }), 'scenery'))
+    const leafMat = this.track(withTrackLook(new THREE.MeshStandardMaterial({ color: 0x374d3e, roughness: 1 }), 'scenery'))
     const trunks = new THREE.InstancedMesh(trunkGeo, trunkMat, count)
     const leaves = new THREE.InstancedMesh(leafGeo, leafMat, count)
     trunks.castShadow = leaves.castShadow = true

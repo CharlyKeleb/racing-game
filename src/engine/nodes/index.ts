@@ -10,3 +10,5 @@ export { floorSheen, hazeMaterial, instanceFadeMaterial, lensDropMaterial, liver
 
 export { rainSurfaceMaterial, rainImpactMaterial, wetRoadMaterial } from './rainSurface'
 export { motionVectorMaterial } from './motionBlur'
+
+export { trackLookMaterial } from './trackLook'

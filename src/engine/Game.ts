@@ -1,3 +1,4 @@
+import { setTrackLook } from '../world/TrackLook'
 import { FinishSequence } from '../racing/FinishSequence'
 import { RaceFinishCamera } from '../camera/RaceFinishCamera'
 import { WetReflections } from '../effects/WetReflections'
@@ -1870,6 +1871,7 @@ export class Game {
   }
 
   private applySettings(s: Settings): void {
+    setTrackLook(s.trackLook)
     this.renderer.applyQuality(s.quality, s.postfx)
     this.effects?.setQuality(s.quality)
     this.environment?.setShadowMapSize(s.quality === 'high' ? 2048 : 1024)

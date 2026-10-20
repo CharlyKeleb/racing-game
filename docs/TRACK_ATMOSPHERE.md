@@ -7,8 +7,8 @@ crowd loops or applause. The existing race finish sting remains unchanged.
 
 The asphalt is darker and its grain has lower contrast; white edge lines and
 red/white kerbs carry the road silhouette. Grass and trees use muted colours.
-The old dashed road centreline is removed. These palette changes only affect
-the procedural circuit; authored streamed-track materials are unchanged.
+The old dashed road centreline is removed. Papaya retains this authored palette; the optional global Road focus preset
+also supports streamed circuits. See TRACK_LOOK.md.
 
 ## Placement and rendering
 
