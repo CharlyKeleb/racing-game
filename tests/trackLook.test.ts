@@ -22,7 +22,8 @@ describe('global track appearance',()=>{
       expect(roles).toContain('road');expect(roles).toContain('scenery')
       expect(roles).toContain('protected')
     }
-    for(const name of ['curbs_new.001','lines_yellow','astroturf.001','1111Mtl','1101Mtl']) expect(trackLookRole(name,'road')).toBe('protected')
+    for(const name of ['lines_yellow','astroturf.001','1101Mtl']) expect(trackLookRole(name,'road')).toBe('protected')
+    for(const name of ['curbs_new.001','1111Mtl','kerb_red']) expect(trackLookRole(name,'road')).toBe('kerb')
     expect(trackLookRole('SGN_NEON','prop')).toBe('protected')
     expect(trackLookRole('__vertex_color')).toBe('mixed')
   })
@@ -42,9 +43,10 @@ describe('global track appearance',()=>{
     setTrackLook('road-focus');expect(trackLookStrength.value).toBe(1)
     material.dispose();later.dispose();map.dispose()
   })
-  it('keeps grading before wet-road darkening and leaves protected kerbs untouched',()=>{
-    const kerb=new THREE.MeshStandardMaterial({name:'kerb',color:0xff0000})
+  it('keeps grading before wet-road darkening and leaves protected paint untouched',()=>{
+    const kerb=new THREE.MeshStandardMaterial({name:'lines_white',color:0xff0000})
     expect(withTrackLook(kerb)).toBe(kerb)
+    expect(kerb.onBeforeCompile.toString()).not.toContain('trackLook')
     const source=new THREE.MeshStandardMaterial({name:'asphalt'})
     source.userData.layer='road'
     const material=withTrackLook(source), mesh=new THREE.Mesh(new THREE.PlaneGeometry(),material), root=new THREE.Group()

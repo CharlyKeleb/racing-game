@@ -1167,3 +1167,7 @@ button.menu-track:hover,button.menu-track:focus-visible { border-color:var(--acc
 @media (max-width:600px) { .race-finish__label { padding:6px 12px 8px; } .screen--race-results { display:flex; align-items:center; justify-content:center; padding:16px; } }
 @media (max-height:520px) { .race-finish__bar { height:9vh; } .race-finish__label { top:calc(9vh + 8px); } .race-finish__badge { top:calc(9vh + 8px); width:84px; } .screen--race-results .results-panel { max-height:94dvh; } }
 @media (prefers-reduced-motion:reduce) { .screen--race-results .results-panel { animation:none; } }
+
+.cockpit-settings { min-width:0; margin:8px 0; padding:16px; border:1px solid var(--line); display:grid; gap:12px; }
+.cockpit-settings legend { padding:0 8px; font:700 16px var(--font-display); text-transform:uppercase; }
+.cockpit-settings .settings__help { margin:0; }

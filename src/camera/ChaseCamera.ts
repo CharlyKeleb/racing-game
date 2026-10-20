@@ -1,3 +1,4 @@
+import { cockpitProfile, DEFAULT_COCKPIT_ADJUSTMENT, type CockpitAdjustment } from '../vehicles/CockpitConfig'
 import { FeedbackSpring } from '../effects/FeedbackSpring'
 import * as THREE from 'three'
 import type { CameraMode } from '../stores/gameStore'
@@ -13,6 +14,10 @@ const _side = new THREE.Vector3()
 const _focus = new THREE.Vector3()
 const _shake = new THREE.Vector3()
 const _vdir = new THREE.Vector3()
+const _cockpitEye = new THREE.Vector3()
+const _cockpitQuaternion = new THREE.Quaternion()
+const _cockpitAim = new THREE.Quaternion()
+const _cockpitEuler = new THREE.Euler()
 
 /** Where the showroom camera looks and from how far; see ChaseCamera.showroom. */
 export interface ShowroomFraming {
@@ -36,6 +41,16 @@ function damp(lambda: number, dt: number): number {
  */
 export class ChaseCamera {
   mode: CameraMode = 'chase'
+  cameraMotion = true
+  cockpitCar = 'porsche911'
+  cockpitAdjustment: Readonly<CockpitAdjustment> = DEFAULT_COCKPIT_ADJUSTMENT
+  private readonly head = new FeedbackSpring(12, .9)
+  private lastMode: CameraMode = 'chase'
+  private transition = 1
+  viewOpacity = 1
+  private readonly transitionPosition = new THREE.Vector3()
+  private readonly transitionQuaternion = new THREE.Quaternion()
+  private readonly reduced = typeof matchMedia === 'undefined' ? null : matchMedia('(prefers-reduced-motion: reduce)')
   private readonly camera: THREE.PerspectiveCamera
   private readonly lookTarget = new THREE.Vector3()
   /**
@@ -117,15 +132,18 @@ export class ChaseCamera {
    * @param boost nitro intensity: 0..1, up to ~1.6 in a perfect boost (capped at 1.3 here).
    * @param motion the car's smoothed acceleration and velocity, for surge, bank and drift framing.
    */
-  update(target: THREE.Object3D, speedKmh: number, dt: number, boost = 0, motion?: VehicleMotion, gridFraming = 0): void {
-    if (this.camera.near !== NEAR) {
-      this.camera.near = NEAR
-      this.camera.updateProjectionMatrix()
-    }
+  update(target: THREE.Object3D, speedKmh: number, dt: number, boost = 0, motion?: VehicleMotion, gridFraming = 0, cockpitBody?: THREE.Object3D): void {
     dt = Math.max(0, Math.min(dt, .1))
+    const movement = this.cameraMotion && !this.reduced?.matches
+    const near = this.mode === 'cockpit' && gridFraming === 0 ? .025 : NEAR
+    if (this.camera.near !== near) { this.camera.near = near; this.camera.updateProjectionMatrix() }
+    if (this.mode !== this.lastMode) {
+      this.transitionPosition.copy(this.camera.position).sub(target.position); this.transitionQuaternion.copy(this.camera.quaternion)
+      this.transition = this.initialised && movement ? 0 : 1; this.lastMode = this.mode
+    }
     const speedT = THREE.MathUtils.smoothstep(Math.abs(speedKmh), 35, 260)
-    const impactY = this.impactY.step(0, dt), impactZ = this.impactZ.step(0, dt)
-    const impactRoll = this.impactRoll.step(0, dt)
+    const impactY = this.impactY.step(0, dt) * (movement ? 1 : 0), impactZ = this.impactZ.step(0, dt) * (movement ? 1 : 0)
+    const impactRoll = this.impactRoll.step(0, dt) * (movement ? 1 : 0)
     this.time += dt
     boost = Math.min(boost, 1.3)
     this.kick += (boost - this.kick) * damp(boost > this.kick ? 10 : 2.5, dt)
@@ -133,7 +151,7 @@ export class ChaseCamera {
 
     // Shake: a few incommensurate sines, so it never visibly loops.
     const roughness = motion?.roadRoughness ?? 0
-    const amp = this.speedShake * speedT * speedT + this.nitroShake * this.kick + roughness * .012
+    const amp = movement ? this.speedShake * speedT * speedT + this.nitroShake * this.kick + roughness * .012 : 0
     const t = this.time
     _shake.set(
       (Math.sin(t * 37.1) + 0.6 * Math.sin(t * 61.7 + 1.3)) * amp,
@@ -142,15 +160,27 @@ export class ChaseCamera {
     )
 
     if (this.mode === 'cockpit' && gridFraming === 0) {
-      _desired.set(0.35, 1.05, 0.1).applyQuaternion(target.quaternion).add(target.position)
+      const profile = cockpitProfile(this.cockpitCar), adjust = this.cockpitAdjustment
+      const heave = this.head.step(movement ? THREE.MathUtils.clamp((motion?.accelLong ?? 0) * -.001, -.012, .012) : 0, dt)
+      _cockpitEye.set(profile.eye[0], profile.eye[1] + adjust.height, profile.eye[2] + adjust.distance + heave)
+      const body = cockpitBody ?? target
+      body.updateWorldMatrix(true, false)
+      _desired.copy(_cockpitEye).applyMatrix4(body.matrixWorld)
+      body.getWorldQuaternion(_cockpitQuaternion)
+      _cockpitEuler.set(THREE.MathUtils.degToRad(adjust.pitch) + .025, THREE.MathUtils.degToRad(adjust.yaw), 0, 'YXZ')
+      _cockpitAim.setFromEuler(_cockpitEuler)
+      _fwd.set(0, 0, 1).applyQuaternion(_cockpitAim).applyQuaternion(_cockpitQuaternion)
       this.camera.position.copy(_desired)
       _look.copy(_desired).addScaledVector(_fwd, 10)
+      this.camera.up.set(0, 1, 0).applyQuaternion(_cockpitQuaternion)
       this.camera.lookAt(_look)
-      this.camera.translateX(_shake.x * 0.4)
-      this.camera.translateY(_shake.y * .4 + impactY * .45)
-      this.camera.translateZ(impactZ * .35)
-      this.camera.rotateZ(impactRoll * .4)
+      this.camera.translateX(_shake.x * .25)
+      this.camera.translateY(_shake.y * .25 + impactY * .2)
+      this.camera.translateZ(impactZ * .2)
+      this.camera.rotateZ(impactRoll * .2)
+      this.initialised = true
     } else {
+      this.camera.up.set(0, 1, 0)
       // Flatten forward so pitching over bumps doesn't swing the camera.
       _fwd.y = 0
       _fwd.normalize()
@@ -191,15 +221,27 @@ export class ChaseCamera {
       this.camera.translateZ(impactZ)
       this.camera.rotateZ(impactRoll)
       // Bank into the corner a little, like a head leaning with the g-force.
-      if (motion) this.camera.rotateZ(THREE.MathUtils.clamp(motion.accelLat * this.bank, -this.maxBank, this.maxBank))
+      if (motion && movement) this.camera.rotateZ(THREE.MathUtils.clamp(motion.accelLat * this.bank, -this.maxBank, this.maxBank))
     }
 
+    if (this.transition < 1) {
+      this.transition = Math.min(1, this.transition + dt / .18)
+      // Fade through black; never interpolate a camera through the car's shell.
+      if (this.transition < .5) {
+        this.camera.position.copy(target.position).add(this.transitionPosition)
+        this.camera.quaternion.copy(this.transitionQuaternion)
+      }
+    }
+
+    this.viewOpacity = Math.abs(this.transition * 2 - 1)
+
     // Kick is already smoothed, so it is added directly: fast in, slow out.
-    const fov = this.baseFov + gridFraming * 4 + this.maxFovBoost * speedT
+    const inCockpit = this.mode === 'cockpit' && gridFraming === 0
+    const fov = inCockpit ? cockpitProfile(this.cockpitCar).fov + this.cockpitAdjustment.fov : this.baseFov + gridFraming * 4 + this.maxFovBoost * speedT
     const speedFov = THREE.MathUtils.lerp(this.camera.fov - this.appliedKick, fov, damp(4, dt))
-    this.appliedKick = this.nitroFovKick * this.kick
+    this.appliedKick = (inCockpit ? movement ? 2 : 0 : this.nitroFovKick) * this.kick
     const next = speedFov + this.appliedKick
-    if (Math.abs(this.camera.fov - next) > 0.01) {
+    if (Math.abs(this.camera.fov - next) > 0.0001) {
       this.camera.fov = next
       this.camera.updateProjectionMatrix()
     }
@@ -261,5 +303,6 @@ export class ChaseCamera {
     this.lastJolt = -Infinity
     this.kick = this.appliedKick = 0
     this.initialised = false
+    this.head.reset(); this.transition = 1; this.viewOpacity = 1; this.lastMode = this.mode
   }
 }
