@@ -1320,7 +1320,6 @@ export class Game {
       this.lensDrops.update(camera, cameraMode === 'cockpit' ? wet : 0, speed, dt)
       this.haze.update(this.hazeCars, camera, dt, this.lensDrops.active)
     }
-    const cameraMode = gameStore.getState().settings.camera
     const blurAmount = gameStore.getState().settings.motionBlur
     let exposure = phase === 'racing' ? motionExposure(this.vehicle.speedKmh, blurAmount, dt)
       : phase === 'intro' ? motionExposure(160, blurAmount * this.introCamera.whip, dt) : 0

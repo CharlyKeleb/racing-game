@@ -9,5 +9,4 @@ export { NodePostFX } from './postfx'
 export { floorSheen, hazeMaterial, instanceFadeMaterial, lensDropMaterial, liveryPaintMaterial, premiumPaintMaterial, rainMaterial, skidMarkMaterial, skyDome } from './materials'
 
 export { rainSurfaceMaterial, rainImpactMaterial, wetRoadMaterial } from './rainSurface'
-export { floorSheen, hazeMaterial, instanceFadeMaterial, skidMarkMaterial, skyDome } from './materials'
 export { motionVectorMaterial } from './motionBlur'
