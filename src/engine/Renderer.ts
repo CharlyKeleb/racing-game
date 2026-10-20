@@ -41,7 +41,7 @@ export function maxAnisotropy(renderer: AnyRenderer): number {
 }
 
 interface PostStack {
-  setWhipBlur(strength: number): void
+  setMotionBlur(exposure: number, player: THREE.Object3D | null): void
   setHaze(haze: HazeSource | null): void
   setSize(w: number, h: number): void
   render(): void
@@ -211,9 +211,8 @@ export class Renderer {
     this.postfx?.setHaze(haze)
   }
 
-  /** Intro whip-pan smear (post stack only; skipped when post FX are off). */
-  setWhipBlur(strength: number): void {
-    this.postfx?.setWhipBlur(strength)
+  setMotionBlur(exposure: number, player: THREE.Object3D | null): void {
+    this.postfx?.setMotionBlur(exposure, player)
   }
 
   render(): void {

@@ -34,9 +34,9 @@ or removed), the game reloads on WebGL and stays there until the tab is closed
   - `WebGPURenderer` and `PMREMGenerator` from `three/webgpu`.
   - `particles.ts`: the GPU particle pool (#51).
   - `postfx.ts`: the post stack as TSL nodes. It has the same chain as the
-    `postprocessing` one, which is WebGL only: bloom over a half-float scene
-    pass, then ACES + sRGB (`renderOutput`), then SMAA (High) or FXAA, and the
-    intro whip-pan blur on top while active.
+    `postprocessing` one, which is WebGL only: a half-float scene pass,
+    depth-aware per-object motion blur, then bloom, ACES + sRGB (`renderOutput`),
+    and SMAA (High) or FXAA (see [Motion blur](MOTION_BLUR.md)).
   - `materials.ts`: node twins of the game's custom WebGL materials:
 
     | WebGL | Node version |
