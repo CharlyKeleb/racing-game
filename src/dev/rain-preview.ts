@@ -64,7 +64,7 @@ async function run() {
     ])
     car = rigCarModel(model, config)
     for (const wheel of config.wheels) car.wheels[wheel.id].pivot.position.set(...wheel.position)
-    new CarLivery(car).apply(DEFAULT_BUILD)
+    new CarLivery(car).apply({ ...DEFAULT_BUILD, finish: new URLSearchParams(location.search).get('finish') === 'pearl' ? 'pearl' : 'metallic' })
     car.root.position.set(3, .3, 3)
     scene.add(car.root)
     carRain = new CarRain(car, field.uniforms)

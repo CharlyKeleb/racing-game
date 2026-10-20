@@ -1,8 +1,9 @@
+import type { PaintFinishUniforms } from '../../vehicles/PaintFinish'
 import type { RainSurfaceUniforms } from '../../effects/RainSurface'
 import { rainClearance } from './rainSurface'
 import * as THREE from 'three/webgpu'
 import {
-  abs, attribute, cameraPosition, clamp, cos, cross, float, fwidth, length, materialColor, materialOpacity, max, min, mix, mod, modelViewMatrix, normalize,
+  abs, attribute, cameraPosition, cameraViewMatrix, modelNormalMatrix, normalView, positionView, floor, fract, clamp, cos, cross, float, fwidth, length, materialColor, materialOpacity, max, min, mix, mod, modelViewMatrix, normalize,
   positionGeometry, positionLocal, reference, reflector, select, sin, smoothstep, step, texture, uniform, uv, varying, vec2, vec3, vec4,
 } from 'three/tsl'
 import { SkyMesh } from 'three/addons/objects/SkyMesh.js'
@@ -128,6 +129,30 @@ export function hazeMaterial() {
 /** LiveryGraphics' uniform objects: the node version reads them live by reference. */
 type LiveryUniforms = Record<string, { value: unknown }>
 
+/** Paint layers live beneath the unperturbed clearcoat, never as emissive glitter. */
+function paintPearlColor(base: THREE.Node<'vec3'>, finish: PaintFinishUniforms) {
+  const angle = float(1).sub(abs(normalize(normalView).dot(normalize(positionView.negate())))).pow(2)
+  const pearl = reference('value', 'float', finish.uPaintPearl)
+  return mix(base, base.gbr, angle.mul(pearl).mul(.4)).mul(mix(vec3(1), mix(vec3(1, .78, .93), vec3(.70, .91, 1), angle), pearl.mul(.65)))
+}
+export function premiumPaintMaterial(finish: PaintFinishUniforms): THREE.MeshPhysicalNodeMaterial {
+  const material = new THREE.MeshPhysicalNodeMaterial({ name: 'livery_paint' })
+  const grain = positionLocal.mul(220)
+  const cell = floor(grain)
+  const hash = fract(sin(vec3(
+    cell.dot(vec3(127.1, 311.7, 74.7)), cell.dot(vec3(269.5, 183.3, 246.1)), cell.dot(vec3(113.5, 271.9, 124.6)),
+  )).mul(43758.5453))
+  const width = fwidth(grain)
+  const filter = float(1).sub(smoothstep(.35, 1.4, max(width.x, max(width.y, width.z))))
+  const strength = smoothstep(.82, .94, hash.x).mul(filter).mul(reference('value', 'float', finish.uPaintFlake))
+  // Transform the object-space perturbation using the object's normal matrix.
+  const tilt = cameraViewMatrix.mul(vec4(modelNormalMatrix.mul(hash.mul(2).sub(1)), 0)).xyz
+  material.normalNode = normalize(normalView.add(tilt.sub(normalView.mul(normalView.dot(tilt))).mul(strength).mul(.38)))
+  material.roughnessNode = mix(reference('roughness', 'float', material), .11, strength)
+  material.colorNode = paintPearlColor(materialColor.rgb, finish)
+  return material
+}
+
 /**
  * Garage livery paint (CarLivery + LiveryGraphics): a physical material whose
  * diffuse colour gets the stripes, hood number and door panels / decals
@@ -135,8 +160,8 @@ type LiveryUniforms = Record<string, { value: unknown }>
  * attributes. Mirrors LIVERY_FRAGMENT; the uniforms stay owned by
  * LiveryGraphics and are read by reference, so `apply()` needs no changes.
  */
-export function liveryPaintMaterial(u: LiveryUniforms): THREE.MeshPhysicalNodeMaterial {
-  const material = new THREE.MeshPhysicalNodeMaterial({ name: 'livery_paint' })
+export function liveryPaintMaterial(u: LiveryUniforms, finish: PaintFinishUniforms): THREE.MeshPhysicalNodeMaterial {
+  const material = premiumPaintMaterial(finish)
   const f = (name: string) => reference('value', 'float', u[name])
   const v2 = (name: string) => reference('value', 'vec2', u[name])
   const v4 = (name: string) => reference('value', 'vec4', u[name])
@@ -164,7 +189,7 @@ export function liveryPaintMaterial(u: LiveryUniforms): THREE.MeshPhysicalNodeMa
   const outer = float(1).sub(smoothstep(width.add(0.018), width.add(0.018).add(edge), distance)).mul(stripeMask)
   const inner = float(1).sub(smoothstep(width, width.add(edge), distance)).mul(stripeMask)
   const inside = (p: THREE.Node<'vec2'>) => step(0, p.x).mul(step(p.x, 1)).mul(step(0, p.y)).mul(step(p.y, 1))
-  let color: THREE.Node<'vec3'> = mix(mix(materialColor.rgb, accent, outer), primary, inner)
+  let color: THREE.Node<'vec3'> = mix(mix(paintPearlColor(materialColor.rgb, finish), accent, outer), primary, inner)
   // Hood number.
   const huv = vec2(lp.x.div(hood.y).add(0.5), lp.z.sub(hood.x).div(hood.y).add(0.5))
   const hoodTex = texture(atlas, vec2(huv.x.mul(0.5), huv.y))

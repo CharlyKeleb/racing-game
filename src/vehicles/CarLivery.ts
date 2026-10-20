@@ -1,3 +1,4 @@
+import { paintFinishUniforms, patchPaintFinish, setPaintFinish } from './PaintFinish'
 import { LicensePlate } from './LicensePlate'
 import { backend } from '../engine/backend'
 import * as THREE from 'three'
@@ -33,6 +34,7 @@ function slotFor(materialName: string, onWheel: boolean): Slot | null {
 }
 
 export class CarLivery {
+  private readonly paintFinish = paintFinishUniforms()
   private readonly paint: THREE.MeshPhysicalMaterial
   private readonly rims = new THREE.MeshStandardMaterial({ name: 'livery_rims', metalness: 1, roughness: 0.22 })
   private readonly calipers = new THREE.MeshStandardMaterial({ name: 'livery_calipers', metalness: 0.3, roughness: 0.4 })
@@ -56,7 +58,7 @@ export class CarLivery {
     if (placement && backend.nodes) {
       // WebGPU runs no onBeforeCompile: the node twin projects the same graphics.
       this.graphics = new LiveryGraphics(placement)
-      this.paint = backend.nodes.liveryPaintMaterial(this.graphics.uniforms) as unknown as THREE.MeshPhysicalMaterial
+      this.paint = backend.nodes.liveryPaintMaterial(this.graphics.uniforms, this.paintFinish) as unknown as THREE.MeshPhysicalMaterial
     } else if (placement) {
       this.paint = new THREE.MeshPhysicalMaterial({ name: 'livery_paint' })
       this.graphics = new LiveryGraphics(placement)
@@ -68,8 +70,11 @@ export class CarLivery {
       }
       this.paint.customProgramCacheKey = () => 'garage-livery-v1'
     } else {
-      this.paint = new THREE.MeshPhysicalMaterial({ name: 'livery_paint' })
+      this.paint = backend.nodes
+        ? backend.nodes.premiumPaintMaterial(this.paintFinish) as unknown as THREE.MeshPhysicalMaterial
+        : new THREE.MeshPhysicalMaterial({ name: 'livery_paint' })
     }
+    if (!backend.nodes) patchPaintFinish(this.paint, this.paintFinish)
     model.root.updateMatrixWorld(true)
     const bodyInverse = model.body.matrixWorld.clone().invert()
 
@@ -132,6 +137,7 @@ export class CarLivery {
       this.paint.needsUpdate = true
       this.finish = build.finish
     }
+    setPaintFinish(this.paintFinish, build.finish)
     this.graphics?.apply(build.livery)
     this.licensePlate.apply(build.livery)
     this.rims.color.set(build.rims)

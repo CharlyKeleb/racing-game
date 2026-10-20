@@ -97,19 +97,23 @@ function PaintTab({ build, update }: TabProps) {
   return (
     <>
       <Swatches label="Color" presets={PAINT_PRESETS} value={build.paint} onPick={(paint) => update({ paint })} />
-      <Segmented<PaintFinish>
+      <FinishPicker build={build} update={update} />
+    </>
+  )
+}
+
+function FinishPicker({ build, update }: TabProps) {
+  return <Segmented<PaintFinish>
         label="Finish"
         value={build.finish}
         options={[
           ['gloss', 'Gloss'],
-          ['metallic', 'Metal'],
+          ['metallic', 'Metallic'],
           ['matte', 'Matte'],
           ['pearl', 'Pearl'],
         ]}
         onPick={(finish) => update({ finish })}
       />
-    </>
-  )
 }
 
 function WheelsTab({ build, update, wheel, onWheel, disabled }: TabProps & { wheel: WheelId; onWheel(wheel: WheelId): void; disabled: boolean }) {
@@ -242,6 +246,7 @@ function LiveryTab({ build, update, disabled }: TabProps & { disabled: boolean }
   return (
     <fieldset className="livery-editor" disabled={disabled}>
       <legend className="sr-only">Livery</legend>
+      <FinishPicker build={build} update={update} />
 
       <Segmented<StripePattern> label="Stripes" value={design.pattern} options={[
         ['none', 'None'], ['center', 'Center'], ['twin', 'Twin'], ['offset', 'Offset'], ['chevron', 'V'], ['triple', 'Triple'], ['sash', 'Sash'], ['pinstripe', 'Pinstripe'],
