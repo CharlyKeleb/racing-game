@@ -3,7 +3,9 @@ import { GiCheckeredFlag, GiStopwatch, GiRaceCar, GiRoad, GiHomeGarage, GiGears 
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { buildStats, carClass, performanceRank } from '../vehicles/CarBuild'
 import { getCar } from '../vehicles/carRegistry'
-import { GAME_MODES } from '../racing/gameModes'
+import { GAME_MODES, type GameModeId } from '../racing/gameModes'
+import { formatTime } from '../racing/LapTimer'
+import { readTrialRecord, trialBuildKey } from '../racing/TimeTrial'
 import { useGameInstance } from './GameContext'
 import { useGame } from './hooks'
 import { CarPicker } from './CarPicker'
@@ -24,6 +26,8 @@ export function MainMenu() {
   const [showSettings, setShowSettings] = useState(false)
   const [showRaceSetup, setShowRaceSetup] = useState(false)
   const settings = useGame((s) => s.settings)
+  const build = useGame((s) => s.build)
+  const personalBest = settings.mode === 'timeTrial' ? readTrialRecord(settings.track, settings.car, trialBuildKey(build))?.lapMs ?? null : null
   // Try immediately in case autoplay is allowed; otherwise the first click or
   // key in the menu brings up the garage's room tone and the soundtrack.
   useEffect(() => {
@@ -62,13 +66,13 @@ export function MainMenu() {
           <ModeSelect />
           <TrackPicker />
           <Button size="sm" variant="ghost" className="menu-setup" onClick={() => setShowRaceSetup(true)}>
-            {settings.mode === 'drift' ? `Drift setup · ${driftEvent(settings.driftEvent).name}` : `Race setup · ${settings.laps} ${settings.laps === 1 ? 'lap' : 'laps'}`} · {TIME_PRESETS[settings.timeOfDay].label}{settings.weather === 'rain' ? ' · Rain' : ''}
+            {setupLabel(settings.mode, settings.driftEvent, settings.laps, personalBest)} · {TIME_PRESETS[settings.timeOfDay].label}{settings.weather === 'rain' ? ' · Rain' : ''}
           </Button>
           <Button size="md" className="menu-icon-action menu-garage" disabled={switching} onClick={() => game?.openGarage()}>
             <GiHomeGarage aria-hidden="true"/> Garage
           </Button>
           <Button size="lg" variant="primary" className="menu-icon-action menu-race" disabled={switching} onClick={() => game?.startRace()} autoFocus>
-            <GiCheckeredFlag aria-hidden="true"/> {settings.mode === 'drift' ? 'Start drifting' : 'Race'}
+            <GiCheckeredFlag aria-hidden="true"/> {START_LABELS[settings.mode]}
           </Button>
         </div>
       </div>
@@ -77,6 +81,15 @@ export function MainMenu() {
       {showSettings && <Suspense fallback={<div role="status">Loading settings…</div>}><SettingsDialog onClose={() => setShowSettings(false)} /></Suspense>}
     </div>
   )
+}
+
+const START_LABELS: Record<GameModeId, string> = { quick: 'Race', timeTrial: 'Start trial', drift: 'Start drifting', freeRoam: 'Drive' }
+
+function setupLabel(mode: GameModeId, event: Parameters<typeof driftEvent>[0], laps: number, personalBest: number | null): string {
+  if (mode === 'drift') return `Drift setup · ${driftEvent(event).name}`
+  if (mode === 'timeTrial') return `Time trial · PB ${formatTime(personalBest)}`
+  if (mode === 'freeRoam') return 'Free roam setup'
+  return `Race setup · ${laps} ${laps === 1 ? 'lap' : 'laps'}`
 }
 
 /** Name, class, rank and stats of the current build. Shared by menu and garage. */
@@ -133,7 +146,7 @@ function CarSpecsStrip({ carId }: { carId: string }) {
   )
 }
 
-/** Mode tiles: the current one lit, the rest locked with a "Soon" tag until they're built. */
+/** Mode tiles: the current one lit; any still being built are locked with a "Soon" tag. */
 const modeIcons = { quick: GiCheckeredFlag, timeTrial: GiStopwatch, drift: GiRaceCar, freeRoam: GiRoad }
 
 function ModeSelect() {
@@ -150,7 +163,7 @@ function ModeSelect() {
             role="radio"
             aria-checked={m.id === mode}
             disabled={!m.available || switching}
-            onClick={() => { if (m.id === 'quick' || m.id === 'drift') update({mode: m.id, ...(m.id === 'drift' ? {track: 'drift-park'} : {})}) }}
+            onClick={() => { if (m.available) update({mode: m.id, ...(m.id === 'drift' ? {track: 'drift-park'} : {})}) }}
             className={m.id === mode ? 'on' : ''}
             title={m.available ? m.blurb : `${m.blurb}: coming soon`}
           >

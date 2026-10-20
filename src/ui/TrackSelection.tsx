@@ -1,3 +1,4 @@
+import { gameMode } from '../racing/gameModes'
 import { driftEvent } from '../racing/driftEvents'
 import { useEffect, useRef, useState } from 'react'
 import { TIME_PRESETS } from '../world/timeOfDay'
@@ -43,7 +44,7 @@ export function TrackSelection({ onClose }: { onClose(): void }) {
   const index = TRACKS.indexOf(track)
   return <dialog className="track-select" ref={dialog} onClose={onClose} aria-labelledby="track-select-title">
     <header className="track-select__header">
-      <div><span className="eyebrow">{settings.mode === 'drift' ? 'Drift Challenge' : 'Quick Race'} / Location</span><h1 id="track-select-title">Choose your circuit<span>.</span></h1></div>
+      <div><span className="eyebrow">{gameMode(settings.mode).name} / Location</span><h1 id="track-select-title">Choose your circuit<span>.</span></h1></div>
       <Button size="sm" variant="ghost" onClick={()=>dialog.current?.close()}>Back</Button>
     </header>
     <div className="track-select__body">
@@ -63,6 +64,6 @@ export function TrackSelection({ onClose }: { onClose(): void }) {
         </div>
       </section>
     </div>
-    <footer className="track-select__footer"><div className="track-select__race-context"><span className="eyebrow">Your race</span><span>{settings.mode === 'drift' ? `${driftEvent(settings.driftEvent).laps} scored ${driftEvent(settings.driftEvent).laps===1?'lap':'laps'} / No time limit` : <>{settings.laps} {settings.laps===1?'lap':'laps'} <i>/</i> {(Number(previews[track.id as keyof typeof previews].lengthKm)*settings.laps).toFixed(2)} km</>} <i>/</i> {TIME_PRESETS[settings.timeOfDay].label}</span></div><Button variant="primary" size="lg" onClick={()=>{dialog.current?.close();if(selected!==current)update({track:selected})}}>{selected===current?'Keep this circuit':'Select circuit'} <span aria-hidden="true">→</span></Button></footer>
+    <footer className="track-select__footer"><div className="track-select__race-context"><span className="eyebrow">Your race</span><span>{settings.mode === 'timeTrial' ? <>Unlimited laps <i>/</i> {previews[track.id as keyof typeof previews].lengthKm} km per lap</> : settings.mode === 'freeRoam' ? <>No timer <i>/</i> Free driving</> : settings.mode === 'drift' ? `${driftEvent(settings.driftEvent).laps} scored ${driftEvent(settings.driftEvent).laps===1?'lap':'laps'} / No time limit` : <>{settings.laps} {settings.laps===1?'lap':'laps'} <i>/</i> {(Number(previews[track.id as keyof typeof previews].lengthKm)*settings.laps).toFixed(2)} km</>} <i>/</i> {TIME_PRESETS[settings.timeOfDay].label}</span></div><Button variant="primary" size="lg" onClick={()=>{dialog.current?.close();if(selected!==current)update({track:selected})}}>{selected===current?'Keep this circuit':'Select circuit'} <span aria-hidden="true">→</span></Button></footer>
   </dialog>
 }
