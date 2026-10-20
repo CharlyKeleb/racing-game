@@ -1,3 +1,4 @@
+import { skidPaintColor } from './skidPaint'
 import * as THREE from 'three/webgpu'
 import { attribute, float, max, min, mix, reference, smoothstep, texture, vec3, vec4 } from 'three/tsl'
 
@@ -21,6 +22,6 @@ export function trackLookMaterial(source: THREE.MeshStandardMaterial | THREE.Mes
   const colour = smoothstep(.15, .4, chroma)
   const kerb = mix(c.mul(1.06), max(mix(vec3(l), c, 1.8), vec3(0, 0, 0)).mul(.75), colour)
   const result = role === 1 ? asphalt : role === 2 ? muted : role === 3 ? mix(muted, asphalt, road) : kerb
-  material.colorNode = vec4(mix(c, result, reference('value', 'float', strength)), base.a)
+  material.colorNode = vec4(skidPaintColor(mix(c, result, reference('value', 'float', strength))), base.a)
   return material
 }

@@ -1482,6 +1482,7 @@ export class Game {
     const { postfx, weather, camera: cameraMode } = gameStore.getState().settings
     const wet = weather === 'rain' && phase !== 'menu' && phase !== 'garage' ? 1 : 0
     const camera = this.renderer.camera
+    this.effects.renderMarks(this.renderer.renderer, this.vehicle.model.root.position)
     this.rainSurface.update(this.renderer.renderer, this.renderer.scene, this.track.group, camera, wet, dt)
     this.wetRoads.update(this.track.group, wet, dt)
     this.vehicle.model.root.getWorldPosition(this.racePosition)

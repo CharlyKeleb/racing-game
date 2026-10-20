@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { withSkidPaint } from '../effects/SkidPaint'
 import { backend } from '../engine/backend'
 
 export type TrackLook = 'default' | 'road-focus'
@@ -65,5 +66,5 @@ export function withTrackLook(source: THREE.MeshStandardMaterial | THREE.MeshLam
   }
   source.customProgramCacheKey = () => key.call(source) + ':track-look:' + roleNumber
   source.needsUpdate = true
-  return source
+  return withSkidPaint(source)
 }
