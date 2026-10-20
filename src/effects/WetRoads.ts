@@ -44,8 +44,8 @@ export class WetRoads {
         if (layer !== 'road' && !/asphalt|tarmac|road/i.test(source.name)) return source
         if (this.materials.has(source)) return this.materials.get(source)!
         if (this.originals.has(source)) return source
-        if (backend.nodes && source instanceof THREE.MeshStandardMaterial) {
-          const material = backend.nodes.wetRoadMaterial(source, this.surface, this.reflection)
+        if (backend.nodes && (source instanceof THREE.MeshStandardMaterial || (source as THREE.Material & { isMeshStandardNodeMaterial?: boolean }).isMeshStandardNodeMaterial)) {
+          const material = backend.nodes.wetRoadMaterial(source as THREE.MeshStandardMaterial, this.surface, this.reflection)
           this.materials.set(source, material)
           this.materials.set(material, material)
           return material
@@ -73,7 +73,7 @@ export class WetRoads {
           }
           shader.vertexShader = 'varying vec3 vRainRoadWorld;\n' + shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvRainRoadWorld=(modelMatrix*vec4(position,1.)).xyz;')
           shader.fragmentShader = 'varying vec3 vRainRoadWorld;\n' + RAIN_SURFACE_GLSL + WET_ROAD_GLSL + shader.fragmentShader
-          shader.fragmentShader = shader.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+          shader.fragmentShader = shader.fragmentShader.replace('#include <alphatest_fragment>', `#include <alphatest_fragment>
             float rainWet=rainExposed(vRainRoadWorld)*uRainWet;
             float rainPool=rainPuddle(vRainRoadWorld.xz)*rainWet;
             diffuseColor.rgb*=mix(1.,mix(.78,.64,rainPool),rainWet);`)

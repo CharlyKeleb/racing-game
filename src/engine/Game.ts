@@ -1,3 +1,4 @@
+import { setTrackLook } from '../world/TrackLook'
 import { FinishSequence } from '../racing/FinishSequence'
 import { RaceFinishCamera } from '../camera/RaceFinishCamera'
 import { WetReflections } from '../effects/WetReflections'
@@ -1404,6 +1405,9 @@ export class Game {
     this.track.update(this.vehicle.position, _velocity.set(v.x, v.y, v.z), dt)
     this.renderer.adapt(dt)
 
+    const outdoors = phase === 'intro' || phase === 'countdown' || phase === 'racing' || phase === 'finished' || phase === 'paused'
+    this.track.atmosphere?.update(camera.position, phase === 'paused' ? 0 : frameDt, outdoors)
+    this.audio.updateTrackside(this.track.atmosphere?.sources, camera, outdoors, gameStore.getState().settings.tracksideVolume)
     this.updateOpponentAudio(phase, staging)
     this.updateHitAudio(phase)
     const ctrl = this.vehicle.controller
@@ -1867,6 +1871,7 @@ export class Game {
   }
 
   private applySettings(s: Settings): void {
+    setTrackLook(s.trackLook)
     this.renderer.applyQuality(s.quality, s.postfx)
     this.effects?.setQuality(s.quality)
     this.environment?.setShadowMapSize(s.quality === 'high' ? 2048 : 1024)

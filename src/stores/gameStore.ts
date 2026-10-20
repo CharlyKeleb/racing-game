@@ -1,3 +1,4 @@
+import type { TrackLook } from '../world/TrackLook'
 import type { MinimapRaster } from '../world/MinimapData'
 import { sanitizeLivery, type LiveryDesign } from '../vehicles/LiveryDesign'
 import { driftEvent, type DriftEventId } from '../racing/driftEvents'
@@ -23,6 +24,7 @@ export type Weather = 'dry' | 'rain'
 export interface Settings {
   mode: 'quick' | 'drift'
   driftEvent: DriftEventId
+  trackLook: TrackLook
   quality: QualityPreset
   postfx: boolean
   /** Velocity blur amount, 0 disables both capture and blur. */
@@ -30,6 +32,8 @@ export interface Settings {
   /** WebGL, or the WebGPU trial (#50). Read once at startup: switching reloads the page. */
   renderer: RendererKind
   masterVolume: number
+  /** Trackside wind and pit ambience; independent of engine/music. */
+  tracksideVolume: number
   /** Menu/garage soundtrack on/off. */
   menuMusic: boolean
   /** Track id from audio/musicTracks.ts. */
@@ -89,10 +93,12 @@ const defaultSettings: Settings = {
   mode: 'quick',
   driftEvent: 'flow',
   quality: defaultQuality(),
+  trackLook: 'road-focus',
   postfx: !isMobile(),
   motionBlur: typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : .65,
   renderer: 'webgl',
   masterVolume: 0.9,
+  tracksideVolume: .65,
   menuMusic: true,
   musicTrack: MUSIC_TRACKS[0].id,
   camera: 'chase',
@@ -110,6 +116,8 @@ function loadSettings(): Settings {
     const raw = localStorage.getItem(SETTINGS_KEY)
     if (!raw) return defaultSettings
     const merged: Settings = { ...defaultSettings, ...JSON.parse(raw) }
+    if (merged.trackLook !== 'default' && merged.trackLook !== 'road-focus') merged.trackLook = defaultSettings.trackLook
+    merged.tracksideVolume = typeof merged.tracksideVolume === 'number' && Number.isFinite(merged.tracksideVolume) ? Math.max(0, Math.min(1, merged.tracksideVolume)) : defaultSettings.tracksideVolume
     merged.driftEvent=driftEvent(merged.driftEvent).id
     if (merged.mode !== 'drift') merged.mode = 'quick'
     if (!isAiDifficulty(merged.difficulty)) merged.difficulty = 'challenging'

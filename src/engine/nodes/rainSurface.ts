@@ -86,7 +86,7 @@ export function wetRoadMaterial(source: THREE.MeshStandardMaterial, surface: Rai
   const noise = sin(p.x.mul(.19).add(sin(p.y.mul(.11)))).mul(sin(p.y.mul(.24).add(sin(p.x.mul(.17))))).mul(.5).add(.5)
   const pool = smoothstep(.62, .82, noise).mul(wet)
   const color = vec3(source.color.r, source.color.g, source.color.b)
-  const baseColor = source.map ? color.mul(texture(source.map).rgb) : color
+  const baseColor = (source as THREE.MeshStandardMaterial & { colorNode?: THREE.Node<'vec3'> | THREE.Node<'vec4'> }).colorNode?.rgb ?? (source.map ? color.mul(texture(source.map).rgb) : color)
   material.colorNode = baseColor.mul(mix(1, mix(.78, .64, pool), wet))
   const roughness = source.roughnessMap ? texture(source.roughnessMap).g.mul(source.roughness) : float(source.roughness)
   material.roughnessNode = mix(mix(roughness, min(roughness, .32), wet), .09, pool)
