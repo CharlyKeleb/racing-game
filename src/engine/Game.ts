@@ -1,3 +1,4 @@
+import { WetReflections } from '../effects/WetReflections'
 import { CarRain } from '../effects/CarRain'
 import { RainSurface } from '../effects/RainSurface'
 import { RainImpacts } from '../effects/RainImpacts'
@@ -201,6 +202,7 @@ export class Game {
   private carRain!: CarRain
   private rainImpacts!: RainImpacts
   private wetRoads!: WetRoads
+  private wetReflections!: WetReflections
   private rain!: Rain
   private rainSpray!: RainSpray
   private lensDrops!: LensDrops
@@ -361,7 +363,9 @@ export class Game {
     this.renderer.setHaze(this.haze)
     this.rainSurface = new RainSurface()
     this.rainImpacts = new RainImpacts(this.rainSurface.uniforms)
-    this.wetRoads = new WetRoads(this.rainSurface.uniforms)
+    this.wetReflections = new WetReflections()
+    this.wetReflections.setQuality(settings.quality)
+    this.wetRoads = new WetRoads(this.rainSurface.uniforms, this.wetReflections.uniforms)
     scene.add(this.rainImpacts.mesh)
     this.rainSurface.setQuality(settings.quality)
     this.rainImpacts.setQuality(settings.quality)
@@ -1302,6 +1306,8 @@ export class Game {
     const camera = this.renderer.camera
     this.rainSurface.update(this.renderer.renderer, this.renderer.scene, this.track.group, camera, wet, dt)
     this.wetRoads.update(this.track.group, wet, dt)
+    this.vehicle.model.root.getWorldPosition(this.racePosition)
+    this.wetReflections.update(this.renderer.renderer, this.renderer.scene, this.track.group, camera, this.racePosition, wet, dt)
     this.rainImpacts.mesh.visible = wet > 0 && this.rainSurface.uniforms.uRainReady.value > 0
     this.carRain.update(this.vehicle.model, wet, dt)
     this.rain.update(camera, wet, dt)
@@ -1791,6 +1797,7 @@ export class Game {
     if (this.camera) this.camera.mode = s.camera
     this.rain?.setQuality(s.quality)
     this.rainSurface?.setQuality(s.quality)
+    this.wetReflections?.setQuality(s.quality)
     this.rainImpacts?.setQuality(s.quality)
     this.carRain?.setQuality(s.quality)
     // Before the time of day: rain re-bakes the environment, applyTimeOfDay pushes it to the scene.
@@ -1831,6 +1838,7 @@ export class Game {
     this.sparks?.dispose()
     this.haze?.dispose()
     this.wetRoads?.dispose()
+    this.wetReflections?.dispose()
     this.carRain?.dispose()
     this.rainImpacts?.dispose()
     this.rainSurface?.dispose()

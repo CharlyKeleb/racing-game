@@ -1,3 +1,4 @@
+import { WetReflections } from '../effects/WetReflections'
 import { AssetManager } from '../engine/AssetManager'
 import { rigCarModel, type CarModel } from '../vehicles/CarModel'
 import { CarLivery } from '../vehicles/CarLivery'
@@ -36,7 +37,10 @@ async function run() {
   const vertices = geometry.getAttribute('position')
   for (let i = 0; i < vertices.count; i++) vertices.setY(i, vertices.getX(i) * .1)
   geometry.computeVertexNormals()
-  const roadMaterial = new THREE.MeshStandardMaterial({ color: '#4d5258', roughness: .9 })
+  const low = new URLSearchParams(location.search).get('quality') === 'low'
+  const roadMaterial = low && !backend.nodes
+    ? new THREE.MeshLambertMaterial({ color: '#4d5258' })
+    : new THREE.MeshStandardMaterial({ color: '#4d5258', roughness: .9 })
   roadMaterial.userData.layer = 'road'
   track.add(new THREE.Mesh(geometry, roadMaterial))
   const roof = new THREE.Mesh(new THREE.BoxGeometry(4, .2, 4), new THREE.MeshStandardMaterial({ color: '#b5875a' }))
@@ -45,7 +49,10 @@ async function run() {
   camera.position.set(8, 7, 12); camera.lookAt(-1, 0, 0)
   const field = new RainSurface()
   const impacts = new RainImpacts(field.uniforms)
-  const roads = new WetRoads(field.uniforms)
+  const reflections = new WetReflections()
+  reflections.setQuality(low ? 'low' : 'high')
+  const reflectionAnchor = new THREE.Vector3()
+  const roads = new WetRoads(field.uniforms, reflections.uniforms)
   const rain = new Rain(field.uniforms)
   scene.add(impacts.mesh, rain.mesh)
   let car: CarModel | undefined, carRain: CarRain | undefined
@@ -108,6 +115,7 @@ async function run() {
     lastTime = now
     field.update(renderer, scene, track, camera, wet, dt)
     roads.update(track, wet, dt)
+    reflections.update(renderer, scene, track, camera, reflectionAnchor, wet, dt)
     rain.update(camera, wet, dt)
     impacts.mesh.visible = wet > 0
     if (car && carRain) carRain.update(car, wet, dt)

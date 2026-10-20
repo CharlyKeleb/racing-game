@@ -1,3 +1,4 @@
+import type { WetReflectionUniforms } from '../../effects/WetReflections'
 import { SPLASH_GRAVITY, SPLASH_LIFT_MIN, SPLASH_LIFT_RANGE, SPLASH_AIR_DRAG } from '../../effects/RainImpactPhysics'
 import type { CarRainAnchors } from '../../effects/CarRain'
 import * as THREE from 'three/webgpu'
@@ -73,7 +74,7 @@ export function rainImpactMaterial(surface: RainSurfaceUniforms, anchors?: CarRa
   return material
 }
 
-export function wetRoadMaterial(source: THREE.MeshStandardMaterial, surface: RainSurfaceUniforms) {
+export function wetRoadMaterial(source: THREE.MeshStandardMaterial, surface: RainSurfaceUniforms, reflection?: WetReflectionUniforms) {
   const material = new THREE.MeshStandardNodeMaterial()
   THREE.MeshStandardMaterial.prototype.copy.call(material, source)
   const time = reference('value', 'float', surface.uRainTime)
@@ -100,5 +101,18 @@ export function wetRoadMaterial(source: THREE.MeshStandardMaterial, surface: Rai
   // NormalMapNode's declaration predates the typed TSL vec3 extensions.
   const baseNormal = source.normalMap ? normalMap(texture(source.normalMap), uniform(source.normalScale)) as unknown as THREE.Node<'vec3'> : normalView
   material.normalNode = normalize(vec3(baseNormal).add(cameraViewMatrix.mul(vec4(ripple.x, 0, ripple.y, 0)).xyz))
+  if (reflection) {
+    const projected = uniform(reflection.uWetReflectionMatrix.value).mul(vec4(positionWorld, 1))
+    const coord = projected.xy.div(max(projected.w, .0001)).add(ripple.mul(.018))
+    const valid = step(0, coord.x).mul(step(coord.x, 1)).mul(step(0, coord.y)).mul(step(coord.y, 1)).mul(step(.001, projected.w))
+    const planeFade = float(1).sub(smoothstep(.08, .4, abs(uniform(reflection.uWetReflectionPlane.value).dot(vec4(positionWorld, 1)))))
+    const viewDirection = normalize(cameraPosition.sub(positionWorld))
+    const fresnel = float(.04).add(float(.96).mul(float(1).sub(abs(viewDirection.dot(uniform(reflection.uWetReflectionPlane.value).xyz))).pow(5)))
+    const weight = pool.mul(planeFade).mul(valid).mul(reference('value', 'float', reflection.uWetReflectionReady)).mul(mix(.35, .85, fresnel))
+    // Render-target textures use native top-left coordinates on WebGPU.
+    const reflected = texture(reflection.uWetReflection.value, vec2(coord.x, float(1).sub(coord.y))).rgb
+    material.emissiveNode = reflected.mul(weight)
+    material.colorNode = material.colorNode.mul(float(1).sub(weight))
+  }
   return material
 }

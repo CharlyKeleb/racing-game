@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import type { WetReflectionUniforms } from './WetReflections'
 import { backend } from '../engine/backend'
 import { RAIN_SURFACE_GLSL, type RainSurfaceUniforms } from './RainSurface'
 
@@ -27,7 +28,8 @@ export class WetRoads {
   private elapsed = Infinity
   private root: THREE.Object3D | null = null
   private readonly surface: RainSurfaceUniforms
-  constructor(surface: RainSurfaceUniforms) { this.surface = surface }
+  private readonly reflection?: WetReflectionUniforms
+  constructor(surface: RainSurfaceUniforms, reflection?: WetReflectionUniforms) { this.surface = surface; this.reflection = reflection }
 
   update(root: THREE.Object3D, wet: number, dt: number): void {
     this.elapsed += dt
@@ -43,7 +45,7 @@ export class WetRoads {
         if (this.materials.has(source)) return this.materials.get(source)!
         if (this.originals.has(source)) return source
         if (backend.nodes && source instanceof THREE.MeshStandardMaterial) {
-          const material = backend.nodes.wetRoadMaterial(source, this.surface)
+          const material = backend.nodes.wetRoadMaterial(source, this.surface, this.reflection)
           this.materials.set(source, material)
           this.materials.set(material, material)
           return material
@@ -53,6 +55,22 @@ export class WetRoads {
         source.onBeforeCompile = (shader, renderer) => {
           previous.compile.call(source, shader, renderer)
           Object.assign(shader.uniforms, this.surface)
+          if (this.reflection && (source instanceof THREE.MeshStandardMaterial || source instanceof THREE.MeshLambertMaterial)) {
+            Object.assign(shader.uniforms, this.reflection)
+            shader.fragmentShader = `uniform sampler2D uWetReflection;
+              uniform mat4 uWetReflectionMatrix; uniform vec4 uWetReflectionPlane;
+              uniform float uWetReflectionReady;
+` + shader.fragmentShader
+            shader.fragmentShader = shader.fragmentShader.replace('#include <opaque_fragment>', `
+              vec4 reflectedCoord=uWetReflectionMatrix*vec4(vRainRoadWorld,1.);
+              vec2 reflectedUv=reflectedCoord.xy/max(reflectedCoord.w,.0001)+rainRipple(vRainRoadWorld.xz)*rainPool*.018;
+              float reflectedValid=step(0.,reflectedUv.x)*step(reflectedUv.x,1.)*step(0.,reflectedUv.y)*step(reflectedUv.y,1.)*step(.001,reflectedCoord.w);
+              float planeFade=1.-smoothstep(.08,.4,abs(dot(uWetReflectionPlane,vec4(vRainRoadWorld,1.))));
+              float fresnel=.04+.96*pow(1.-abs(dot(normal,normalize(vViewPosition))),5.);
+              float reflectionWeight=rainPool*planeFade*reflectedValid*uWetReflectionReady*mix(.35,.85,fresnel);
+              outgoingLight=mix(outgoingLight,texture2D(uWetReflection,clamp(reflectedUv,0.,1.)).rgb,reflectionWeight);
+              #include <opaque_fragment>`)
+          }
           shader.vertexShader = 'varying vec3 vRainRoadWorld;\n' + shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvRainRoadWorld=(modelMatrix*vec4(position,1.)).xyz;')
           shader.fragmentShader = 'varying vec3 vRainRoadWorld;\n' + RAIN_SURFACE_GLSL + WET_ROAD_GLSL + shader.fragmentShader
           shader.fragmentShader = shader.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
@@ -68,7 +86,7 @@ export class WetRoads {
               normal=normalize(normal+mat3(viewMatrix)*vec3(ripple.x,0.,ripple.y));`)
           }
         }
-        source.customProgramCacheKey = () => previous.key.call(source) + ':wet-road-v1'
+        source.customProgramCacheKey = () => previous.key.call(source) + ':wet-road-v2:' + Boolean(this.reflection)
         source.needsUpdate = true
         return source
       }
