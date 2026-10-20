@@ -1190,3 +1190,16 @@ button.menu-track:hover,button.menu-track:focus-visible { border-color:var(--acc
 .spoiler-design summary { cursor:pointer; font:700 16px var(--font-display); text-transform:uppercase; }
 .spoiler-design[open] > :not(summary) { margin-top:14px; }
 .spoiler-design .ui-segmented { flex-wrap:wrap; }
+
+/* Car-local awareness stays between map and gauges, clear of touch inputs. */
+.proximity { position:absolute; left:50%; bottom:max(20px,env(safe-area-inset-bottom)); transform:translateX(-50%); width:116px; pointer-events:none; }
+.proximity__panel { padding:7px 5px 6px; background:#07101fd9; border:1px solid #9fbdd540; border-radius:7px; box-shadow:0 4px 18px #0003; text-align:center; }
+.proximity__title { display:block; font:700 9px system-ui; letter-spacing:.16em; color:#a8bfd2; text-transform:uppercase; }
+.proximity svg { display:block; width:100%; height:108px; }
+.proximity__cue { display:block; min-height:14px; font:800 10px system-ui; text-transform:uppercase; letter-spacing:.03em; color:#dae9f3; white-space:nowrap; }
+.proximity__cue--overlap { color:#ff8f7e; }
+.proximity--text-only { width:142px; }
+.overlay--touch .proximity { top:50%; bottom:auto; width:96px; transform:translate(-50%,-35%); }
+.overlay--touch .proximity svg { height:88px; }
+@media (max-width:600px) { .proximity { width:98px; bottom:190px; } .proximity svg { height:86px; } }
+@media (max-height:450px) { .proximity { width:94px; } .proximity svg { height:78px; } }

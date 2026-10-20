@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DriftChallenge } from '../src/racing/DriftChallenge'
 import { Game } from '../src/engine/Game'
+import { ProximityRadar } from '../src/racing/ProximityRadar'
 import { gameStore } from '../src/stores/gameStore'
 
 const savedSettings = gameStore.getState().settings
@@ -30,7 +31,8 @@ function loadingGame(loadVisuals: () => Promise<void>) {
     raceQueued: false,
     raceLoadingTick: null,
     disposed: false,
-    audio: { unlock: vi.fn(), playStart: vi.fn(), clearOpponents: vi.fn(), setOpponentCars: vi.fn() },
+    awareness:new ProximityRadar(),awarenessFrame:0,
+    audio: { unlock: vi.fn(), playStart: vi.fn(), clearOpponents: vi.fn(), setOpponentCars: vi.fn(), clearSpotter:vi.fn() },
     resetCar: vi.fn(),
     effects: { clear: vi.fn() },
     sparks: { clear: vi.fn() },
