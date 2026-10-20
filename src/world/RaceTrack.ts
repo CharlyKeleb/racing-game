@@ -1,3 +1,4 @@
+import type { TrackAtmosphere } from './TrackAtmosphere'
 import type { MinimapRaster } from './MinimapData'
 import type RAPIER from '@dimforge/rapier3d-compat'
 import type * as THREE from 'three'
@@ -17,6 +18,7 @@ export interface ViewDistance {
  * chunked GLB package (StreamedTrack).
  */
 export interface RaceTrack {
+  readonly atmosphere?: TrackAtmosphere
   readonly id: string
   readonly name: string
   readonly group: THREE.Group

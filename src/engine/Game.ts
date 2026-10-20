@@ -1404,6 +1404,9 @@ export class Game {
     this.track.update(this.vehicle.position, _velocity.set(v.x, v.y, v.z), dt)
     this.renderer.adapt(dt)
 
+    const outdoors = phase === 'intro' || phase === 'countdown' || phase === 'racing' || phase === 'finished' || phase === 'paused'
+    this.track.atmosphere?.update(camera.position, phase === 'paused' ? 0 : frameDt, outdoors)
+    this.audio.updateTrackside(this.track.atmosphere?.sources, camera, outdoors, gameStore.getState().settings.tracksideVolume)
     this.updateOpponentAudio(phase, staging)
     this.updateHitAudio(phase)
     const ctrl = this.vehicle.controller

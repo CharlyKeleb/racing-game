@@ -58,6 +58,11 @@ export function Settings({ onClose }: { onClose?: () => void }) {
         </>}
         {section === 'audio' && <>
           <label className="ui-field settings__volume">
+            <span className="ui-field__label">Trackside ambience <em>{Math.round(settings.tracksideVolume * 100)}%</em></span>
+            <input aria-label="Trackside ambience volume" className="ui-range" type="range" min={0} max={1} step={.05} value={settings.tracksideVolume} onChange={e=>update({tracksideVolume:Number(e.target.value)})}/>
+            <span className="settings__help">Flags, wind and pit equipment on supported circuits. Zero mutes trackside ambience.</span>
+          </label>
+          <label className="ui-field settings__volume">
             <span className="ui-field__label">Master volume <Help label="Master volume">Adjusts all game sound, including the engine, tires, effects, menu music and garage ambience. Zero mutes the game.</Help><em>{Math.round(settings.masterVolume*100)}%</em></span>
             <input aria-label="Master volume" className="ui-range" type="range" min={0} max={1} step={.05} value={settings.masterVolume} onChange={e=>update({masterVolume:Number(e.target.value)})}/>
             <span className="settings__help">Engine, tires, effects, menu music and garage ambience.</span>
