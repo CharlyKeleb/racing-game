@@ -89,7 +89,7 @@ export function wetRoadMaterial(source: THREE.MeshStandardMaterial, surface: Rai
   const baseColor = (source as THREE.MeshStandardMaterial & { colorNode?: THREE.Node<'vec3'> | THREE.Node<'vec4'> }).colorNode?.rgb ?? (source.map ? color.mul(texture(source.map).rgb) : color)
   material.colorNode = baseColor.mul(mix(1, mix(.78, .64, pool), wet))
   const roughness = source.roughnessMap ? texture(source.roughnessMap).g.mul(source.roughness) : float(source.roughness)
-  material.roughnessNode = mix(mix(roughness, min(roughness, .32), wet), .09, pool)
+  material.roughnessNode = mix(mix(roughness, min(roughness, .55), wet), .3, pool)
   const cell = floor(p.mul(1.7))
   const hash = fract(sin(cell.x.mul(127.1).add(cell.y.mul(311.7))).mul(43758.5453))
   const center = cell.add(vec2(hash.mul(.5).add(.25), fract(hash.mul(7.13)).mul(.5).add(.25))).div(1.7)
@@ -108,9 +108,9 @@ export function wetRoadMaterial(source: THREE.MeshStandardMaterial, surface: Rai
     const planeFade = float(1).sub(smoothstep(.08, .4, abs(uniform(reflection.uWetReflectionPlane.value).dot(vec4(positionWorld, 1)))))
     const viewDirection = normalize(cameraPosition.sub(positionWorld))
     const fresnel = float(.04).add(float(.96).mul(float(1).sub(abs(viewDirection.dot(uniform(reflection.uWetReflectionPlane.value).xyz))).pow(5)))
-    const weight = pool.mul(planeFade).mul(valid).mul(reference('value', 'float', reflection.uWetReflectionReady)).mul(mix(.35, .85, fresnel))
+    const weight = pool.mul(planeFade).mul(valid).mul(reference('value', 'float', reflection.uWetReflectionReady)).mul(mix(.1, .5, fresnel))
     // Render-target textures use native top-left coordinates on WebGPU.
-    const reflected = texture(reflection.uWetReflection.value, vec2(coord.x, float(1).sub(coord.y))).rgb
+    const reflected = texture(reflection.uWetReflection.value, vec2(coord.x, float(1).sub(coord.y))).rgb.mul(.55)
     material.emissiveNode = reflected.mul(weight)
     material.colorNode = material.colorNode.mul(float(1).sub(weight))
   }

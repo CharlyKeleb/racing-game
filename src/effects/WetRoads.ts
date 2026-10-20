@@ -67,8 +67,8 @@ export class WetRoads {
               float reflectedValid=step(0.,reflectedUv.x)*step(reflectedUv.x,1.)*step(0.,reflectedUv.y)*step(reflectedUv.y,1.)*step(.001,reflectedCoord.w);
               float planeFade=1.-smoothstep(.08,.4,abs(dot(uWetReflectionPlane,vec4(vRainRoadWorld,1.))));
               float fresnel=.04+.96*pow(1.-abs(dot(normal,normalize(vViewPosition))),5.);
-              float reflectionWeight=rainPool*planeFade*reflectedValid*uWetReflectionReady*mix(.35,.85,fresnel);
-              outgoingLight=mix(outgoingLight,texture2D(uWetReflection,clamp(reflectedUv,0.,1.)).rgb,reflectionWeight);
+              float reflectionWeight=rainPool*planeFade*reflectedValid*uWetReflectionReady*mix(.1,.5,fresnel);
+              outgoingLight=mix(outgoingLight,texture2D(uWetReflection,clamp(reflectedUv,0.,1.)).rgb*.55,reflectionWeight);
               #include <opaque_fragment>`)
           }
           shader.vertexShader = 'varying vec3 vRainRoadWorld;\n' + shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvRainRoadWorld=(modelMatrix*vec4(position,1.)).xyz;')
@@ -79,8 +79,8 @@ export class WetRoads {
             diffuseColor.rgb*=mix(1.,mix(.78,.64,rainPool),rainWet);`)
           if (source instanceof THREE.MeshStandardMaterial) {
             shader.fragmentShader = shader.fragmentShader.replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
-              roughnessFactor=mix(roughnessFactor,min(roughnessFactor,.32),rainWet);
-              roughnessFactor=mix(roughnessFactor,.09,rainPool);`)
+              roughnessFactor=mix(roughnessFactor,min(roughnessFactor,.55),rainWet);
+              roughnessFactor=mix(roughnessFactor,.3,rainPool);`)
             shader.fragmentShader = shader.fragmentShader.replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
               vec2 ripple=rainRipple(vRainRoadWorld.xz)*rainPool;
               normal=normalize(normal+mat3(viewMatrix)*vec3(ripple.x,0.,ripple.y));`)
