@@ -1,3 +1,5 @@
+import type { TrackLook } from '../world/TrackLook'
+import type { MinimapRaster } from '../world/MinimapData'
 import { sanitizeLivery, type LiveryDesign } from '../vehicles/LiveryDesign'
 import { driftEvent, type DriftEventId } from '../racing/driftEvents'
 import { createStore } from 'zustand/vanilla'
@@ -17,10 +19,12 @@ import type { RendererKind } from '../engine/backend'
 export type GamePhase = 'boot' | 'menu' | 'garage' | 'loading' | 'intro' | 'countdown' | 'racing' | 'paused' | 'finished'
 export type QualityPreset = 'low' | 'medium' | 'high'
 export type CameraMode = 'chase' | 'cockpit'
+export type Weather = 'dry' | 'rain'
 
 export interface Settings {
   mode: 'quick' | 'drift'
   driftEvent: DriftEventId
+  trackLook: TrackLook
   quality: QualityPreset
   postfx: boolean
   /** Velocity blur amount, 0 disables both capture and blur. */
@@ -28,6 +32,8 @@ export interface Settings {
   /** WebGL, or the WebGPU trial (#50). Read once at startup: switching reloads the page. */
   renderer: RendererKind
   masterVolume: number
+  /** Trackside wind and pit ambience; independent of engine/music. */
+  tracksideVolume: number
   /** Menu/garage soundtrack on/off. */
   menuMusic: boolean
   /** Track id from audio/musicTracks.ts. */
@@ -42,6 +48,8 @@ export interface Settings {
   car: string
   /** Lighting preset, see world/timeOfDay.ts. */
   timeOfDay: TimeOfDay
+  /** Race weather (#37 / #53): rain brings rainfall, spray and an overcast sky. */
+  weather: Weather
 }
 
 export interface GameState {
@@ -58,7 +66,7 @@ export interface GameState {
   /** 0..1 while a track is loading. */
   loadProgress: number
   /** Track outline for the minimap: the full centreline as [x, z] pairs, start line first. Set on track load. */
-  minimap: { points: [number, number][]; gates: [number, number][] } | null
+  minimap: { points: [number, number][]; gates: [number, number][]; overview?: MinimapRaster | null } | null
   error: string | null
   settings: Settings
   /** Garage customisation of the current car, applied by the engine on change. */
@@ -85,10 +93,12 @@ const defaultSettings: Settings = {
   mode: 'quick',
   driftEvent: 'flow',
   quality: defaultQuality(),
+  trackLook: 'road-focus',
   postfx: !isMobile(),
   motionBlur: typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : .65,
   renderer: 'webgl',
   masterVolume: 0.9,
+  tracksideVolume: .65,
   menuMusic: true,
   musicTrack: MUSIC_TRACKS[0].id,
   camera: 'chase',
@@ -98,6 +108,7 @@ const defaultSettings: Settings = {
   track: 'nurburgring',
   car: 'porsche911',
   timeOfDay: 'noon',
+  weather: 'dry',
 }
 
 function loadSettings(): Settings {
@@ -105,11 +116,14 @@ function loadSettings(): Settings {
     const raw = localStorage.getItem(SETTINGS_KEY)
     if (!raw) return defaultSettings
     const merged: Settings = { ...defaultSettings, ...JSON.parse(raw) }
+    if (merged.trackLook !== 'default' && merged.trackLook !== 'road-focus') merged.trackLook = defaultSettings.trackLook
+    merged.tracksideVolume = typeof merged.tracksideVolume === 'number' && Number.isFinite(merged.tracksideVolume) ? Math.max(0, Math.min(1, merged.tracksideVolume)) : defaultSettings.tracksideVolume
     merged.driftEvent=driftEvent(merged.driftEvent).id
     if (merged.mode !== 'drift') merged.mode = 'quick'
     if (!isAiDifficulty(merged.difficulty)) merged.difficulty = 'challenging'
     merged.opponents = [0, 1, 3].includes(merged.opponents) ? merged.opponents : 3
     if (!isTimeOfDay(merged.timeOfDay)) merged.timeOfDay = defaultSettings.timeOfDay
+    if (merged.weather !== 'rain') merged.weather = 'dry'
     merged.motionBlur = typeof merged.motionBlur === 'number' && Number.isFinite(merged.motionBlur) ? Math.max(0, Math.min(1, merged.motionBlur)) : defaultSettings.motionBlur
     if (merged.renderer !== 'webgpu') merged.renderer = 'webgl'
     if (typeof merged.menuMusic !== 'boolean') merged.menuMusic = defaultSettings.menuMusic

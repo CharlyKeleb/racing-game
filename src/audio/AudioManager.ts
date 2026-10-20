@@ -1,3 +1,7 @@
+import { TracksideAmbience } from './TracksideAmbience'
+import type { TracksideEmitter } from '../world/atmospherePlan'
+import type { Camera } from 'three'
+import { DrivingSound } from './DrivingSound'
 import { Howler } from 'howler'
 import { CarSound, type CarSoundState } from './CarSound'
 import { OpponentAudio, type RivalSoundState } from './OpponentAudio'
@@ -46,6 +50,9 @@ export class AudioManager {
   /** The player's tyres and brakes, and what they're made of. */
   private tyres: TyreBrakeSound | null = null
   private impacts: ImpactSound | null = null
+  private driving: DrivingSound | null = null
+  private trackside: TracksideAmbience | null = null
+  private tracksideAreas: readonly TracksideEmitter[] | undefined
   /** Dips the player's engine and tyres under a crash. */
   private duck!: GainNode
   private fxBus!: GainNode
@@ -71,6 +78,7 @@ export class AudioManager {
   onMenuMusicState: ((playing: boolean) => void) | null = null
   /** 'menu' = garage room tone, engine held quiet (except a swap's rev); 'race' = engine up, room tone out. */
   private scene: 'menu' | 'race' = 'menu'
+  private finishMix = false
   private menuEngine = false
   /** True while the game is paused; otherwise the context must stay running. */
   private paused = false
@@ -146,6 +154,7 @@ export class AudioManager {
     this.tyres = new TyreBrakeSound(ctx, this.noiseProfile)
     this.tyres.output.connect(this.carBus)
     this.impacts = new ImpactSound(ctx, this.fxBus)
+    this.driving = new DrivingSound(ctx, this.carBus)
     this.ambience = new GarageAmbience(ctx, this.master)
     this.music = new MenuMusic(ctx, this.master, (playing) => this.onMenuMusicState?.(playing))
     this.music.setTrack(musicTrack(this.musicTrackId))
@@ -307,6 +316,26 @@ export class AudioManager {
     })
   }
 
+  /** Short original finish sting: a low hit and a restrained rising chord. */
+  playFinish(victory: boolean): void {
+    const ctx = this.ctx
+    if (!ctx || this.paused) return
+    this.playImpact(.35)
+    const notes = victory ? [196, 246.94, 293.66, 392] : [146.83, 196, 220, 293.66]
+    notes.forEach((hz, i) => {
+      const at = ctx.currentTime + .08 + i * .11
+      const tone = ctx.createOscillator(), gain = ctx.createGain(), filter = ctx.createBiquadFilter()
+      tone.type = 'triangle'; tone.frequency.value = hz
+      filter.type = 'lowpass'; filter.frequency.value = 1900; filter.Q.value = .5
+      gain.gain.setValueAtTime(.0001, at)
+      gain.gain.exponentialRampToValueAtTime(.11, at + .014)
+      gain.gain.exponentialRampToValueAtTime(.0001, at + 1.1)
+      tone.connect(filter).connect(gain).connect(this.master)
+      tone.onended = () => { tone.disconnect(); filter.disconnect(); gain.disconnect() }
+      tone.start(at); tone.stop(at + 1.15)
+    })
+  }
+
   /** Start gantry: a short tone per red light, a long high one at lights out. */
   playStartLight(go: boolean): void {
     const ctx = this.ctx
@@ -354,10 +383,16 @@ export class AudioManager {
     this.applyMix()
   }
 
+  setFinishMix(active: boolean): void {
+    if (this.finishMix === active) return
+    this.finishMix = active
+    this.applyMix()
+  }
+
   private applyMix(): void {
     const ctx = this.ctx
     if (!ctx || !this.carBus) return
-    const engine = this.scene === 'race' || this.menuEngine ? 1 : 0
+    const engine = this.scene === 'race' || this.menuEngine ? (this.finishMix ? .55 : 1) : 0
     this.carBus.gain.setTargetAtTime(engine, ctx.currentTime, 0.12)
     this.ambience?.setLevel(this.scene === 'menu' ? 1 : 0)
   }
@@ -398,6 +433,26 @@ export class AudioManager {
       this.synthSaw.frequency.setTargetAtTime(fire, t, 0.012)
       this.synthSquare.frequency.setTargetAtTime(fire / 2, t, 0.012)
     }
+  }
+
+  updateDriving(speed: number, paved: number, grounded: number, roughness: number, cockpit: boolean, active: boolean): void {
+    this.driving?.update(speed, paved, grounded, roughness, cockpit, active && !this.paused)
+  }
+
+  /** Camera position/orientation, never the player's heading during cinematics. */
+  updateTrackside(areas: readonly TracksideEmitter[] | undefined, camera: Camera, active: boolean, volume: number): void {
+    if (!this.ctx) return
+    if (areas !== this.tracksideAreas) {
+      this.tracksideAreas = areas
+      if (areas?.length) {
+        this.trackside ??= new TracksideAmbience(this.ctx, this.master)
+        this.trackside.setAreas(areas)
+      } else { this.trackside?.dispose(); this.trackside = null }
+    }
+    if (!this.trackside) return
+    camera.updateWorldMatrix(true, false)
+    const e = camera.matrixWorld.elements
+    this.trackside.update(e[12], e[13], e[14], e[0], e[1], e[2], active && !this.paused && this.scene === 'race', volume)
   }
 
   suspend(): void {
@@ -456,18 +511,18 @@ export class AudioManager {
   /** A hit on a car: `car` -1 is the player, otherwise the rival's index (heard where it is). */
   impact(car: number, kind: ImpactKind, strength: number): void {
     if (this.paused || strength <= 0) return
-    ;(car < 0 ? this.impacts : this.rivals[car]?.impacts)?.hit(kind, strength)
+    const played = (car < 0 ? this.impacts : this.rivals[car]?.impacts)?.hit(kind, strength)
+    if (!played) return
     const ctx = this.ctx
-    // Your own hit (not a curb thunk): the engine drops away, up to ~14 dB
-    // on a big one, holds for a quarter second and comes back over half a
-    // second, so the crash owns the moment.
+    // Your own hit (not a curb thunk): the engine drops away, up to ~8 dB
+    // on a big one, briefly holds the transient and then recovers, so the crash owns the moment.
     if (car < 0 && kind !== 'curb' && ctx && this.duck) {
       const t = ctx.currentTime
       const g = this.duck.gain
       g.cancelScheduledValues(t)
       g.setValueAtTime(g.value, t)
-      g.linearRampToValueAtTime(1 - 0.8 * strength, t + 0.012)
-      g.setTargetAtTime(1, t + 0.1 + 0.15 * strength, 0.2)
+      g.linearRampToValueAtTime(1 - 0.6 * strength, t + 0.012)
+      g.setTargetAtTime(1, t + 0.045 + 0.08 * strength, 0.13)
     }
   }
 
@@ -479,6 +534,8 @@ export class AudioManager {
   dispose(): void {
     this.clearOpponents()
     this.impacts?.dispose()
+    this.driving?.dispose()
+    this.trackside?.dispose(); this.trackside = null; this.tracksideAreas = undefined
     this.engineBank = null
     this.bankCache.clear()
     this.sound?.dispose()

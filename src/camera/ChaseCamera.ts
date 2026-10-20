@@ -1,3 +1,4 @@
+import { FeedbackSpring } from '../effects/FeedbackSpring'
 import * as THREE from 'three'
 import type { CameraMode } from '../stores/gameStore'
 import type { VehicleMotion } from '../vehicles/Vehicle'
@@ -54,15 +55,15 @@ export class ChaseCamera {
   distance = 5.0
   height = 1.5
   /**
-   * Extra chase distance at top speed, meters. Zero: the car stays big on
-   * screen at any speed, and the FOV widening sells the speed instead.
+   * Extra chase distance at top speed, meters. A small pull-back lets the
+   * car settle in frame without shrinking it away from the player.
    */
-  speedPullBack = 0
+  speedPullBack = .65
   /** Aim point: this far ahead of the car's centre and this high, so the camera looks down the road, not at the roof. */
   lookAhead = 9
   lookHeight = 0.7
   baseFov = 58
-  maxFovBoost = 18
+  maxFovBoost = 15
   /**
    * Weight you can feel: meters the camera drops back per m/s² of
    * acceleration (the car surges away) or closes in under braking (the car
@@ -81,8 +82,27 @@ export class ChaseCamera {
   /** Extra chase distance at full nitro, meters (the car surges away from the lens). */
   nitroPullBack = 0.7
   /** Camera shake amplitude at top speed and at full nitro, meters. */
-  speedShake = 0.03
-  nitroShake = 0.05
+  speedShake = 0.009
+  nitroShake = 0.025
+
+  private readonly impactY = new FeedbackSpring(22, .72)
+  private readonly impactZ = new FeedbackSpring(18, .75)
+  private readonly impactRoll = new FeedbackSpring(20, .75)
+  private lastJolt = -Infinity
+  private lastJoltStrength = 0
+  private lastJoltCurb = false
+  /** Contact-driven impulse; the camera responds once, then settles. */
+  jolt(strength: number, curb = false): void {
+    const s = THREE.MathUtils.clamp(strength, 0, 1)
+    if (curb && !this.lastJoltCurb && this.time - this.lastJolt < .12) return
+    if (s <= 0 || (this.time - this.lastJolt < .12 && !(this.lastJoltCurb && !curb) && s <= this.lastJoltStrength + .2)) return
+    this.lastJolt = this.time; this.lastJoltStrength = s; this.lastJoltCurb = curb
+    this.impactY.velocity = Math.min(1.5, this.impactY.velocity + s * (curb ? .45 : 1.1))
+    if (!curb) {
+      this.impactZ.velocity = Math.min(2, this.impactZ.velocity + s * 1.4)
+      this.impactRoll.velocity = THREE.MathUtils.clamp(this.impactRoll.velocity + Math.sin(this.time * 19) * s * .25, -.4, .4)
+    }
+  }
 
   private time = 0
   /** Nitro intensity, smoothed separately so the FOV kicks fast and relaxes slowly. */
@@ -102,14 +122,18 @@ export class ChaseCamera {
       this.camera.near = NEAR
       this.camera.updateProjectionMatrix()
     }
-    const speedT = Math.min(speedKmh / 300, 1)
+    dt = Math.max(0, Math.min(dt, .1))
+    const speedT = THREE.MathUtils.smoothstep(Math.abs(speedKmh), 35, 260)
+    const impactY = this.impactY.step(0, dt), impactZ = this.impactZ.step(0, dt)
+    const impactRoll = this.impactRoll.step(0, dt)
     this.time += dt
     boost = Math.min(boost, 1.3)
     this.kick += (boost - this.kick) * damp(boost > this.kick ? 10 : 2.5, dt)
     _fwd.set(0, 0, 1).applyQuaternion(target.quaternion)
 
     // Shake: a few incommensurate sines, so it never visibly loops.
-    const amp = this.speedShake * speedT * speedT + this.nitroShake * this.kick
+    const roughness = motion?.roadRoughness ?? 0
+    const amp = this.speedShake * speedT * speedT + this.nitroShake * this.kick + roughness * .012
     const t = this.time
     _shake.set(
       (Math.sin(t * 37.1) + 0.6 * Math.sin(t * 61.7 + 1.3)) * amp,
@@ -123,7 +147,9 @@ export class ChaseCamera {
       _look.copy(_desired).addScaledVector(_fwd, 10)
       this.camera.lookAt(_look)
       this.camera.translateX(_shake.x * 0.4)
-      this.camera.translateY(_shake.y * 0.4)
+      this.camera.translateY(_shake.y * .4 + impactY * .45)
+      this.camera.translateZ(impactZ * .35)
+      this.camera.rotateZ(impactRoll * .4)
     } else {
       // Flatten forward so pitching over bumps doesn't swing the camera.
       _fwd.y = 0
@@ -161,13 +187,15 @@ export class ChaseCamera {
       this.camera.lookAt(this.lookTarget)
       // Shake in camera space after aiming, so it jitters the view, not the chase.
       this.camera.translateX(_shake.x)
-      this.camera.translateY(_shake.y)
+      this.camera.translateY(_shake.y + impactY)
+      this.camera.translateZ(impactZ)
+      this.camera.rotateZ(impactRoll)
       // Bank into the corner a little, like a head leaning with the g-force.
       if (motion) this.camera.rotateZ(THREE.MathUtils.clamp(motion.accelLat * this.bank, -this.maxBank, this.maxBank))
     }
 
     // Kick is already smoothed, so it is added directly: fast in, slow out.
-    const fov = this.baseFov + gridFraming * 4 + this.maxFovBoost * speedT * speedT
+    const fov = this.baseFov + gridFraming * 4 + this.maxFovBoost * speedT
     const speedFov = THREE.MathUtils.lerp(this.camera.fov - this.appliedKick, fov, damp(4, dt))
     this.appliedKick = this.nitroFovKick * this.kick
     const next = speedFov + this.appliedKick
@@ -212,6 +240,8 @@ export class ChaseCamera {
     if (dirty) this.camera.updateProjectionMatrix()
     // Hand back to the chase cam without a swoop from the turntable.
     this.initialised = false
+    this.impactY.reset(); this.impactZ.reset(); this.impactRoll.reset()
+    this.lastJolt = -Infinity
     this.kick = this.appliedKick = 0
   }
 
@@ -226,6 +256,9 @@ export class ChaseCamera {
   }
 
   snap(): void {
+    this.camera.up.set(0, 1, 0)
+    this.impactY.reset(); this.impactZ.reset(); this.impactRoll.reset()
+    this.lastJolt = -Infinity
     this.kick = this.appliedKick = 0
     this.initialised = false
   }

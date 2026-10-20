@@ -61,13 +61,13 @@ export function MainMenu() {
         <div className="menu-actions">
           <ModeSelect />
           <TrackPicker />
-          <Button size="sm" variant="ghost" onClick={() => setShowRaceSetup(true)}>
-            {settings.mode === 'drift' ? `Drift setup · ${driftEvent(settings.driftEvent).name}` : `Race setup · ${settings.laps} ${settings.laps === 1 ? 'lap' : 'laps'}`} · {TIME_PRESETS[settings.timeOfDay].label}
+          <Button size="sm" variant="ghost" className="menu-setup" onClick={() => setShowRaceSetup(true)}>
+            {settings.mode === 'drift' ? `Drift setup · ${driftEvent(settings.driftEvent).name}` : `Race setup · ${settings.laps} ${settings.laps === 1 ? 'lap' : 'laps'}`} · {TIME_PRESETS[settings.timeOfDay].label}{settings.weather === 'rain' ? ' · Rain' : ''}
           </Button>
-          <Button size="md" className="menu-icon-action" disabled={switching} onClick={() => game?.openGarage()}>
+          <Button size="md" className="menu-icon-action menu-garage" disabled={switching} onClick={() => game?.openGarage()}>
             <GiHomeGarage aria-hidden="true"/> Garage
           </Button>
-          <Button size="lg" variant="primary" className="menu-icon-action" disabled={switching} onClick={() => game?.startRace()} autoFocus>
+          <Button size="lg" variant="primary" className="menu-icon-action menu-race" disabled={switching} onClick={() => game?.startRace()} autoFocus>
             <GiCheckeredFlag aria-hidden="true"/> {settings.mode === 'drift' ? 'Start drifting' : 'Race'}
           </Button>
         </div>

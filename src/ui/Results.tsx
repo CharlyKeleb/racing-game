@@ -6,6 +6,9 @@ import { useGame, useTelemetry } from './hooks'
 import { Button, Panel } from './kit'
 
 export function Results() {
+  const position = useTelemetry(s => s.finishPosition)
+  const field = useTelemetry(s => s.finishFieldSize)
+  const track = useGame(s => s.trackName)
   const drift = useGame(s => s.settings.mode === 'drift')
   const score = useTelemetry(s => s.driftTotal)
   const t = useTelemetry(useShallow(s => ({ driftBestChain: s.driftBestChain, driftBusts: s.driftBusts, driftLongest: s.driftLongest, driftNewBest: s.driftNewBest, driftPeakCombo: s.driftPeakCombo, driftPersonalBest: s.driftPersonalBest, driftTransitions: s.driftTransitions, driftZoneSeconds: s.driftZoneSeconds })))
@@ -16,8 +19,14 @@ export function Results() {
   const total = useTelemetry((s) => s.totalMs)
   const best = useTelemetry((s) => s.bestLapMs)
   return (
-    <div className="screen screen--center">
-      <Panel title={drift ? 'Drift complete' : 'Finished'} className="results-panel">
+    <div className={`screen screen--center ${drift ? '' : 'screen--race-results'}`}>
+      <Panel title={drift ? 'Drift complete' : undefined} className="results-panel">
+        {!drift && <div className="race-result__hero">
+          <span className="eyebrow">{track} / RACE RESULT</span>
+          <h1>{field === 1 ? 'RUN COMPLETE' : position === 1 ? 'VICTORY' : 'RACE COMPLETE'}</h1>
+          <div className="race-result__position">{field === 1 ? 'SOLO' : `P${position}`}<small>{field > 1 ? ` / ${field}` : ' RUN'}</small></div>
+          <p>{field === 1 ? 'Your time is on the board.' : position === 1 ? 'First across the line.' : position <= 3 && field > 2 ? 'A podium finish. Keep pushing.' : 'The next race is yours to chase.'}</p>
+        </div>}
         {drift && <div className={`drift-result drift-result--${medal.toLowerCase()}`}>
           <span className="eyebrow">{event.name} / {t.driftNewBest?'NEW PERSONAL BEST':'SESSION COMPLETE'}</span>
           <div className="drift-result__medal">{medal==='Unranked'?'—':medal[0]}</div>
@@ -32,7 +41,7 @@ export function Results() {
           <dd className="mono">{formatTime(total)}</dd>
           {!drift && <><dt>Best lap</dt><dd className="mono">{formatTime(best)}</dd></>}
         </dl>
-        {standings.length > 1 && <ol className="race-standings" aria-label="Race standings">{standings.map(s => <li key={s.id} className={s.player ? 'race-standings__player' : ''}><b>{s.position}</b><span>{s.name}</span><span className="mono">{s.finishMs === null ? 'DNF' : formatTime(s.finishMs)}</span></li>)}</ol>}
+        {standings.length > 1 && <ol className="race-standings" aria-label="Race standings">{standings.map(s => <li key={s.id} className={s.player ? 'race-standings__player' : ''}><b>{s.position}</b><span>{s.name}</span><span className="mono">{s.finishMs === null ? 'Racing' : formatTime(s.finishMs)}</span></li>)}</ol>}
         <Button variant="primary" size="lg" onClick={() => game?.startRace()} autoFocus>
           {drift ? 'Drift again' : 'Race again'}
         </Button>

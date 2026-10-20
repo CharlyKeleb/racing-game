@@ -41,6 +41,8 @@ export class Environment {
   private preset: TimePreset = TIME_PRESETS.noon
   private timeOfDay: TimeOfDay | null = null
   private viewFar = 900
+  /** Overcast and wet (#53): applied on top of the time-of-day preset. */
+  private rain = false
   /** Bumped per preset change so a slow HDRI load can't overwrite a newer choice. */
   private generation = 0
 
@@ -89,6 +91,17 @@ export class Environment {
   }
 
   /** Switch preset: sky, lights, fog colour, baked environment. Call apply() to push it to the scene. */
+  /** Rain on or off: re-applies the preset with the overcast changes and re-bakes the environment. */
+  setRain(rain: boolean): void {
+    if (rain === this.rain) return
+    this.rain = rain
+    if (this.timeOfDay) {
+      const id = this.timeOfDay
+      this.timeOfDay = null
+      this.setTimeOfDay(id)
+    }
+  }
+
   setTimeOfDay(id: TimeOfDay): void {
     if (id === this.timeOfDay) return
     this.timeOfDay = id
@@ -104,6 +117,15 @@ export class Environment {
     u.uSkyExposure.value = p.skyExposure
     u.uSkyTint.value.set(...p.skyTint)
     u.uSkyMax.value = p.skyMax
+    // Overcast: a near-solid cloud deck, hazier, flatter and darker, with a grey veil.
+    u.cloudCoverage.value = this.rain ? 0.97 : 0.4
+    u.cloudDensity.value = this.rain ? 0.9 : 0.4
+    if (this.rain) {
+      u.turbidity.value = Math.max(p.sky.turbidity, 10)
+      u.rayleigh.value = p.sky.rayleigh * 0.4
+      u.uSkyExposure.value = p.skyExposure * 0.4
+      u.uSkyTint.value.addScalar(0.06 * p.skyExposure)
+    }
 
     this.sunDirection.copy(direction(p.key.elevation, p.key.azimuth))
     this.sun.color.setHex(p.key.color)
@@ -113,8 +135,17 @@ export class Environment {
     this.fill.groundColor.setHex(p.fill.ground)
     this.fill.intensity = p.fill.intensity
     this.fog.color.setHex(p.fog)
-    this.fog.near = this.viewFar * p.fogStart
-    this.background.setHex(p.fog)
+    if (this.rain) {
+      // Cloud hides the sun: weak, shadowless key light, flat grey fill, grey fog.
+      this.sun.intensity *= 0.3
+      this.sun.castShadow = false
+      this.fill.color.lerp(_rainFill, 0.6)
+      this.fill.intensity *= 1.1
+      const l = 0.2126 * this.fog.color.r + 0.7152 * this.fog.color.g + 0.0722 * this.fog.color.b
+      this.fog.color.lerp(_grey.setRGB(l, l * 1.02, l * 1.06).multiplyScalar(0.85), 0.75)
+    }
+    this.applyFog()
+    this.background.copy(this.fog.color)
 
     this.setEnvTarget(this.bakeSky(p))
     if (p.hdri) {
@@ -130,6 +161,13 @@ export class Environment {
     }
   }
 
+  /** Fog distances from the view distance; rain closes them in to about half. */
+  private applyFog(): void {
+    const far = this.viewFar * (this.rain ? 0.5 : 1)
+    this.fog.far = far
+    this.fog.near = far * (this.rain ? 0.05 : this.preset.fogStart)
+  }
+
   /** Write fog, background and image-based lighting onto the scene. */
   apply(scene: THREE.Scene): void {
     scene.fog = this.fog
@@ -141,8 +179,7 @@ export class Environment {
   /** Tracks hide their streaming edge in fog; the preset decides where the haze starts. */
   setViewDistance(_near: number, far: number): void {
     this.viewFar = far
-    this.fog.near = far * this.preset.fogStart
-    this.fog.far = far
+    this.applyFog()
   }
 
   /** Smaller shadow maps on weaker presets (shadows are off entirely on low). */
@@ -197,6 +234,9 @@ export class Environment {
     this.group.removeFromParent()
   }
 }
+
+const _rainFill = new THREE.Color(0xb8c2cc)
+const _grey = new THREE.Color()
 
 /** Unit vector toward a point `elevation` degrees above the horizon at compass `azimuth`. */
 function direction(elevation: number, azimuth: number): THREE.Vector3 {

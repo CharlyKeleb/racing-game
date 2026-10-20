@@ -135,6 +135,9 @@ describe('race cinematic handoff', () => {
     gameStore.setState({phase:'loading'})
     const order: string[] = []
     const game = Object.assign(Object.create(Game.prototype), {
+      finish:{reset:vi.fn()},
+      loop:{timeScale:.28},
+      audio:{setFinishMix:vi.fn()},
       updateShowroom:()=>order.push('scene'),
       vehicle:{render:()=>order.push('player'),position:{},model:{root:{}},config:{engine:{idleRpm:900}}},
       playerRevs:{reset:()=>{}},
@@ -146,5 +149,8 @@ describe('race cinematic handoff', () => {
     })
     game.prepareRaceIntro()
     expect(order).toEqual(['scene','player','rival','cinematic','paint'])
+    expect(game.loop.timeScale).toBe(1)
+    expect(game.finish.reset).toHaveBeenCalledOnce()
+    expect(game.audio.setFinishMix).toHaveBeenCalledWith(false)
   })
 })

@@ -1,3 +1,4 @@
+import { withTrackLook } from './TrackLook'
 import { GeometryWarmup } from '../engine/GeometryWarmup'
 import { performanceCapture } from '../engine/PerformanceCapture'
 import RAPIER from '@dimforge/rapier3d-compat'
@@ -224,8 +225,8 @@ export class StreamedTrack implements RaceTrack {
     next.set(
       VERTEX_COLOR_MATERIAL,
       tier === 'low' && backend.kind === 'webgl'
-        ? new THREE.MeshLambertMaterial({ name: VERTEX_COLOR_MATERIAL, vertexColors: true })
-        : new THREE.MeshStandardMaterial({ name: VERTEX_COLOR_MATERIAL, vertexColors: true, roughness: 0.95, metalness: 0 }),
+        ? withTrackLook(new THREE.MeshLambertMaterial({ name: VERTEX_COLOR_MATERIAL, vertexColors: true }))
+        : withTrackLook(new THREE.MeshStandardMaterial({ name: VERTEX_COLOR_MATERIAL, vertexColors: true, roughness: 0.95, metalness: 0 })),
     )
 
     if (this.disposed || request !== this.materialRequest) {
@@ -303,7 +304,7 @@ export class StreamedTrack implements RaceTrack {
       if (m.transparent) m.depthWrite = false
     }
     m.userData.layer = layer
-    return m
+    return withTrackLook(m as THREE.MeshStandardMaterial | THREE.MeshLambertMaterial)
   }
 
   /**
@@ -313,6 +314,8 @@ export class StreamedTrack implements RaceTrack {
   private async precompile(): Promise<void> {
     const scene = new THREE.Scene()
     const geo = new THREE.PlaneGeometry(0.01, 0.01)
+    // Native graded far-LOD materials explicitly sample the colour attribute.
+    geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(geo.getAttribute('position').count * 3).fill(1), 3))
     for (const m of this.materials.values()) scene.add(new THREE.Mesh(geo, m))
     try {
       await this.renderer.compileAsync(scene, this.camera, this.scene)
@@ -359,6 +362,8 @@ export class StreamedTrack implements RaceTrack {
     const bytes = await this.assets.loadBinary(this.baseUrl + info.url)
     if (bytes) this.surfaces = new SurfaceMap(info, decodeSurfaceRle(bytes, info.width * info.height))
   }
+
+  mapOverview() { return this.surfaces?.overview() ?? null }
 
   surfaceAt(x: number, z: number): Surface {
     return this.surfaces ? this.surfaces.at(x, z) : Surface.Asphalt

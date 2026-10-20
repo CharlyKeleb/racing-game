@@ -1,3 +1,4 @@
+import { buildMinimapRaster, type MinimapRaster } from './MinimapData'
 import { Surface } from '../vehicles/Surface'
 
 /** Grid metadata as written to track.json by scripts/track/derive-from-chunks.mjs. */
@@ -38,12 +39,17 @@ export function decodeSurfaceRle(bytes: Uint8Array, cellCount: number): Uint8Arr
 
 /** Surface type per grid cell; anything off the grid is open terrain (Surface.None). */
 export class SurfaceMap {
+  private overviewCache?: MinimapRaster
   private readonly cells: Uint8Array
   private readonly info: SurfaceGridInfo
 
   constructor(info: SurfaceGridInfo, cells: Uint8Array) {
     this.info = info
     this.cells = cells
+  }
+
+  overview(): MinimapRaster {
+    return this.overviewCache ??= buildMinimapRaster(this.info, this.cells)
   }
 
   at(x: number, z: number): Surface {

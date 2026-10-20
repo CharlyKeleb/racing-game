@@ -1,3 +1,11 @@
+import { setTrackLook } from '../world/TrackLook'
+import { FinishSequence } from '../racing/FinishSequence'
+import { RaceFinishCamera } from '../camera/RaceFinishCamera'
+import { WetReflections } from '../effects/WetReflections'
+import { CarRain } from '../effects/CarRain'
+import { RainSurface } from '../effects/RainSurface'
+import { RainImpacts } from '../effects/RainImpacts'
+import { WetRoads } from '../effects/WetRoads'
 import { motionExposure } from '../effects/MotionBlur'
 import { performanceCapture } from './PerformanceCapture'
 import { hudCoversPoint } from '../stores/hudLayoutStore'
@@ -18,6 +26,10 @@ import { DirectionGuide } from '../effects/DirectionGuide'
 import { NitroFlames } from '../effects/NitroFlames'
 import { Sparks, type SparkContact } from '../effects/Sparks'
 import { HeatHaze } from '../effects/HeatHaze'
+import { LensDrops } from '../effects/LensDrops'
+import { Rain } from '../effects/Rain'
+import { RainSpray } from '../effects/RainSpray'
+import { Benchmark } from './Benchmark'
 import { backend } from './backend'
 import { DrivingEffects } from '../effects/DrivingEffects'
 import { Headlights } from '../effects/Headlights'
@@ -65,6 +77,8 @@ export type ShowroomFocus = 'car' | 'wheel' | `wheel-${WheelId}` | 'plate-front'
 
 const LOCKED_INPUT: InputState = { throttle: 0, brake: 0, steer: 0, handbrake: true, nitro: false }
 /** Past the flag: brake to a stop in a straight line while the rivals finish. */
+const FINISH_COAST_INPUT: InputState = { throttle: 0, brake: 0, steer: 0, handbrake: false, nitro: false }
+const FINISH_GENTLE_INPUT: InputState = { throttle: 0, brake: .18, steer: 0, handbrake: false, nitro: false }
 const FINISHED_INPUT: InputState = { throttle: 0, brake: 0.5, steer: 0, handbrake: false, nitro: false }
 const _velocity = new THREE.Vector3()
 const _forward = new THREE.Vector3()
@@ -172,6 +186,10 @@ export class Game {
   private safetyWalls: RAPIER.RigidBody | null = null
   private readonly recoverSpawn = (entry: RaceEntry): SpawnPoint => this.recoverySpawn(entry)
   private readonly playerPose: TrafficCar = { id: 0, x: 0, z: 0, heading: 0, speed: 0 }
+  private readonly finish = new FinishSequence()
+  private readonly finishCamera: RaceFinishCamera
+  private finishPosition = 1
+  private finishFieldSize = 1
   private readonly playerEntry: RaceEntry = { id: 0, name: 'You', player: true, lap: 0, checkpoint: 0, index: 0, finishMs: null }
   private traffic: TrafficCar[] = [this.playerPose]
   private entries: RaceEntry[] = [this.playerEntry]
@@ -190,6 +208,17 @@ export class Game {
   /** Exhaust heat haze for every car (#56). Built in init(), once the renderer is known. */
   private haze!: HeatHaze
   private readonly hazeCars: Vehicle[] = []
+  /** Rain (#53): streaks around the camera, spray off every car, drops on the lens in cockpit view. Built in init(). */
+  private rainSurface!: RainSurface
+  private carRain!: CarRain
+  private rainImpacts!: RainImpacts
+  private wetRoads!: WetRoads
+  private wetReflections!: WetReflections
+  private rain!: Rain
+  private rainSpray!: RainSpray
+  private lensDrops!: LensDrops
+  /** `?bench=1`: autopiloted WebGL vs WebGPU frame-time comparison (#50). */
+  private benchmark: Benchmark | null = null
   private readonly sparkContact: SparkContact = { x: 0, y: 0, z: 0, nx: 0, ny: 0, nz: 0, vx: 0, vy: 0, vz: 0, dv: 0, groundY: 0 }
   /** Change in speed per car from contact forces this tick (the spark burst size). */
   private readonly tickHit = new Float32Array(16)
@@ -255,6 +284,7 @@ export class Game {
   constructor(container: HTMLElement) {
     this.renderer = new Renderer(container, gameStore.getState().settings.renderer)
     this.introCamera = new RaceIntroCamera(this.renderer.camera)
+    this.finishCamera = new RaceFinishCamera(this.renderer.camera)
     this.loop = new GameLoop({
       fixedUpdate: (dt) => this.fixedUpdate(dt),
       render: (alpha, dt) => this.renderFrame(alpha, dt),
@@ -308,6 +338,7 @@ export class Game {
     const scene = this.renderer.scene
 
     this.environment = new Environment(this.renderer.renderer)
+    this.environment.setRain(settings.weather === 'rain')
     this.environment.setTimeOfDay(settings.timeOfDay)
     scene.add(this.environment.group)
     this.environment.apply(scene)
@@ -342,6 +373,24 @@ export class Game {
     scene.add(this.sparks.mesh)
     this.haze = new HeatHaze()
     this.renderer.setHaze(this.haze)
+    this.rainSurface = new RainSurface()
+    this.rainImpacts = new RainImpacts(this.rainSurface.uniforms)
+    this.wetReflections = new WetReflections()
+    this.wetReflections.setQuality(settings.quality)
+    this.wetRoads = new WetRoads(this.rainSurface.uniforms, this.wetReflections.uniforms)
+    scene.add(this.rainImpacts.mesh)
+    this.rainSurface.setQuality(settings.quality)
+    this.rainImpacts.setQuality(settings.quality)
+    this.carRain = new CarRain(model, this.rainSurface.uniforms)
+    this.carRain.setQuality(settings.quality)
+    scene.add(this.carRain.impacts.mesh)
+    this.rain = new Rain(this.rainSurface.uniforms)
+    scene.add(this.rain.mesh)
+    this.rainSpray = new RainSpray()
+    scene.add(...this.rainSpray.meshes)
+    // Lens drops refract through the haze buffer: they live in its scene.
+    this.lensDrops = new LensDrops()
+    this.haze.scene.add(this.lensDrops.mesh)
 
     const spawn = this.track.spawn
     this.showroom.placeAt(spawn.position, spawn.heading)
@@ -360,6 +409,7 @@ export class Game {
     this.vehicle.render(1)
     if (!document.hidden) this.loop.start()
     setPhase('menu')
+    if (new URLSearchParams(location.search).get('bench') === '1') this.startBenchmark()
     performance.measure('boot:menu', 'boot:start')
     if (import.meta.env.DEV) (window as unknown as { __game: Game }).__game = this
 
@@ -417,6 +467,28 @@ export class Game {
     this.input.setTouch(state)
   }
 
+  /** Development fixture only: prime ordered gates, then physically drive over the finish. */
+  debugFinishRace(): void {
+    if (!import.meta.env.DEV || gameStore.getState().phase !== 'racing') return
+    this.race.totalLaps = this.race.lap
+    for (let i = this.race.lastCheckpoint + 1; i < this.track.checkpoints.length; i++) {
+      const gate = this.track.checkpoints[i]
+      this.racePosition.copy(gate.position).addScaledVector(gate.tangent, -2)
+      this.race.update(1, this.racePosition)
+      this.racePosition.copy(gate.position).addScaledVector(gate.tangent, 2)
+      this.race.update(1 / 60, this.racePosition)
+    }
+    const gate = this.track.checkpoints[0]
+    const heading = Math.atan2(gate.tangent.x, gate.tangent.z)
+    this.racePosition.copy(gate.position).addScaledVector(gate.tangent, -3)
+    this.racePosition.y += .6
+    this.vehicle.respawn({ position: this.racePosition, heading })
+    this.race.update(1 / 60, this.racePosition)
+    this.vehicle.body.setLinvel({ x: gate.tangent.x * 34, y: 0, z: gate.tangent.z * 34 }, true)
+    this.progress.reset()
+    this.camera.snap()
+  }
+
   private createRace(): RaceManager {
     return new RaceManager(this.track.checkpoints, gameStore.getState().settings.laps, {
       onStateChange: (state) => {
@@ -467,6 +539,7 @@ export class Game {
     // Every point: the minimap is zoomed in and highlights the route from the car's index.
     gameStore.setState({
       minimap: {
+        overview: this.track.mapOverview?.() ?? null,
         points: line.map((p) => [p.x, p.z]),
         gates: this.track.checkpoints.map((c) => [c.position.x, c.position.z]),
       },
@@ -550,6 +623,8 @@ export class Game {
     this.track.dispose()
     this.effects.clear()
     this.sparks.clear()
+    this.rainSpray?.clear()
+    this.lensDrops?.clear()
     try {
       this.track = await this.loadTrack(id)
     } catch (err) {
@@ -672,6 +747,8 @@ export class Game {
       this.resetCar()
       this.effects.clear()
       this.sparks.clear()
+      this.rainSpray?.clear()
+      this.lensDrops?.clear()
       this.standings?.reset()
       this.playerEntry.finishMs = null
       this.playerEntry.lap = 0
@@ -727,6 +804,7 @@ export class Game {
 
   /** Paint the cinematic before React reveals it; never expose the grid camera. */
   private prepareRaceIntro(): void {
+    this.finish.reset(); this.loop.timeScale = 1; this.audio.setFinishMix(false)
     this.playerRevs.reset(this.vehicle.config.engine.idleRpm)
     this.introCueAt = 0
     this.lightsShown = 0
@@ -873,6 +951,7 @@ export class Game {
   private installCar(entry: CarEntry, base: VehicleConfig, model: CarModel): void {
     const scene = this.renderer.scene
     const old = this.vehicle
+    this.carRain.dispose()
     this.effects.dispose()
     this.headlights.dispose()
     this.livery.dispose()
@@ -890,6 +969,9 @@ export class Game {
     this.livery = new CarLivery(model)
     this.livery.apply(build)
     scene.add(model.root)
+    this.carRain = new CarRain(model, this.rainSurface.uniforms)
+    this.carRain.setQuality(gameStore.getState().settings.quality)
+    scene.add(this.carRain.impacts.mesh)
     this.headlights = new Headlights(model, config)
     this.headlights.setOn(this.environment.current.headlights)
     this.effects = new DrivingEffects(this.vehicle)
@@ -932,6 +1014,12 @@ export class Game {
     }
   }
 
+  skipRaceFinish(): void {
+    if (gameStore.getState().phase !== 'finished') return
+    this.finish.skip(); this.loop.timeScale = 1
+    this.publishTelemetry()
+  }
+
   skipRaceIntro(): void {
     if (gameStore.getState().phase !== 'intro') return
     for (const opponent of this.opponents) opponent.race.skipIntro()
@@ -966,6 +1054,7 @@ export class Game {
   }
 
   quitToMenu(): void {
+    this.finish.reset(); this.loop.timeScale = 1; this.audio.setFinishMix(false)
     this.clearOpponents()
     this.race.state = 'idle'
     // Back in the garage: room tone on, engine quiet (updateShowroom sets the scene).
@@ -973,6 +1062,8 @@ export class Game {
     this.resetCar()
     this.effects.clear()
     this.sparks.clear()
+    this.rainSpray?.clear()
+    this.lensDrops?.clear()
     gameStore.getState().setPhase('menu')
   }
 
@@ -1014,6 +1105,47 @@ export class Game {
     }
   }
 
+  /** Drive a race on autopilot and report frame times for this renderer (`?bench=1`). */
+  private startBenchmark(): void {
+    this.benchmark = new Benchmark({
+      racing: () => this.race.state === 'racing',
+      position: () => this.vehicle.position,
+      quaternion: () => this.vehicle.quaternion,
+      speedKmh: () => this.vehicle.speedKmh,
+      lineAhead: (ahead) => {
+        const line = this.track.line
+        return line[(this.progress.index + ahead) % line.length]
+      },
+      setInput: (state) => this.input.setTouch(state),
+      startRace: () => this.startRace(),
+      drawCalls: () => this.renderer.frameStats.calls,
+      triangles: () => this.renderer.frameStats.triangles,
+      environment: () => this.benchmarkEnvironment(),
+    })
+    this.benchmark.start()
+  }
+
+  /** Renderer, GPU, display and settings, so two benchmark runs can be compared. */
+  private async benchmarkEnvironment(): Promise<Record<string, unknown>> {
+    const { quality, postfx, track, opponents, timeOfDay, renderer } = gameStore.getState().settings
+    let gpu: unknown = null
+    try {
+      if (backend.kind === 'webgpu') {
+        const adapter = await (navigator as { gpu?: { requestAdapter(): Promise<{ info?: Record<string, string> } | null> } }).gpu?.requestAdapter()
+        gpu = adapter?.info ? { vendor: adapter.info.vendor, architecture: adapter.info.architecture, description: adapter.info.description } : null
+      } else {
+        const gl = (this.renderer.renderer as THREE.WebGLRenderer).getContext()
+        const ext = gl.getExtension('WEBGL_debug_renderer_info')
+        gpu = ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER)
+      }
+    } catch { /* GPU name is optional */ }
+    return {
+      backend: this.renderer.backendName, gpu, userAgent: navigator.userAgent,
+      viewport: [innerWidth, innerHeight], devicePixelRatio, renderPixelRatio: this.renderer.pixelRatio,
+      settings: { renderer, quality, postfx, track, opponents, timeOfDay },
+    }
+  }
+
   /** Feed from the on-screen touch controls. */
   setTouchInput(state: Partial<InputState>): void {
     this.input.setTouch(state)
@@ -1028,7 +1160,10 @@ export class Game {
 
   private fixedUpdate(dt: number): void {
     this.input.poll()
-    if (this.input.consume('pause')) this.togglePause()
+    if (this.input.consume('pause')) {
+      if (gameStore.getState().phase === 'finished' && this.finish.active) this.skipRaceFinish()
+      else this.togglePause()
+    }
     // Camera toggle (C / gamepad Y / touch button) only while driving: a stray
     // key press in a menu used to flip every later race into the cockpit view.
     if (this.input.consume('camera')) {
@@ -1037,7 +1172,10 @@ export class Game {
     }
 
     const skip = this.input.consume('skip')
-    if (skip) this.skipRaceIntro()
+    if (skip) {
+      if (gameStore.getState().phase === 'finished') this.skipRaceFinish()
+      else this.skipRaceIntro()
+    }
     const phase = gameStore.getState().phase
     if (phase === 'paused') return
     const racing = phase === 'racing' && this.race.state === 'racing'
@@ -1051,7 +1189,9 @@ export class Game {
     this.playerPose.speed = this.vehicle.controller.forwardSpeed
     for (const opponent of this.opponents) opponent.readPose()
     this.vehicle.controller.drafting = controls ? draftingStrength(this.playerPose, this.traffic, 0) : 0
-    this.vehicle.fixedUpdate(phase === 'finished' ? FINISHED_INPUT : controls ? this.input.state : LOCKED_INPUT, dt)
+    const finishInput = Math.abs(this.vehicle.controller.forwardSpeed) <= 1.2 ? LOCKED_INPUT
+      : this.finish.active ? (this.finish.elapsed < 1.5 ? FINISH_COAST_INPUT : FINISH_GENTLE_INPUT) : FINISHED_INPUT
+    this.vehicle.fixedUpdate(phase === 'finished' ? finishInput : controls ? this.input.state : LOCKED_INPUT, dt)
     const playerDistance = this.standings.distance(this.playerEntry)
     for (const opponent of this.opponents) {
       const i = opponent.driver.progress.index
@@ -1127,12 +1267,27 @@ export class Game {
     this.playerEntry.z = position.z
     if (this.race.state === 'finished' && this.playerEntry.finishMs === null) {
       this.playerEntry.finishMs = this.race.timer.totalMs
+      const standings = this.standings.snapshot(this.entries)
+      this.finishPosition = standings.find(row => row.player)?.position ?? 1
+      this.finishFieldSize = this.entries.length
+      this.finish.start(matchMedia('(prefers-reduced-motion: reduce)').matches)
+      this.finishCamera.start(this.vehicle.model.root)
+      this.loop.timeScale = this.finish.timeScale
+      this.audio.setFinishMix(true)
+      this.audio.playFinish(this.finishPosition === 1 && this.finishFieldSize > 1)
       this.publishTelemetry()
     }
   }
 
   private renderFrame(alpha: number, dt: number): void {
+    const frameDt = dt
     const phase = gameStore.getState().phase
+    if (phase === 'finished') {
+      this.finish.update(dt)
+      this.audio.setFinishMix(this.finish.active)
+      this.loop.timeScale = this.finish.timeScale
+      dt *= this.loop.timeScale
+    }
     if (phase === 'loading' && this.raceTransition) return
     for (const opponent of this.opponents) {
       opponent.vehicle.render(phase === 'paused' ? 1 : alpha, phase === 'paused' ? 0 : dt)
@@ -1194,6 +1349,10 @@ export class Game {
       }
     } else if (phase === 'intro') {
       this.introCamera.update(1-this.race.introRemaining/this.race.introDuration,this.vehicle.model.root,this.opponents[0]?.vehicle.model.root ?? this.vehicle.model.root,this.physics.world)
+    } else if (phase === 'finished' && !this.finish.reducedMotion) {
+      this.finishCamera.update(this.finish.progress, this.vehicle.model.root, this.physics.world)
+      this.effects.update(this.vehicle, dt)
+      this.sparks.update(dt)
     } else if (phase !== 'paused') {
       // Creep in on the car as the lights build, then settle into the race camera after the start.
       const lightsT = Math.min(1, (COUNTDOWN_SEC - this.race.countdown) / COUNTDOWN_SEC)
@@ -1205,17 +1364,33 @@ export class Game {
       this.updateGuide(dt)
     }
     if (this.rivalTags.length > 0) this.updateRivalTags(phase === 'countdown' || phase === 'racing', dt)
-    // Exhaust heat haze: every car, laid out after the camera moved this frame.
-    if (gameStore.getState().settings.postfx) {
-      this.hazeCars.length = 0
-      this.hazeCars.push(this.vehicle)
-      for (const opponent of this.opponents) this.hazeCars.push(opponent.vehicle)
-      this.haze.update(this.hazeCars, this.renderer.camera, dt)
+    this.benchmark?.frame()
+    // Every car, for the haze and the spray.
+    this.hazeCars.length = 0
+    this.hazeCars.push(this.vehicle)
+    for (const opponent of this.opponents) this.hazeCars.push(opponent.vehicle)
+    // Rain outdoors only: not in the garage.
+    const { postfx, weather, camera: cameraMode } = gameStore.getState().settings
+    const wet = weather === 'rain' && phase !== 'menu' && phase !== 'garage' ? 1 : 0
+    const camera = this.renderer.camera
+    this.rainSurface.update(this.renderer.renderer, this.renderer.scene, this.track.group, camera, wet, dt)
+    this.wetRoads.update(this.track.group, wet, dt)
+    this.vehicle.model.root.getWorldPosition(this.racePosition)
+    this.wetReflections.update(this.renderer.renderer, this.renderer.scene, this.track.group, camera, this.racePosition, wet, dt)
+    this.rainImpacts.mesh.visible = wet > 0 && this.rainSurface.uniforms.uRainReady.value > 0
+    this.carRain.update(this.vehicle.model, wet, dt)
+    this.rain.update(camera, wet, dt)
+    this.rainSpray.update(this.hazeCars, camera.position, wet, dt)
+    // Exhaust heat haze and lens drops share the distortion buffer (post FX only).
+    if (postfx) {
+      const speed = Math.abs(this.vehicle.controller.forwardSpeed)
+      this.lensDrops.update(camera, cameraMode === 'cockpit' ? wet : 0, speed, dt)
+      this.haze.update(this.hazeCars, camera, dt, this.lensDrops.active)
     }
-    const cameraMode = gameStore.getState().settings.camera
     const blurAmount = gameStore.getState().settings.motionBlur
     let exposure = phase === 'racing' ? motionExposure(this.vehicle.speedKmh, blurAmount, dt)
-      : phase === 'intro' ? motionExposure(160, blurAmount * this.introCamera.whip, dt) : 0
+      : phase === 'intro' ? motionExposure(160, blurAmount * this.introCamera.whip, dt)
+      : phase === 'finished' && this.finish.active && !this.finish.reducedMotion ? motionExposure(this.vehicle.speedKmh, blurAmount * (1 - .7 * THREE.MathUtils.smoothstep(this.finish.progress, 0, .1)), dt) : 0
     if (this.blurCamera !== cameraMode) { exposure = 0; this.blurCamera = cameraMode }
     this.renderer.setMotionBlur(exposure, this.vehicle.model.body)
     const staging = phase === 'intro' || phase === 'countdown'
@@ -1230,6 +1405,9 @@ export class Game {
     this.track.update(this.vehicle.position, _velocity.set(v.x, v.y, v.z), dt)
     this.renderer.adapt(dt)
 
+    const outdoors = phase === 'intro' || phase === 'countdown' || phase === 'racing' || phase === 'finished' || phase === 'paused'
+    this.track.atmosphere?.update(camera.position, phase === 'paused' ? 0 : frameDt, outdoors)
+    this.audio.updateTrackside(this.track.atmosphere?.sources, camera, outdoors, gameStore.getState().settings.tracksideVolume)
     this.updateOpponentAudio(phase, staging)
     this.updateHitAudio(phase)
     const ctrl = this.vehicle.controller
@@ -1241,16 +1419,18 @@ export class Game {
     sound.nitroActive = ctrl.nitro.active
     sound.nitroPerfect = ctrl.nitro.perfect
     this.audio.update(sound, readTyres(ctrl, this.tyreSound))
+    this.audio.updateDriving(this.tyreSound.speed, this.tyreSound.paved, this.vehicle.motion.grounded,
+      this.vehicle.motion.roadRoughness, cameraMode === 'cockpit', phase === 'racing' || phase === 'finished')
     this.renderer.render()
 
     this.fpsFrames++
-    this.fpsTimer += dt
+    this.fpsTimer += frameDt
     if (this.fpsTimer >= 0.5) {
       this.fps = Math.round(this.fpsFrames / this.fpsTimer)
       this.fpsFrames = 0
       this.fpsTimer = 0
     }
-    this.telemetryTimer += dt
+    this.telemetryTimer += frameDt
     if (this.telemetryTimer >= 1 / TELEMETRY_HZ) {
       this.telemetryTimer = 0
       this.publishTelemetry()
@@ -1372,13 +1552,19 @@ export class Game {
       const h = this.carHits[slot]
       if (live) {
         if (h) {
-          if (h.car > 0) this.audio.impact(car, 'car', impactStrength(h.car))
-          if (h.wall > 0) this.audio.impact(car, 'wall', impactStrength(h.wall))
-          if (h.ground > 0) this.audio.impact(car, 'ground', impactStrength(h.ground))
+          const hit = Math.max(h.car, h.wall, h.ground)
+          if (hit > 0) {
+            const strength = impactStrength(hit)
+            this.audio.impact(car, hit === h.car ? 'car' : hit === h.wall ? 'wall' : 'ground', strength)
+            if (slot === 0 && strength > 0) this.camera.jolt(strength)
+          }
           this.audio.scrape(car, scrapeLevel(h.touching, speed), speed)
         }
         const curb = vehicle.quietTicks > 0 ? 0 : curbStrength(peak, speed)
-        if (curb > 0) this.audio.impact(car, 'curb', curb)
+        if (curb > 0) {
+          this.audio.impact(car, 'curb', curb)
+          if (slot === 0) this.camera.jolt(curb, true)
+        }
       } else {
         this.audio.scrape(car, 0, 0)
       }
@@ -1552,6 +1738,9 @@ export class Game {
     })
     const rivalLabels = labelsUnchanged ? previousLabels : this.opponents.map(o => ({ id: o.id, name: o.driver.profile.name, style: o.driver.profile.style, position: standings.find(s => s.id === o.id)?.position ?? o.id }))
     telemetryStore.setState({
+      finishProgress: this.finish.progress,
+      finishPosition: this.finishPosition,
+      finishFieldSize: this.finishFieldSize,
       rivalLabels,
       introShot: introShot(this.race.introDuration > 0 ? 1-this.race.introRemaining/this.race.introDuration : 0),
       introProgress: this.race.introDuration > 0 ? 1-this.race.introRemaining/this.race.introDuration : 0,
@@ -1682,6 +1871,7 @@ export class Game {
   }
 
   private applySettings(s: Settings): void {
+    setTrackLook(s.trackLook)
     this.renderer.applyQuality(s.quality, s.postfx)
     this.effects?.setQuality(s.quality)
     this.environment?.setShadowMapSize(s.quality === 'high' ? 2048 : 1024)
@@ -1694,6 +1884,13 @@ export class Game {
     this.audio.setVolume(s.masterVolume)
     this.audio.setMenuMusic(s.musicTrack, s.menuMusic)
     if (this.camera) this.camera.mode = s.camera
+    this.rain?.setQuality(s.quality)
+    this.rainSurface?.setQuality(s.quality)
+    this.wetReflections?.setQuality(s.quality)
+    this.rainImpacts?.setQuality(s.quality)
+    this.carRain?.setQuality(s.quality)
+    // Before the time of day: rain re-bakes the environment, applyTimeOfDay pushes it to the scene.
+    this.environment?.setRain(s.weather === 'rain')
     this.applyTimeOfDay(s.timeOfDay)
   }
 
@@ -1729,6 +1926,14 @@ export class Game {
     this.effects?.dispose()
     this.sparks?.dispose()
     this.haze?.dispose()
+    this.wetRoads?.dispose()
+    this.wetReflections?.dispose()
+    this.carRain?.dispose()
+    this.rainImpacts?.dispose()
+    this.rainSurface?.dispose()
+    this.rain?.dispose()
+    this.rainSpray?.dispose()
+    this.lensDrops?.dispose()
     this.guide?.dispose()
     this.driftZones?.dispose()
     this.showroom?.dispose()

@@ -17,7 +17,7 @@ vi.mock('three', async importOriginal => {
   return { ...three, WebGLRenderer: class {
     domElement = { remove: vi.fn() }
     shadowMap = { enabled: false, type: 0 }
-    info = { autoReset: true }
+    info = { autoReset: true, reset() {}, render: { calls: 0, triangles: 0 }, memory: { textures: 0, geometries: 0 } }
     setPixelRatio = mocks.setPixelRatio
     setSize = mocks.rendererSize
     render = mocks.directRender

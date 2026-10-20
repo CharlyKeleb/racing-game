@@ -6,5 +6,9 @@
 export { WebGPURenderer, PMREMGenerator } from 'three/webgpu'
 export { GpuParticlePool } from './particles'
 export { NodePostFX } from './postfx'
-export { floorSheen, hazeMaterial, instanceFadeMaterial, skidMarkMaterial, skyDome } from './materials'
+export { floorSheen, hazeMaterial, instanceFadeMaterial, lensDropMaterial, liveryPaintMaterial, premiumPaintMaterial, rainMaterial, skidMarkMaterial, skyDome } from './materials'
+
+export { rainSurfaceMaterial, rainImpactMaterial, wetRoadMaterial } from './rainSurface'
 export { motionVectorMaterial } from './motionBlur'
+
+export { trackLookMaterial } from './trackLook'

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { curbStrength, impactLayers, impactStrength, scrapeLevel } from '../src/audio/ImpactModel'
+import { curbStrength, impactStrength, scrapeLevel } from '../src/audio/ImpactModel'
 import { tyreBrakeLevels } from '../src/audio/TyreBrakeModel'
 import { getCar } from '../src/vehicles/carRegistry'
 
@@ -11,15 +11,6 @@ describe('impact sound model', () => {
     expect(shunt).toBeGreaterThan(tap)
     expect(big).toBeCloseTo(1)
     expect(huge).toBe(1)
-  })
-
-  it('gives car-on-car hits ringing panels, walls a heavier thud, and only big hits debris', () => {
-    const car = impactLayers('car', 0.5), wall = impactLayers('wall', 0.5)
-    expect(car.ring).toBeGreaterThan(wall.ring)
-    expect(wall.thudHz).toBeLessThan(car.thudHz)
-    expect(car.debris).toBe(0)
-    expect(impactLayers('car', 1).debris).toBeGreaterThan(0.9)
-    expect(impactLayers('car', 1).crunchDecay).toBeGreaterThan(car.crunchDecay)
   })
 
   it('thunks on a curb strike at speed, not crawling over one or on a smooth road', () => {

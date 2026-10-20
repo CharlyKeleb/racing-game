@@ -1,4 +1,6 @@
+import { paintFinishUniforms, patchPaintFinish, setPaintFinish } from './PaintFinish'
 import { LicensePlate } from './LicensePlate'
+import { backend } from '../engine/backend'
 import * as THREE from 'three'
 import { DEFAULT_BUILD, type CarBuild, type PaintFinish } from './CarBuild'
 import type { CarModel } from './CarModel'
@@ -32,7 +34,8 @@ function slotFor(materialName: string, onWheel: boolean): Slot | null {
 }
 
 export class CarLivery {
-  private readonly paint = new THREE.MeshPhysicalMaterial({ name: 'livery_paint' })
+  private readonly paintFinish = paintFinishUniforms()
+  private readonly paint: THREE.MeshPhysicalMaterial
   private readonly rims = new THREE.MeshStandardMaterial({ name: 'livery_rims', metalness: 1, roughness: 0.22 })
   private readonly calipers = new THREE.MeshStandardMaterial({ name: 'livery_calipers', metalness: 0.3, roughness: 0.4 })
   private readonly glass = new THREE.MeshPhysicalMaterial({
@@ -52,7 +55,12 @@ export class CarLivery {
 
   constructor(model: CarModel) {
     const placement = LIVERY_PLACEMENTS[model.root.name]
-    if (placement) {
+    if (placement && backend.nodes) {
+      // WebGPU runs no onBeforeCompile: the node twin projects the same graphics.
+      this.graphics = new LiveryGraphics(placement)
+      this.paint = backend.nodes.liveryPaintMaterial(this.graphics.uniforms, this.paintFinish) as unknown as THREE.MeshPhysicalMaterial
+    } else if (placement) {
+      this.paint = new THREE.MeshPhysicalMaterial({ name: 'livery_paint' })
       this.graphics = new LiveryGraphics(placement)
       const graphics = this.graphics
       this.paint.onBeforeCompile = (shader) => {
@@ -61,7 +69,12 @@ export class CarLivery {
         shader.fragmentShader = LIVERY_FRAGMENT_DECLARATIONS + shader.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>\n' + LIVERY_FRAGMENT)
       }
       this.paint.customProgramCacheKey = () => 'garage-livery-v1'
+    } else {
+      this.paint = backend.nodes
+        ? backend.nodes.premiumPaintMaterial(this.paintFinish) as unknown as THREE.MeshPhysicalMaterial
+        : new THREE.MeshPhysicalMaterial({ name: 'livery_paint' })
     }
+    if (!backend.nodes) patchPaintFinish(this.paint, this.paintFinish)
     model.root.updateMatrixWorld(true)
     const bodyInverse = model.body.matrixWorld.clone().invert()
 
@@ -124,6 +137,7 @@ export class CarLivery {
       this.paint.needsUpdate = true
       this.finish = build.finish
     }
+    setPaintFinish(this.paintFinish, build.finish)
     this.graphics?.apply(build.livery)
     this.licensePlate.apply(build.livery)
     this.rims.color.set(build.rims)

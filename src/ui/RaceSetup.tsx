@@ -2,6 +2,7 @@ import { DRIFT_EVENTS, driftEvent, type DriftEventId } from '../racing/driftEven
 import { useEffect, useRef } from 'react'
 import { AI_DIFFICULTIES, type AiDifficulty } from '../racing/AiProfiles'
 import { TIME_PRESETS, type TimeOfDay } from '../world/timeOfDay'
+import type { Weather } from '../stores/gameStore'
 import { useGame } from './hooks'
 import { Button, Panel, Segmented } from './kit'
 
@@ -30,6 +31,7 @@ export function RaceSetup({ onClose }: { onClose(): void }) {
         <Segmented<TimeOfDay> label="Time of day" value={settings.timeOfDay}
           options={(Object.keys(TIME_PRESETS) as TimeOfDay[]).map((id) => [id, TIME_PRESETS[id].label])}
           onPick={(timeOfDay) => update({ timeOfDay })} />
+        <Segmented<Weather> help label="Weather" value={settings.weather} options={[['dry', 'Dry'], ['rain', 'Rain']]} onPick={(weather) => update({ weather })} />
         <p className="race-setup__note">{settings.mode === 'drift' ? 'Follow the route and pass every gate. Link slides to build ×5. Hit the cyan clipping zones for a 1.75× bonus. Clean transitions earn bonus points. Wall hits, spins, leaving the asphalt and resets lose your chain. Straighten up for 2.5 seconds to bank.' : settings.opponents > 0 ? AI_DIFFICULTIES[settings.difficulty].description : "Solo practice, with no rivals on the circuit."} Your setup is saved.</p>
         <Button variant="primary" onClick={() => dialog.current?.close()}>Done</Button>
       </Panel>

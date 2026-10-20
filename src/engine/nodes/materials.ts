@@ -1,6 +1,13 @@
+import type { PaintFinishUniforms } from '../../vehicles/PaintFinish'
+import type { RainSurfaceUniforms } from '../../effects/RainSurface'
+import { rainClearance } from './rainSurface'
 import * as THREE from 'three/webgpu'
-import { attribute, clamp, cos, float, length, materialOpacity, max, min, modelViewMatrix, positionLocal, reflector, sin, smoothstep, texture, uniform, uv, varying, vec2, vec3, vec4 } from 'three/tsl'
+import {
+  abs, attribute, cameraPosition, cameraViewMatrix, modelNormalMatrix, normalView, positionView, floor, fract, clamp, cos, cross, float, fwidth, length, materialColor, materialOpacity, max, min, mix, mod, modelViewMatrix, normalize,
+  positionGeometry, positionLocal, reference, reflector, select, sin, smoothstep, step, texture, uniform, uv, varying, vec2, vec3, vec4,
+} from 'three/tsl'
 import { SkyMesh } from 'three/addons/objects/SkyMesh.js'
+import { RAIN_BOX, RAIN_EXPOSURE, RAIN_FALL, RAIN_WIDTH } from '../../effects/Rain'
 
 /**
  * Node (TSL) versions of the game's custom WebGL materials, for
@@ -59,6 +66,8 @@ export function skyDome() {
       mieCoefficient: sky.mieCoefficient,
       mieDirectionalG: sky.mieDirectionalG,
       sunPosition: sky.sunPosition,
+      cloudCoverage: sky.cloudCoverage,
+      cloudDensity: sky.cloudDensity,
       uSkyExposure: exposure,
       uSkyTint: tint,
       uSkyMax: clampMax,
@@ -115,4 +124,144 @@ export function hazeMaterial() {
   material.colorNode = vec3(off.mul(fall).mul(strength), 0)
   material.opacityNode = float(1)
   return { material, time: uTime }
+}
+
+/** LiveryGraphics' uniform objects: the node version reads them live by reference. */
+type LiveryUniforms = Record<string, { value: unknown }>
+
+/** Paint layers live beneath the unperturbed clearcoat, never as emissive glitter. */
+function paintPearlColor(base: THREE.Node<'vec3'>, finish: PaintFinishUniforms) {
+  const angle = float(1).sub(abs(normalize(normalView).dot(normalize(positionView.negate())))).pow(2)
+  const pearl = reference('value', 'float', finish.uPaintPearl)
+  return mix(base, base.gbr, angle.mul(pearl).mul(.4)).mul(mix(vec3(1), mix(vec3(1, .78, .93), vec3(.70, .91, 1), angle), pearl.mul(.65)))
+}
+export function premiumPaintMaterial(finish: PaintFinishUniforms): THREE.MeshPhysicalNodeMaterial {
+  const material = new THREE.MeshPhysicalNodeMaterial({ name: 'livery_paint' })
+  const grain = positionLocal.mul(220)
+  const cell = floor(grain)
+  const hash = fract(sin(vec3(
+    cell.dot(vec3(127.1, 311.7, 74.7)), cell.dot(vec3(269.5, 183.3, 246.1)), cell.dot(vec3(113.5, 271.9, 124.6)),
+  )).mul(43758.5453))
+  const width = fwidth(grain)
+  const filter = float(1).sub(smoothstep(.35, 1.4, max(width.x, max(width.y, width.z))))
+  const strength = smoothstep(.82, .94, hash.x).mul(filter).mul(reference('value', 'float', finish.uPaintFlake))
+  // Transform the object-space perturbation using the object's normal matrix.
+  const tilt = cameraViewMatrix.mul(vec4(modelNormalMatrix.mul(hash.mul(2).sub(1)), 0)).xyz
+  material.normalNode = normalize(normalView.add(tilt.sub(normalView.mul(normalView.dot(tilt))).mul(strength).mul(.38)))
+  material.roughnessNode = mix(reference('roughness', 'float', material), .11, strength)
+  material.colorNode = paintPearlColor(materialColor.rgb, finish)
+  return material
+}
+
+/**
+ * Garage livery paint (CarLivery + LiveryGraphics): a physical material whose
+ * diffuse colour gets the stripes, hood number and door panels / decals
+ * projected from the body-space `liveryPosition` / `liveryNormal`
+ * attributes. Mirrors LIVERY_FRAGMENT; the uniforms stay owned by
+ * LiveryGraphics and are read by reference, so `apply()` needs no changes.
+ */
+export function liveryPaintMaterial(u: LiveryUniforms, finish: PaintFinishUniforms): THREE.MeshPhysicalNodeMaterial {
+  const material = premiumPaintMaterial(finish)
+  const f = (name: string) => reference('value', 'float', u[name])
+  const v2 = (name: string) => reference('value', 'vec2', u[name])
+  const v4 = (name: string) => reference('value', 'vec4', u[name])
+  const rgb = (name: string) => reference('value', 'color', u[name])
+  const atlas = u.uLiveryAtlas.value as THREE.Texture
+  const lp = varying(attribute('liveryPosition', 'vec3'), 'vLiveryPosition')
+  const ln = normalize(varying(attribute('liveryNormal', 'vec3'), 'vLiveryNormal'))
+  const enabled = step(0.5, f('uLiveryEnabled'))
+  const pattern = f('uLiveryPattern')
+  const stripe = v4('uLiveryStripe'), panel = v4('uLiveryPanel'), hood = v2('uLiveryHood'), decalSize = v2('uLiveryDecal')
+  const primary = rgb('uLiveryPrimary'), accent = rgb('uLiveryAccent')
+  const edge = max(fwidth(lp.x), 0.001)
+  const ax = abs(lp.x)
+  // Stripe distance and width per pattern (1 centre … 7 pinstripe), as the GLSL if-chain.
+  const below = (k: number) => pattern.lessThan(k + 0.5)
+  const distance = select(below(1), ax,
+    select(below(2), abs(ax.sub(stripe.y)),
+      select(below(3), abs(lp.x.sub(stripe.z)),
+        select(below(4), abs(ax.sub(abs(lp.z.sub(0.4)).mul(0.18))),
+          select(below(5), min(ax, abs(ax.sub(stripe.y.mul(1.8)))),
+            select(below(6), abs(lp.x.sub(lp.z.mul(0.32))), abs(ax.sub(0.47))))))))
+  const width = stripe.x.mul(select(below(1), 1.8, select(below(4), 1, select(below(5), 0.65, select(below(6), 1, 0.25)))))
+  const onTop = step(0.45, ln.y).mul(step(stripe.w, lp.y))
+  const stripeMask = enabled.mul(step(0.5, pattern)).mul(onTop)
+  const outer = float(1).sub(smoothstep(width.add(0.018), width.add(0.018).add(edge), distance)).mul(stripeMask)
+  const inner = float(1).sub(smoothstep(width, width.add(edge), distance)).mul(stripeMask)
+  const inside = (p: THREE.Node<'vec2'>) => step(0, p.x).mul(step(p.x, 1)).mul(step(0, p.y)).mul(step(p.y, 1))
+  let color: THREE.Node<'vec3'> = mix(mix(paintPearlColor(materialColor.rgb, finish), accent, outer), primary, inner)
+  // Hood number.
+  const huv = vec2(lp.x.div(hood.y).add(0.5), lp.z.sub(hood.x).div(hood.y).add(0.5))
+  const hoodTex = texture(atlas, vec2(huv.x.mul(0.5), huv.y))
+  const hoodMask = enabled.mul(step(0.5, f('uLiveryHoodNumber'))).mul(step(0.55, ln.y)).mul(step(stripe.w, lp.y)).mul(inside(huv))
+  color = mix(color, hoodTex.rgb, hoodTex.a.mul(hoodMask))
+  // Door panels and decals, mirrored on the far side so they read the right way round.
+  const side = enabled.mul(step(0.55, abs(ln.x)))
+  const direction = select(ln.x.greaterThan(0), float(1), float(-1))
+  const puv = vec2(lp.z.sub(panel.y).mul(direction).div(panel.z).add(0.5), lp.y.sub(panel.x).div(panel.w).add(0.5))
+  const panelTex = texture(atlas, vec2(puv.x.mul(0.5), puv.y))
+  color = mix(color, panelTex.rgb, panelTex.a.mul(side).mul(step(0.5, f('uLiveryDoorNumber'))).mul(inside(puv)))
+  const duv = vec2(lp.z.sub(decalSize.x).mul(direction).div(decalSize.y).add(0.5), lp.y.sub(panel.x).div(decalSize.y).add(0.5))
+  const decalTex = texture(atlas, vec2(duv.x.mul(0.5).add(0.5), duv.y))
+  color = mix(color, decalTex.rgb, decalTex.a.mul(side).mul(inside(duv)))
+  material.colorNode = color
+  return material
+}
+
+/**
+ * Rain streaks (#53): the box-wrapped, camera-relative streaks of
+ * effects/Rain.ts, in world space (the mesh sits at the origin).
+ */
+export function rainMaterial(surface?: RainSurfaceUniforms) {
+  const uTime = uniform(0)
+  const cameraVelocity = new THREE.Vector3()
+  const uCameraVelocity = uniform(cameraVelocity)
+  const box = vec3(RAIN_BOX.x, RAIN_BOX.y, RAIN_BOX.z)
+  const seed = attribute('aSeed', 'vec4')
+  const fall = vec3(RAIN_FALL.x, RAIN_FALL.y, RAIN_FALL.z).mul(seed.w.mul(0.4).add(0.8))
+  const wrapped = cameraPosition.add(mod(seed.xyz.mul(box).add(fall.mul(uTime)).sub(cameraPosition), box)).sub(box.mul(0.5))
+  const drift = sin(uTime.mul(0.7).add(seed.z.mul(Math.PI * 2))).mul(0.12)
+  const drop = wrapped.add(vec3(drift, 0, 0))
+  const dist = length(drop.sub(cameraPosition))
+  const motion = fall.sub(uCameraVelocity).negate()
+  const speed = max(length(motion), 0.001)
+  const exposure = seed.w.mul(0.7).add(0.55).mul(RAIN_EXPOSURE)
+  const along = motion.div(speed).mul(min(speed.mul(exposure), 0.65))
+  const mid = drop.add(along.mul(positionGeometry.y))
+  const crossAxis = cross(mid.sub(cameraPosition), along)
+  const side = crossAxis.div(max(length(crossAxis), 0.00001))
+  const width = max(seed.w.mul(0.7).add(0.65).mul(RAIN_WIDTH), dist.mul(0.00018))
+  const material = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false, side: THREE.DoubleSide })
+  const world = mid.add(side.mul(width).mul(positionGeometry.x.mul(2)))
+  material.positionNode = world
+  const fade = varying(smoothstep(0.8, 2.5, dist)
+    .mul(float(1).sub(smoothstep(12, 22, dist)))
+    .mul(seed.w.mul(0.3).add(0.16)).mul(min(1, float(0.0032).div(width))), 'vRainFade')
+  const brightness = varying(seed.y.mul(0.25).add(0.75), 'vRainBrightness')
+  const p = uv()
+  const across = float(1).sub(smoothstep(0.15, 1, abs(p.x.sub(0.5)).mul(2)))
+  const taper = smoothstep(0, 0.18, p.y).mul(float(1).sub(smoothstep(0.55, 1, p.y)))
+  material.colorNode = vec3(0.82, 0.87, 0.92).mul(brightness)
+  material.opacityNode = across.mul(taper).mul(fade)
+  if (surface) material.opacityNode = across.mul(taper).mul(fade).mul(step(.025, varying(rainClearance(surface, world), 'vRainClearance')))
+  material.alphaTest = 0.004
+  return { material, uniforms: { time: uTime, cameraVelocity: { value: cameraVelocity } } }
+}
+
+/**
+ * Lens drops (#53, cockpit view): each drop writes a lens-like inward offset
+ * into the distortion buffer, so the image behind it is refracted (and
+ * flipped) the way a water drop on glass does. Mirrors effects/LensDrops.ts.
+ */
+export function lensDropMaterial() {
+  const material = new THREE.MeshBasicNodeMaterial({ transparent: true, blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false })
+  material.toneMapped = false
+  material.fog = false
+  const strength = varying(attribute('aStrength', 'float'), 'vDrop')
+  const d = uv().sub(0.5).mul(2)
+  const r = length(d)
+  const inside = float(1).sub(smoothstep(0.8, 1, r))
+  material.colorNode = vec3(d.mul(inside).mul(strength).negate(), 0)
+  material.opacityNode = float(1)
+  return material
 }
