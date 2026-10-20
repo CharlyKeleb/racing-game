@@ -41,6 +41,9 @@ export interface Settings {
   musicTrack: MusicTrackId
   camera: CameraMode
   cameraMotion: boolean
+  proximityRadar: boolean
+  spotterVisual: boolean
+  spotterAudio: boolean
   cockpits: Record<string, CockpitAdjustment>
   difficulty: AiDifficulty
   opponents: number
@@ -108,6 +111,9 @@ const defaultSettings: Settings = {
   musicTrack: MUSIC_TRACKS[0].id,
   camera: 'chase',
   cameraMotion: !(typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches),
+  proximityRadar: true,
+  spotterVisual: true,
+  spotterAudio: false,
   cockpits: {},
   difficulty: 'challenging',
   opponents: 3,
@@ -128,6 +134,7 @@ function loadSettings(): Settings {
     merged.cockpits = {}
     for (const car of selectableCars()) if (savedCockpits && typeof savedCockpits === 'object' && Object.hasOwn(savedCockpits, car.id)) merged.cockpits[car.id] = sanitizeCockpit(savedCockpits[car.id], car.id)
     if (typeof merged.cameraMotion !== 'boolean') merged.cameraMotion = defaultSettings.cameraMotion
+    for(const key of ['proximityRadar','spotterVisual','spotterAudio'] as const)if(typeof merged[key]!=='boolean')merged[key]=defaultSettings[key]
     merged.tracksideVolume = typeof merged.tracksideVolume === 'number' && Number.isFinite(merged.tracksideVolume) ? Math.max(0, Math.min(1, merged.tracksideVolume)) : defaultSettings.tracksideVolume
     merged.driftEvent=driftEvent(merged.driftEvent).id
     if (merged.mode !== 'drift') merged.mode = 'quick'

@@ -7,6 +7,7 @@ import { useGame, useTelemetry } from './hooks'
 import { Minimap } from './Minimap'
 import { Leaderboard, PositionBadge } from './RacePosition'
 import { RivalTags } from './RivalTags'
+import { ProximityDisplay } from './ProximityRadar'
 import { NitroGauge, RpmGauge, Speedometer } from './Speedometer'
 
 /** Dial full scale. Comfortably above the 911's ~306 km/h top speed. */
@@ -24,6 +25,7 @@ export function Hud() {
   const fieldSize = useTelemetry(s => s.standings.length)
   const drift = useGame(s => s.settings.mode === 'drift')
   const phase = useGame((s) => s.phase)
+  const awarenessVisible=useGame(s=>s.settings.proximityRadar||s.settings.spotterVisual)
   useLayoutEffect(() => {
     const element = root.current!
     const measure = () => hudLayoutStore.setState({ panels: measureHudPanels(element) })
@@ -37,7 +39,7 @@ export function Hud() {
       window.removeEventListener('resize', measure)
       hudLayoutStore.setState({ panels: [] })
     }
-  }, [drift, fieldSize, phase])
+  }, [drift, fieldSize, phase, awarenessVisible])
   return (
     <div ref={root} className={`hud${t.nitroActive ? ' hud--nitro' : ''}${t.nitroPerfect ? ' hud--nitro-perfect' : ''}`}>
       <div className="hud-speedlines" aria-hidden="true" />
@@ -48,6 +50,7 @@ export function Hud() {
       </div>
 
       <RivalTags />
+      <ProximityDisplay />
       <HudFeedback />
       <HudStartLights />
       <HudGauges />
