@@ -1,5 +1,5 @@
 import { setTrackLook } from '../world/TrackLook'
-import { FinishSequence } from '../racing/FinishSequence'
+import { BRAKE_AT, FINISH_SECONDS, FinishSequence, finishDrive, shotAt, type FinishShot } from '../racing/FinishSequence'
 import { RaceFinishCamera } from '../camera/RaceFinishCamera'
 import { WetReflections } from '../effects/WetReflections'
 import { CarRain } from '../effects/CarRain'
@@ -79,6 +79,9 @@ const LOCKED_INPUT: InputState = { throttle: 0, brake: 0, steer: 0, handbrake: t
 /** Past the flag: brake to a stop in a straight line while the rivals finish. */
 const FINISH_COAST_INPUT: InputState = { throttle: 0, brake: 0, steer: 0, handbrake: false, nitro: false }
 const FINISH_GENTLE_INPUT: InputState = { throttle: 0, brake: .18, steer: 0, handbrake: false, nitro: false }
+/** The scripted finish slide: handbrake on, so the rear lets go and the tyres smoke as it swings round. */
+const FINISH_SLIDE_INPUT: InputState = { throttle: 0, brake: 0, steer: 0, handbrake: true, nitro: false }
+const FINISH_BRAKE_INPUT: InputState = { throttle: 0, brake: 1, steer: 0, handbrake: false, nitro: false }
 const FINISHED_INPUT: InputState = { throttle: 0, brake: 0.5, steer: 0, handbrake: false, nitro: false }
 const _velocity = new THREE.Vector3()
 const _forward = new THREE.Vector3()
@@ -88,6 +91,7 @@ const _rivalOffset = new THREE.Vector3()
 const _listenerUp = new THREE.Vector3()
 const _listenerBack = new THREE.Vector3()
 const _relativeVelocity = new THREE.Vector3()
+const _finishRay = new RAPIER.Ray({ x: 0, y: 0, z: 0 }, { x: 1, y: 0, z: 0 })
 const _sparkPoint = new THREE.Vector3()
 const _sparkNormal = new THREE.Vector3()
 const _sparkOrigin = new THREE.Vector3()
@@ -190,6 +194,11 @@ export class Game {
   private readonly finishCamera: RaceFinishCamera
   private finishPosition = 1
   private finishFieldSize = 1
+  /** The finish slide: which way (+1 the car's left), its heading at the line and the speed braking began from. */
+  private finishSide: 1 | -1 = 1
+  private readonly finishTravel = new THREE.Vector3()
+  private finishBrakeFrom: number | null = null
+  private lastFinishShot: FinishShot | null = null
   private readonly playerEntry: RaceEntry = { id: 0, name: 'You', player: true, lap: 0, checkpoint: 0, index: 0, finishMs: null }
   private traffic: TrafficCar[] = [this.playerPose]
   private entries: RaceEntry[] = [this.playerEntry]
@@ -1189,9 +1198,17 @@ export class Game {
     this.playerPose.speed = this.vehicle.controller.forwardSpeed
     for (const opponent of this.opponents) opponent.readPose()
     this.vehicle.controller.drafting = controls ? draftingStrength(this.playerPose, this.traffic, 0) : 0
-    const finishInput = Math.abs(this.vehicle.controller.forwardSpeed) <= 1.2 ? LOCKED_INPUT
+    // The finish cinematic scripts the stop (see finishDrive); the reduced-motion
+    // version, and the car after the sequence, just brake gently.
+    const scripted = phase === 'finished' && this.finish.active && !this.finish.reducedMotion
+    if (scripted && this.finishBrakeFrom === null && this.finish.elapsed >= BRAKE_AT) this.finishBrakeFrom = Math.abs(this.vehicle.controller.forwardSpeed)
+    const drive = scripted ? finishDrive(this.finish.elapsed, this.finishBrakeFrom ?? Math.abs(this.vehicle.controller.forwardSpeed)) : null
+    const finishInput = drive
+      ? drive.mode === 'coast' ? FINISH_COAST_INPUT : drive.mode === 'parked' ? LOCKED_INPUT : drive.yawRate > 0 ? FINISH_SLIDE_INPUT : FINISH_BRAKE_INPUT
+      : Math.abs(this.vehicle.controller.forwardSpeed) <= 1.2 ? LOCKED_INPUT
       : this.finish.active ? (this.finish.elapsed < 1.5 ? FINISH_COAST_INPUT : FINISH_GENTLE_INPUT) : FINISHED_INPUT
     this.vehicle.fixedUpdate(phase === 'finished' ? finishInput : controls ? this.input.state : LOCKED_INPUT, dt)
+    if (drive && drive.mode !== 'coast') this.applyFinishDrive(drive.mode === 'parked' ? 0 : drive.speed, drive.mode === 'parked' ? 0 : drive.yawRate, drive.drift)
     const playerDistance = this.standings.distance(this.playerEntry)
     for (const opponent of this.opponents) {
       const i = opponent.driver.progress.index
@@ -1271,12 +1288,61 @@ export class Game {
       this.finishPosition = standings.find(row => row.player)?.position ?? 1
       this.finishFieldSize = this.entries.length
       this.finish.start(matchMedia('(prefers-reduced-motion: reduce)').matches)
-      this.finishCamera.start(this.vehicle.model.root)
+      // Slide toward whichever side has more room before a wall (a paved pit
+      // lane behind a pit wall reads as wide road, so measure, don't guess).
+      this.finishTravel.set(0, 0, 1).applyQuaternion(this.vehicle.model.root.quaternion).setY(0).normalize()
+      const roomLeft = this.clearance(1), roomRight = this.clearance(-1)
+      this.finishSide = roomLeft >= roomRight ? 1 : -1
+      this.finishBrakeFrom = null
+      this.lastFinishShot = null
+      this.finishCamera.start(this.vehicle.model.root, { side: this.finishSide, speed: Math.abs(this.vehicle.controller.forwardSpeed), room: Math.max(roomLeft, roomRight) })
       this.loop.timeScale = this.finish.timeScale
       this.audio.setFinishMix(true)
       this.audio.playFinish(this.finishPosition === 1 && this.finishFieldSize > 1)
       this.publishTelemetry()
     }
+  }
+
+  /** Metres of open space beside the car toward its left (+1) or right (−1), up to 25, at wheel height. */
+  private clearance(side: 1 | -1): number {
+    const p = this.vehicle.body.translation()
+    const dx = this.finishTravel.z * side, dz = -this.finishTravel.x * side
+    _finishRay.origin = { x: p.x, y: p.y + 0.4, z: p.z }
+    _finishRay.dir = { x: dx, y: 0, z: dz }
+    const hit = this.physics.world.castRay(_finishRay, 25, true, RAPIER.QueryFilterFlags.EXCLUDE_DYNAMIC)
+    return hit ? hit.timeOfImpact : 25
+  }
+
+  /**
+   * Frames the finish cinematic's current shot (false = the chase camera
+   * carries on, at the line itself). After the sequence, or a skip, the last
+   * shot keeps following the car behind the results.
+   */
+  private finishCinematic(): boolean {
+    const seconds = this.finish.active ? this.finish.elapsed : FINISH_SECONDS
+    const shot = shotAt(seconds).shot
+    if (this.finish.active && this.lastFinishShot === 'line' && shot === 'pass') this.audio.playWhoosh(0.18)
+    this.lastFinishShot = shot
+    return this.finishCamera.update(seconds, this.vehicle.model.root, this.physics.world, !this.finish.active)
+  }
+
+  /**
+   * Overrides the car's motion for the scripted finish (after the tyre forces,
+   * before the physics step): along its heading at the line, turning toward the
+   * slide side as it goes, swinging round at `yawRate`. Physics still resolves
+   * anything it runs into, and the tyres smoke and squeal because it slides.
+   */
+  private applyFinishDrive(speed: number, yawRate: number, drift: number): void {
+    const body = this.vehicle.body
+    const lx = this.finishTravel.z * this.finishSide, lz = -this.finishTravel.x * this.finishSide
+    let dx = this.finishTravel.x * (1 - drift) + lx * drift, dz = this.finishTravel.z * (1 - drift) + lz * drift
+    const len = Math.hypot(dx, dz) || 1
+    dx /= len
+    dz /= len
+    const v = body.linvel()
+    body.setLinvel({ x: dx * speed, y: v.y, z: dz * speed }, true)
+    // + yaw about +Y turns toward +X, the car's left (glTF).
+    body.setAngvel({ x: 0, y: this.finishSide * yawRate, z: 0 }, true)
   }
 
   private renderFrame(alpha: number, dt: number): void {
@@ -1349,8 +1415,7 @@ export class Game {
       }
     } else if (phase === 'intro') {
       this.introCamera.update(1-this.race.introRemaining/this.race.introDuration,this.vehicle.model.root,this.opponents[0]?.vehicle.model.root ?? this.vehicle.model.root,this.physics.world)
-    } else if (phase === 'finished' && !this.finish.reducedMotion) {
-      this.finishCamera.update(this.finish.progress, this.vehicle.model.root, this.physics.world)
+    } else if (phase === 'finished' && !this.finish.reducedMotion && this.finishCinematic()) {
       this.effects.update(this.vehicle, dt)
       this.sparks.update(dt)
     } else if (phase !== 'paused') {
@@ -1739,6 +1804,8 @@ export class Game {
     const rivalLabels = labelsUnchanged ? previousLabels : this.opponents.map(o => ({ id: o.id, name: o.driver.profile.name, style: o.driver.profile.style, position: standings.find(s => s.id === o.id)?.position ?? o.id }))
     telemetryStore.setState({
       finishProgress: this.finish.progress,
+      finishSeconds: this.finish.elapsed,
+      finishReduced: this.finish.reducedMotion,
       finishPosition: this.finishPosition,
       finishFieldSize: this.finishFieldSize,
       rivalLabels,

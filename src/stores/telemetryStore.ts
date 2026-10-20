@@ -7,6 +7,10 @@ import { createStore } from 'zustand/vanilla'
  */
 export interface Telemetry {
   finishProgress: number
+  /** Real seconds into the finish cinematic (FinishSequence's shot timeline). */
+  finishSeconds: number
+  /** The short reduced-motion finish: no shots, no badge animation. */
+  finishReduced: boolean
   finishPosition: number
   finishFieldSize: number
   introShot: number
@@ -83,6 +87,8 @@ export interface Telemetry {
 
 export const initialTelemetry: Telemetry = {
   finishProgress: 0,
+  finishSeconds: 0,
+  finishReduced: false,
   finishPosition: 1,
   finishFieldSize: 1,
   introShot: 0,

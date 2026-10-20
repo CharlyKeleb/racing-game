@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { describe, expect, it, vi } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { FinishSequence, FINISH_SECONDS } from '../src/racing/FinishSequence'
+import { BLACKOUT, BRAKE_AT, FinishSequence, FINISH_SECONDS, SLIDE_AT, SLIDE_SECONDS, SLIDE_YAW, blackout, finishDrive, shotAt } from '../src/racing/FinishSequence'
 import { RaceFinishCamera } from '../src/camera/RaceFinishCamera'
 import { GameLoop, FIXED_DT } from '../src/engine/GameLoop'
 import { RaceFinish } from '../src/ui/RaceFinish'
@@ -14,27 +14,22 @@ vi.mock('../src/ui/hooks', () => ({
   useTelemetry: (select: (s: ReturnType<typeof telemetryStore.getState>) => unknown) => select(telemetryStore.getState()),
 }))
 
-it('uses real time for the finish, restores normal speed and resets cleanly', () => {
+it('runs the finish at normal speed, skips and resets cleanly', () => {
   const finish = new FinishSequence()
   finish.start()
   expect(finish.timeScale).toBe(1)
-  finish.update(.4)
-  expect(finish.timeScale).toBeCloseTo(.28)
-  for (let i = 0; i < 120; i++) finish.update(1 / 60)
+  finish.update(5)
   expect(finish.active).toBe(true)
-  expect(finish.timeScale).toBeGreaterThan(.28)
+  expect(finish.timeScale).toBe(1)
   finish.update(FINISH_SECONDS)
   expect(finish.active).toBe(false)
-  expect(finish.timeScale).toBe(1)
   finish.start(); finish.skip()
   expect(finish.progress).toBe(1)
   finish.reset()
   expect(finish.started).toBe(false)
-  expect(finish.timeScale).toBe(1)
 })
-it('respects reduced motion without slow motion', () => {
+it('respects reduced motion with a short outcome reveal', () => {
   const finish = new FinishSequence(); finish.start(true)
-  expect(finish.timeScale).toBe(1)
   finish.update(1.2)
   expect(finish.active).toBe(false)
 })
@@ -50,46 +45,80 @@ it('scales the simulation accumulator without changing fixed tick duration or re
   for (let i = 0; i < 60; i++) loop.advance(1 / 60)
   expect(ticks.length).toBe(75)
 })
-it('matches the crossing view exactly and moves continuously at different headings', () => {
-  for (const heading of [0, 1.3, Math.PI]) {
-    const camera = new THREE.PerspectiveCamera(), car = new THREE.Object3D()
-    car.position.set(100, 5, -70); car.rotation.y = heading
-    const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(car.quaternion)
-    camera.position.copy(car.position).addScaledVector(forward, -6); camera.position.y += 1.6
-    camera.lookAt(car.position.clone().add(new THREE.Vector3(0, .7, 0))); camera.fov = 67
-    camera.rotateZ(.02)
-    const start = camera.position.clone(), rotation = camera.quaternion.clone()
-    const finish = new RaceFinishCamera(camera); finish.start(car)
-    finish.update(0, car)
-    expect(camera.position.distanceTo(start)).toBeLessThan(1e-8)
-    expect(camera.quaternion.angleTo(rotation)).toBeLessThan(1e-7)
-    expect(camera.fov).toBe(67)
-    let previous = camera.position.clone(), previousRotation = camera.quaternion.clone(), previousFov = camera.fov
-    for (let frame = 0; frame <= 252; frame++) {
-      const progress = frame / 252
-      finish.update(progress, car); camera.updateMatrixWorld()
-      const screen = car.position.clone().add(new THREE.Vector3(0, .65, 0)).project(camera)
-      expect(camera.position.toArray().every(Number.isFinite)).toBe(true)
-      expect(Math.abs(screen.x)).toBeLessThan(.8)
-      expect(Math.abs(screen.y)).toBeLessThan(.8)
-      expect(camera.position.distanceTo(car.position)).toBeGreaterThan(4)
-      expect(camera.position.distanceTo(previous)).toBeLessThan(.12)
-      expect(camera.quaternion.angleTo(previousRotation)).toBeLessThan(.04)
-      expect(Math.abs(camera.fov - previousFov)).toBeLessThan(.15)
-      previous.copy(camera.position); previousRotation.copy(camera.quaternion); previousFov = camera.fov
+describe('finish shots and slide', () => {
+  it('runs the shots in order with a dip to black before the beauty shots', () => {
+    expect(shotAt(0.2).shot).toBe('line')
+    expect(shotAt(1).shot).toBe('pass')
+    expect(shotAt(2.5).shot).toBe('slide')
+    expect(shotAt(5).shot).toBe('stop')
+    expect(shotAt(8).shot).toBe('beauty-front')
+    expect(shotAt(11).shot).toBe('beauty-rear')
+    expect(shotAt(14).shot).toBe('beauty-nose')
+    expect(blackout(5)).toBe(0)
+    expect(blackout(BLACKOUT.black)).toBeCloseTo(1)
+    expect(blackout(9)).toBe(0)
+  })
+  it('coasts past the camera, brakes, then slides round ~95° to a stop', () => {
+    expect(finishDrive(0.5, 60).mode).toBe('coast')
+    let speed = Infinity, yaw = 0
+    for (let t = BRAKE_AT; t < SLIDE_AT + SLIDE_SECONDS + 0.5; t += 1 / 60) {
+      const d = finishDrive(t, 60)
+      if (d.mode === 'parked') break
+      expect(d.speed).toBeLessThanOrEqual(speed + 1e-9) // never speeds up
+      speed = d.speed
+      yaw += d.yawRate / 60
     }
-  }
+    expect(finishDrive(SLIDE_AT + SLIDE_SECONDS + 0.1, 60).mode).toBe('parked')
+    expect(yaw).toBeCloseTo(SLIDE_YAW, 1)
+    // A slow finish isn't sped up to slide.
+    expect(finishDrive(SLIDE_AT, 8).speed).toBeCloseTo(8)
+  })
+  it('keeps the car in frame and the camera clear of it in every shot', () => {
+    for (const heading of [0, 1.3, Math.PI]) for (const side of [1, -1] as const) {
+      const camera = new THREE.PerspectiveCamera(50, 16 / 9), car = new THREE.Object3D()
+      car.position.set(100, 5, -70); car.rotation.y = heading
+      const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(car.quaternion)
+      const finish = new RaceFinishCamera(camera); finish.start(car, { side, speed: 40, room: 25 })
+      expect(finish.update(0.2, car)).toBe(false) // the line: chase camera
+      for (let t = 0.6; t < FINISH_SECONDS; t += 0.05) {
+        // Roughly the scripted path: rolling on, then stopped and swung round.
+        if (t < 3.4) car.position.addScaledVector(forward, 0.05 * Math.max(0, 40 - t * 12))
+        else car.rotation.y = heading + side * SLIDE_YAW
+        car.updateMatrixWorld()
+        expect(finish.update(t, car)).toBe(true)
+        camera.updateMatrixWorld()
+        const screen = car.position.clone().add(new THREE.Vector3(0, .55, 0)).project(camera)
+        expect(camera.position.toArray().every(Number.isFinite)).toBe(true)
+        expect(Math.abs(screen.x), `${shotAt(t).shot} x`).toBeLessThan(.9)
+        expect(Math.abs(screen.y), `${shotAt(t).shot} y`).toBeLessThan(.9)
+        expect(camera.position.distanceTo(car.position), shotAt(t).shot).toBeGreaterThan(2.5)
+      }
+    }
+  })
 })
 describe('finish outcome presentation', () => {
-  it('distinguishes victory, other places and solo runs', () => {
+  it('labels a podium, a lost place and a solo run, and stays quiet until the car has stopped', () => {
     gameStore.setState({ settings: { ...gameStore.getState().settings, mode: 'quick' } })
-    telemetryStore.setState({ ...initialTelemetry, finishFieldSize: 4, finishPosition: 1 })
-    expect(renderToStaticMarkup(<RaceFinish />)).toContain('VICTORY')
-    telemetryStore.setState({ finishPosition: 2 })
-    expect(renderToStaticMarkup(<RaceFinish />)).toContain('P2')
-    expect(renderToStaticMarkup(<RaceFinish />)).not.toContain('VICTORY')
+    telemetryStore.setState({ ...initialTelemetry, finishFieldSize: 4, finishPosition: 1, finishSeconds: 1, totalMs: 124051 })
+    expect(renderToStaticMarkup(<RaceFinish />)).not.toContain('FINISH TOP 3')
+    telemetryStore.setState({ finishSeconds: 5 })
+    let html = renderToStaticMarkup(<RaceFinish />)
+    expect(html).toContain('FINISH TOP 3')
+    expect(html).toContain('1ST')
+    expect(html).toContain('2:04.051')
+    expect(html).toContain('is-done')
+    telemetryStore.setState({ finishPosition: 4 })
+    html = renderToStaticMarkup(<RaceFinish />)
+    expect(html).toContain('4TH')
+    expect(html).toContain('is-missed')
     telemetryStore.setState({ finishFieldSize: 1, finishPosition: 1 })
-    expect(renderToStaticMarkup(<RaceFinish />)).toContain('RUN COMPLETE')
+    expect(renderToStaticMarkup(<RaceFinish />)).toContain('SOLO RUN')
+  })
+  it('shows the place badge mid-slide', () => {
+    telemetryStore.setState({ ...initialTelemetry, finishFieldSize: 4, finishPosition: 2, finishSeconds: 2.4 })
+    const html = renderToStaticMarkup(<RaceFinish />)
+    expect(html).toContain('race-finish__badge')
+    expect(html).toContain('2ND')
   })
   it('does not label a rival still racing as a DNF', () => {
     telemetryStore.setState({ ...initialTelemetry, standings: [{ id: 0, name: 'You', player: true, position: 1, finishMs: 5000, gapMeters: 0, gapLaps: 0, gapMs: null }, { id: 1, name: 'Raven', player: false, position: 2, finishMs: null, gapMeters: 0, gapLaps: 0, gapMs: null }] })
