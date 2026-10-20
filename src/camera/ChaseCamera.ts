@@ -41,6 +41,9 @@ function damp(lambda: number, dt: number): number {
  */
 export class ChaseCamera {
   mode: CameraMode = 'chase'
+  /** Held override: never changes the selected mode or its normal offsets. */
+  lookBack = false
+  private wasLookingBack = false
   cameraMotion = true
   cockpitCar = 'porsche911'
   cockpitAdjustment: Readonly<CockpitAdjustment> = DEFAULT_COCKPIT_ADJUSTMENT
@@ -135,7 +138,7 @@ export class ChaseCamera {
   update(target: THREE.Object3D, speedKmh: number, dt: number, boost = 0, motion?: VehicleMotion, gridFraming = 0, cockpitBody?: THREE.Object3D): void {
     dt = Math.max(0, Math.min(dt, .1))
     const movement = this.cameraMotion && !this.reduced?.matches
-    const near = this.mode === 'cockpit' && gridFraming === 0 ? .025 : NEAR
+    const near = !this.lookBack && this.mode === 'cockpit' && gridFraming === 0 ? .025 : NEAR
     if (this.camera.near !== near) { this.camera.near = near; this.camera.updateProjectionMatrix() }
     if (this.mode !== this.lastMode) {
       this.transitionPosition.copy(this.camera.position).sub(target.position); this.transitionQuaternion.copy(this.camera.quaternion)
@@ -224,6 +227,9 @@ export class ChaseCamera {
       if (motion && movement) this.camera.rotateZ(THREE.MathUtils.clamp(motion.accelLat * this.bank, -this.maxBank, this.maxBank))
     }
 
+    // A rear check must never inherit a mode fade or fly through the body.
+    if (this.lookBack || this.wasLookingBack) this.transition = 1
+    this.wasLookingBack = this.lookBack
     if (this.transition < 1) {
       this.transition = Math.min(1, this.transition + dt / .18)
       // Fade through black; never interpolate a camera through the car's shell.
@@ -245,6 +251,17 @@ export class ChaseCamera {
       this.camera.fov = next
       this.camera.updateProjectionMatrix()
     }
+    if (this.lookBack) {
+      // Normal camera history keeps advancing above, so release restores it immediately.
+      // External framing clears the seats/roof in every cockpit asset.
+      _fwd.set(0, 0, 1).applyQuaternion(target.quaternion).setY(0).normalize()
+      this.camera.position.copy(target.position).addScaledVector(_fwd, 5)
+      this.camera.position.y += 1.5
+      _look.copy(target.position).addScaledVector(_fwd, -9); _look.y += .7
+      this.camera.up.set(0, 1, 0); this.camera.lookAt(_look)
+      if(this.camera.near!==NEAR){this.camera.near=NEAR;this.camera.updateProjectionMatrix()}
+      this.viewOpacity=1
+    }
   }
 
   /**
@@ -254,6 +271,7 @@ export class ChaseCamera {
    * Switching framings glides because position and look target are damped.
    */
   showroom(target: THREE.Object3D, yaw: number, dt: number, framing: ShowroomFraming): void {
+    this.lookBack=this.wasLookingBack=false
     _focus.copy(framing.focus).applyQuaternion(target.quaternion).add(target.position)
     _desired.set(Math.sin(yaw) * framing.distance, framing.height, Math.cos(yaw) * framing.distance)
     _desired.applyQuaternion(target.quaternion).add(_focus)
@@ -298,6 +316,7 @@ export class ChaseCamera {
   }
 
   snap(): void {
+    this.lookBack=this.wasLookingBack=false
     this.camera.up.set(0, 1, 0)
     this.impactY.reset(); this.impactZ.reset(); this.impactRoll.reset()
     this.lastJolt = -Infinity

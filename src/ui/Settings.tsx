@@ -83,6 +83,7 @@ export function Settings({ onClose }: { onClose?: () => void }) {
           <div><dt>Handbrake</dt><dd><kbd>Space</kbd></dd></div>
           <div><dt>Nitro</dt><dd><kbd>Shift</kbd></dd></div>
           <div><dt>Camera / reset / pause</dt><dd><kbd>C</kbd> <kbd>R</kbd> <kbd>Esc</kbd></dd></div>
+          <div><dt>Look back (hold)</dt><dd><kbd>B</kbd> / gamepad R3</dd></div>
         </dl>}
         {section === 'controls' && <p className="settings__help">Drift: tap brake or handbrake while turning. Tap nitro again on the cue for a perfect boost. Gamepads are supported.</p>}
       </div>

@@ -177,6 +177,7 @@ export class Game {
   private environment!: Environment
   private vehicle!: Vehicle
   private blurCamera = ''
+  private blurLookBack = false
   private camera!: ChaseCamera
   private driftZones?: DriftZones
   private driftPersonalBest = 0
@@ -1372,6 +1373,7 @@ export class Game {
       dt *= this.loop.timeScale
     }
     if (phase === 'loading' && this.raceTransition) return
+    this.camera.lookBack=(phase==='racing'||phase==='countdown')&&!!this.input.state.lookBack
     for (const opponent of this.opponents) {
       opponent.vehicle.render(phase === 'paused' ? 1 : alpha, phase === 'paused' ? 0 : dt)
       this.opponentFlames.get(opponent.id)?.update(opponent.vehicle.controller.nitro.intensity, phase === 'paused' ? 0 : dt)
@@ -1478,7 +1480,7 @@ export class Game {
     let exposure = phase === 'racing' ? motionExposure(this.vehicle.speedKmh, blurAmount, dt)
       : phase === 'intro' ? motionExposure(160, blurAmount * this.introCamera.whip, dt)
       : phase === 'finished' && this.finish.active && !this.finish.reducedMotion ? motionExposure(this.vehicle.speedKmh, blurAmount * (1 - .7 * THREE.MathUtils.smoothstep(this.finish.progress, 0, .1)), dt) : 0
-    if (this.blurCamera !== cameraMode) { exposure = 0; this.blurCamera = cameraMode }
+    if (this.blurCamera !== cameraMode || this.blurLookBack !== this.camera.lookBack) { exposure = 0; this.blurCamera = cameraMode; this.blurLookBack = this.camera.lookBack }
     this.renderer.setMotionBlur(exposure, this.vehicle.model.body)
     const staging = phase === 'intro' || phase === 'countdown'
     if (staging) this.updateStaging(phase, dt)
