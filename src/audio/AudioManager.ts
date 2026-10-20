@@ -73,6 +73,7 @@ export class AudioManager {
   onMenuMusicState: ((playing: boolean) => void) | null = null
   /** 'menu' = garage room tone, engine held quiet (except a swap's rev); 'race' = engine up, room tone out. */
   private scene: 'menu' | 'race' = 'menu'
+  private finishMix = false
   private menuEngine = false
   /** True while the game is paused; otherwise the context must stay running. */
   private paused = false
@@ -310,6 +311,26 @@ export class AudioManager {
     })
   }
 
+  /** Short original finish sting: a low hit and a restrained rising chord. */
+  playFinish(victory: boolean): void {
+    const ctx = this.ctx
+    if (!ctx || this.paused) return
+    this.playImpact(.35)
+    const notes = victory ? [196, 246.94, 293.66, 392] : [146.83, 196, 220, 293.66]
+    notes.forEach((hz, i) => {
+      const at = ctx.currentTime + .08 + i * .11
+      const tone = ctx.createOscillator(), gain = ctx.createGain(), filter = ctx.createBiquadFilter()
+      tone.type = 'triangle'; tone.frequency.value = hz
+      filter.type = 'lowpass'; filter.frequency.value = 1900; filter.Q.value = .5
+      gain.gain.setValueAtTime(.0001, at)
+      gain.gain.exponentialRampToValueAtTime(.11, at + .014)
+      gain.gain.exponentialRampToValueAtTime(.0001, at + 1.1)
+      tone.connect(filter).connect(gain).connect(this.master)
+      tone.onended = () => { tone.disconnect(); filter.disconnect(); gain.disconnect() }
+      tone.start(at); tone.stop(at + 1.15)
+    })
+  }
+
   /** Start gantry: a short tone per red light, a long high one at lights out. */
   playStartLight(go: boolean): void {
     const ctx = this.ctx
@@ -357,10 +378,16 @@ export class AudioManager {
     this.applyMix()
   }
 
+  setFinishMix(active: boolean): void {
+    if (this.finishMix === active) return
+    this.finishMix = active
+    this.applyMix()
+  }
+
   private applyMix(): void {
     const ctx = this.ctx
     if (!ctx || !this.carBus) return
-    const engine = this.scene === 'race' || this.menuEngine ? 1 : 0
+    const engine = this.scene === 'race' || this.menuEngine ? (this.finishMix ? .55 : 1) : 0
     this.carBus.gain.setTargetAtTime(engine, ctx.currentTime, 0.12)
     this.ambience?.setLevel(this.scene === 'menu' ? 1 : 0)
   }

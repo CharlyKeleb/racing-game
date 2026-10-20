@@ -1,3 +1,5 @@
+import { FinishSequence } from '../racing/FinishSequence'
+import { RaceFinishCamera } from '../camera/RaceFinishCamera'
 import { WetReflections } from '../effects/WetReflections'
 import { CarRain } from '../effects/CarRain'
 import { RainSurface } from '../effects/RainSurface'
@@ -74,6 +76,8 @@ export type ShowroomFocus = 'car' | 'wheel' | `wheel-${WheelId}` | 'plate-front'
 
 const LOCKED_INPUT: InputState = { throttle: 0, brake: 0, steer: 0, handbrake: true, nitro: false }
 /** Past the flag: brake to a stop in a straight line while the rivals finish. */
+const FINISH_COAST_INPUT: InputState = { throttle: 0, brake: 0, steer: 0, handbrake: false, nitro: false }
+const FINISH_GENTLE_INPUT: InputState = { throttle: 0, brake: .18, steer: 0, handbrake: false, nitro: false }
 const FINISHED_INPUT: InputState = { throttle: 0, brake: 0.5, steer: 0, handbrake: false, nitro: false }
 const _velocity = new THREE.Vector3()
 const _forward = new THREE.Vector3()
@@ -181,6 +185,10 @@ export class Game {
   private safetyWalls: RAPIER.RigidBody | null = null
   private readonly recoverSpawn = (entry: RaceEntry): SpawnPoint => this.recoverySpawn(entry)
   private readonly playerPose: TrafficCar = { id: 0, x: 0, z: 0, heading: 0, speed: 0 }
+  private readonly finish = new FinishSequence()
+  private readonly finishCamera: RaceFinishCamera
+  private finishPosition = 1
+  private finishFieldSize = 1
   private readonly playerEntry: RaceEntry = { id: 0, name: 'You', player: true, lap: 0, checkpoint: 0, index: 0, finishMs: null }
   private traffic: TrafficCar[] = [this.playerPose]
   private entries: RaceEntry[] = [this.playerEntry]
@@ -275,6 +283,7 @@ export class Game {
   constructor(container: HTMLElement) {
     this.renderer = new Renderer(container, gameStore.getState().settings.renderer)
     this.introCamera = new RaceIntroCamera(this.renderer.camera)
+    this.finishCamera = new RaceFinishCamera(this.renderer.camera)
     this.loop = new GameLoop({
       fixedUpdate: (dt) => this.fixedUpdate(dt),
       render: (alpha, dt) => this.renderFrame(alpha, dt),
@@ -455,6 +464,28 @@ export class Game {
   /** Dev-only: hold inputs for debugStep runs. */
   debugInput(state: Partial<InputState>): void {
     this.input.setTouch(state)
+  }
+
+  /** Development fixture only: prime ordered gates, then physically drive over the finish. */
+  debugFinishRace(): void {
+    if (!import.meta.env.DEV || gameStore.getState().phase !== 'racing') return
+    this.race.totalLaps = this.race.lap
+    for (let i = this.race.lastCheckpoint + 1; i < this.track.checkpoints.length; i++) {
+      const gate = this.track.checkpoints[i]
+      this.racePosition.copy(gate.position).addScaledVector(gate.tangent, -2)
+      this.race.update(1, this.racePosition)
+      this.racePosition.copy(gate.position).addScaledVector(gate.tangent, 2)
+      this.race.update(1 / 60, this.racePosition)
+    }
+    const gate = this.track.checkpoints[0]
+    const heading = Math.atan2(gate.tangent.x, gate.tangent.z)
+    this.racePosition.copy(gate.position).addScaledVector(gate.tangent, -3)
+    this.racePosition.y += .6
+    this.vehicle.respawn({ position: this.racePosition, heading })
+    this.race.update(1 / 60, this.racePosition)
+    this.vehicle.body.setLinvel({ x: gate.tangent.x * 34, y: 0, z: gate.tangent.z * 34 }, true)
+    this.progress.reset()
+    this.camera.snap()
   }
 
   private createRace(): RaceManager {
@@ -772,6 +803,7 @@ export class Game {
 
   /** Paint the cinematic before React reveals it; never expose the grid camera. */
   private prepareRaceIntro(): void {
+    this.finish.reset(); this.loop.timeScale = 1; this.audio.setFinishMix(false)
     this.playerRevs.reset(this.vehicle.config.engine.idleRpm)
     this.introCueAt = 0
     this.lightsShown = 0
@@ -981,6 +1013,12 @@ export class Game {
     }
   }
 
+  skipRaceFinish(): void {
+    if (gameStore.getState().phase !== 'finished') return
+    this.finish.skip(); this.loop.timeScale = 1
+    this.publishTelemetry()
+  }
+
   skipRaceIntro(): void {
     if (gameStore.getState().phase !== 'intro') return
     for (const opponent of this.opponents) opponent.race.skipIntro()
@@ -1015,6 +1053,7 @@ export class Game {
   }
 
   quitToMenu(): void {
+    this.finish.reset(); this.loop.timeScale = 1; this.audio.setFinishMix(false)
     this.clearOpponents()
     this.race.state = 'idle'
     // Back in the garage: room tone on, engine quiet (updateShowroom sets the scene).
@@ -1120,7 +1159,10 @@ export class Game {
 
   private fixedUpdate(dt: number): void {
     this.input.poll()
-    if (this.input.consume('pause')) this.togglePause()
+    if (this.input.consume('pause')) {
+      if (gameStore.getState().phase === 'finished' && this.finish.active) this.skipRaceFinish()
+      else this.togglePause()
+    }
     // Camera toggle (C / gamepad Y / touch button) only while driving: a stray
     // key press in a menu used to flip every later race into the cockpit view.
     if (this.input.consume('camera')) {
@@ -1129,7 +1171,10 @@ export class Game {
     }
 
     const skip = this.input.consume('skip')
-    if (skip) this.skipRaceIntro()
+    if (skip) {
+      if (gameStore.getState().phase === 'finished') this.skipRaceFinish()
+      else this.skipRaceIntro()
+    }
     const phase = gameStore.getState().phase
     if (phase === 'paused') return
     const racing = phase === 'racing' && this.race.state === 'racing'
@@ -1143,7 +1188,9 @@ export class Game {
     this.playerPose.speed = this.vehicle.controller.forwardSpeed
     for (const opponent of this.opponents) opponent.readPose()
     this.vehicle.controller.drafting = controls ? draftingStrength(this.playerPose, this.traffic, 0) : 0
-    this.vehicle.fixedUpdate(phase === 'finished' ? FINISHED_INPUT : controls ? this.input.state : LOCKED_INPUT, dt)
+    const finishInput = Math.abs(this.vehicle.controller.forwardSpeed) <= 1.2 ? LOCKED_INPUT
+      : this.finish.active ? (this.finish.elapsed < 1.5 ? FINISH_COAST_INPUT : FINISH_GENTLE_INPUT) : FINISHED_INPUT
+    this.vehicle.fixedUpdate(phase === 'finished' ? finishInput : controls ? this.input.state : LOCKED_INPUT, dt)
     const playerDistance = this.standings.distance(this.playerEntry)
     for (const opponent of this.opponents) {
       const i = opponent.driver.progress.index
@@ -1219,12 +1266,27 @@ export class Game {
     this.playerEntry.z = position.z
     if (this.race.state === 'finished' && this.playerEntry.finishMs === null) {
       this.playerEntry.finishMs = this.race.timer.totalMs
+      const standings = this.standings.snapshot(this.entries)
+      this.finishPosition = standings.find(row => row.player)?.position ?? 1
+      this.finishFieldSize = this.entries.length
+      this.finish.start(matchMedia('(prefers-reduced-motion: reduce)').matches)
+      this.finishCamera.start(this.vehicle.model.root)
+      this.loop.timeScale = this.finish.timeScale
+      this.audio.setFinishMix(true)
+      this.audio.playFinish(this.finishPosition === 1 && this.finishFieldSize > 1)
       this.publishTelemetry()
     }
   }
 
   private renderFrame(alpha: number, dt: number): void {
+    const frameDt = dt
     const phase = gameStore.getState().phase
+    if (phase === 'finished') {
+      this.finish.update(dt)
+      this.audio.setFinishMix(this.finish.active)
+      this.loop.timeScale = this.finish.timeScale
+      dt *= this.loop.timeScale
+    }
     if (phase === 'loading' && this.raceTransition) return
     for (const opponent of this.opponents) {
       opponent.vehicle.render(phase === 'paused' ? 1 : alpha, phase === 'paused' ? 0 : dt)
@@ -1286,6 +1348,10 @@ export class Game {
       }
     } else if (phase === 'intro') {
       this.introCamera.update(1-this.race.introRemaining/this.race.introDuration,this.vehicle.model.root,this.opponents[0]?.vehicle.model.root ?? this.vehicle.model.root,this.physics.world)
+    } else if (phase === 'finished' && !this.finish.reducedMotion) {
+      this.finishCamera.update(this.finish.progress, this.vehicle.model.root, this.physics.world)
+      this.effects.update(this.vehicle, dt)
+      this.sparks.update(dt)
     } else if (phase !== 'paused') {
       // Creep in on the car as the lights build, then settle into the race camera after the start.
       const lightsT = Math.min(1, (COUNTDOWN_SEC - this.race.countdown) / COUNTDOWN_SEC)
@@ -1322,7 +1388,8 @@ export class Game {
     }
     const blurAmount = gameStore.getState().settings.motionBlur
     let exposure = phase === 'racing' ? motionExposure(this.vehicle.speedKmh, blurAmount, dt)
-      : phase === 'intro' ? motionExposure(160, blurAmount * this.introCamera.whip, dt) : 0
+      : phase === 'intro' ? motionExposure(160, blurAmount * this.introCamera.whip, dt)
+      : phase === 'finished' && this.finish.active && !this.finish.reducedMotion ? motionExposure(this.vehicle.speedKmh, blurAmount * (1 - .7 * THREE.MathUtils.smoothstep(this.finish.progress, 0, .1)), dt) : 0
     if (this.blurCamera !== cameraMode) { exposure = 0; this.blurCamera = cameraMode }
     this.renderer.setMotionBlur(exposure, this.vehicle.model.body)
     const staging = phase === 'intro' || phase === 'countdown'
@@ -1353,13 +1420,13 @@ export class Game {
     this.renderer.render()
 
     this.fpsFrames++
-    this.fpsTimer += dt
+    this.fpsTimer += frameDt
     if (this.fpsTimer >= 0.5) {
       this.fps = Math.round(this.fpsFrames / this.fpsTimer)
       this.fpsFrames = 0
       this.fpsTimer = 0
     }
-    this.telemetryTimer += dt
+    this.telemetryTimer += frameDt
     if (this.telemetryTimer >= 1 / TELEMETRY_HZ) {
       this.telemetryTimer = 0
       this.publishTelemetry()
@@ -1667,6 +1734,9 @@ export class Game {
     })
     const rivalLabels = labelsUnchanged ? previousLabels : this.opponents.map(o => ({ id: o.id, name: o.driver.profile.name, style: o.driver.profile.style, position: standings.find(s => s.id === o.id)?.position ?? o.id }))
     telemetryStore.setState({
+      finishProgress: this.finish.progress,
+      finishPosition: this.finishPosition,
+      finishFieldSize: this.finishFieldSize,
       rivalLabels,
       introShot: introShot(this.race.introDuration > 0 ? 1-this.race.introRemaining/this.race.introDuration : 0),
       introProgress: this.race.introDuration > 0 ? 1-this.race.introRemaining/this.race.introDuration : 0,

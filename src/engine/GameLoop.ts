@@ -19,6 +19,8 @@ export interface LoopCallbacks {
 }
 
 export class GameLoop {
+  /** Presentation slow motion; physics still steps at exactly FIXED_DT. */
+  timeScale = 1
   private accumulator = 0
   private lastTime = 0
   private rafId = 0
@@ -47,7 +49,8 @@ export class GameLoop {
     const profiling = performanceCapture.active
     const started = profiling ? performance.now() : 0
     const clamped = Number.isFinite(frameTime) ? Math.max(0, Math.min(frameTime, MAX_FRAME_TIME)) : 0
-    this.accumulator += clamped
+    const scale = Number.isFinite(this.timeScale) ? Math.max(0, Math.min(1, this.timeScale)) : 1
+    this.accumulator += clamped * scale
     let steps = 0
     while (this.accumulator >= FIXED_DT && steps < MAX_STEPS_PER_FRAME) {
       this.callbacks.fixedUpdate(FIXED_DT)

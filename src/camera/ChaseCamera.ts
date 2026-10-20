@@ -256,6 +256,7 @@ export class ChaseCamera {
   }
 
   snap(): void {
+    this.camera.up.set(0, 1, 0)
     this.impactY.reset(); this.impactZ.reset(); this.impactRoll.reset()
     this.lastJolt = -Infinity
     this.kick = this.appliedKick = 0

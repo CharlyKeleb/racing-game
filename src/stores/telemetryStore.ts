@@ -6,6 +6,9 @@ import { createStore } from 'zustand/vanilla'
  * (see Game.publishTelemetry) so React never re-renders at physics rate.
  */
 export interface Telemetry {
+  finishProgress: number
+  finishPosition: number
+  finishFieldSize: number
   introShot: number
   introProgress: number
   /** Who each rival tag names; placement is per frame in rivalTagStore. */
@@ -79,6 +82,9 @@ export interface Telemetry {
 }
 
 export const initialTelemetry: Telemetry = {
+  finishProgress: 0,
+  finishPosition: 1,
+  finishFieldSize: 1,
   introShot: 0,
   introProgress: 0,
   rivalLabels: [],
