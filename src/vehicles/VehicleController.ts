@@ -2,6 +2,7 @@ import { keyboardSteeringAngle } from './KeyboardSteering'
 import RAPIER from '@dimforge/rapier3d-compat'
 import * as THREE from 'three'
 import type { InputState } from '../input/InputManager'
+import { Backfire } from './Backfire'
 import { Burnout, BURNOUT_BRAKE, BURNOUT_THROTTLE } from './Burnout'
 import { Drift, type DriftConfig, type DriftGuide } from './Drift'
 import { Drivetrain, type GearRequest } from './Drivetrain'
@@ -85,6 +86,8 @@ export class VehicleController {
   readonly drift = new Drift()
   /** Brake + full throttle at a standstill: driven tyres spin and smoke while the car is held. */
   readonly burnout = new Burnout()
+  /** Exhaust pops and bangs: overrun crackle, hard upshifts, nitro lighting, burnouts. */
+  readonly backfire = new Backfire()
   private eventDrift: DriftConfig | null = null
   setDriftMode(enabled: boolean): void {
     this.eventDrift = enabled ? {...this.cfg.drift, minSpeed:9, entryLock:.4, baseAngle:.46, holdAngle:.78, minAngle:.18, exitTime:.55, counterExitTime:.9, scrub:.025, pathG:.5} : null
@@ -254,6 +257,13 @@ export class VehicleController {
     const burn = this.burnout.intensity
     // The engine screams against the spinning tyres (the drivetrain alone would sit at its clutch-slip revs).
     if (burn > 0) this.drivetrain.rpm = Math.max(this.drivetrain.rpm, cfg.engine.idleRpm + (cfg.engine.redlineRpm * BURNOUT_RPM - cfg.engine.idleRpm) * burn * input.throttle)
+    this.backfire.update(dt, {
+      throttle: reversing ? 0 : input.throttle,
+      revs: this.drivetrain.rpm / cfg.engine.redlineRpm,
+      gear: this.drivetrain.gear,
+      burnout: burn,
+      nitroLit: this.nitro.ignited,
+    })
     const downshift = this.drivetrain.gear > 0 && this.drivetrain.gear < gearBefore
 
     // Drift: entries (fast turn-in, brake-tap, downshift, handbrake) and exits.
@@ -404,7 +414,7 @@ export class VehicleController {
     // already near their grip limit under power, so routing it through the
     // friction circle would mostly turn into wheelspin. Grounded only.
     if (this.nitro.intensity > 0 && groundedCount > 0) {
-      _impulse.copy(_fwd).multiplyScalar(this.nitro.force * dt)
+      _impulse.copy(_fwd).multiplyScalar((this.nitro.force + this.nitro.surgeForce) * dt)
       body.applyImpulse(_impulse, true)
     }
 
@@ -564,6 +574,7 @@ export class VehicleController {
     this.nitro.reset()
     this.drift.reset()
     this.burnout.reset()
+    this.backfire.reset()
     for (const w of this.wheels) {
       w.suspension.reset()
       w.slip = 0

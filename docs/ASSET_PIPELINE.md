@@ -154,6 +154,11 @@ and list them in `public/audio/impacts/CREDITS.md`). Then run
 Freesound previews, cuts each one from its first transient, matches loudness
 per tier and writes the bank.
 
+Exhaust pops work the same way: `public/audio/backfire/backfire-bank.wav` +
+`.json` (short `crackle`s and big `bang`s) is built by
+`node scripts/audio/build-backfire-bank.mjs <download dir>`. Each cut is listed
+by the time of its pop in the source recording.
+
 ## Garage
 
 The menu and garage screens use the NFS 2015 workshop

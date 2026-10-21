@@ -2,13 +2,14 @@ import type { QualityPreset } from '../stores/gameStore'
 import type { AnyRenderer } from '../engine/Renderer'
 import * as THREE from 'three'
 import type { Vehicle } from '../vehicles/Vehicle'
-import { NitroFlames } from './NitroFlames'
+import { NitroFlames, type ExhaustPop } from './NitroFlames'
 import { SkidMarks } from './SkidMarks'
 import { SurfaceSpray } from './SurfaceSpray'
 import { TireSmoke } from './TireSmoke'
 
 const _vel = new THREE.Vector3()
 const _fwd = new THREE.Vector3()
+const _pop: ExhaustPop = { flash: 0, kind: 0, strength: 0, count: 0 }
 
 /**
  * Driving feedback for the player car: skid marks, tire smoke and sand / dust
@@ -44,9 +45,9 @@ export class DrivingEffects {
     _fwd.set(0, 0, 1).applyQuaternion(vehicle.quaternion)
     this.smoke.update(ctrl.wheels, _vel, dt, ctrl.burnout.intensity, _fwd)
     this.spray.update(ctrl.wheels, _vel, dt)
-    // Burnout backfires flash the same exhaust flames as nitro, briefly and orange.
-    const backfire = ctrl.burnout.pop * 0.55
-    this.flames.update(Math.max(ctrl.nitro.intensity, backfire), dt, backfire > ctrl.nitro.intensity ? 1 : 0)
+    const b = ctrl.backfire
+    _pop.flash = b.flash; _pop.kind = b.flashKind; _pop.strength = b.strength; _pop.count = b.count
+    this.flames.update(ctrl.nitro.intensity, dt, _pop)
   }
 
   renderMarks(renderer: AnyRenderer, position: THREE.Vector3): void {

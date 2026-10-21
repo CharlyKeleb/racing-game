@@ -36,7 +36,7 @@ import { RaceIntroCamera, RACE_INTRO_SECONDS, INTRO_CUTS, WHIP_SECONDS, introSho
 import { startingGrid } from '../racing/StartingGrid'
 import { ChaseCamera, type ShowroomFraming } from '../camera/ChaseCamera'
 import { DirectionGuide } from '../effects/DirectionGuide'
-import { NitroFlames } from '../effects/NitroFlames'
+import { NitroFlames, type ExhaustPop } from '../effects/NitroFlames'
 import { Sparks, type SparkContact } from '../effects/Sparks'
 import { HeatHaze } from '../effects/HeatHaze'
 import { LensDrops } from '../effects/LensDrops'
@@ -102,6 +102,8 @@ const FINISH_BRAKE_INPUT: InputState = { throttle: 0, brake: 1, steer: 0, handbr
 const FINISHED_INPUT: InputState = { throttle: 0, brake: 0.5, steer: 0, handbrake: false, nitro: false }
 const _velocity = new THREE.Vector3()
 const _forward = new THREE.Vector3()
+/** A rival's backfire, copied out for its exhaust flames (no per-frame allocation). */
+const _rivalPop: ExhaustPop = { flash: 0, kind: 0, strength: 0, count: 0 }
 const _listenerPosition = new THREE.Vector3()
 const _listenerRight = new THREE.Vector3()
 const _rivalOffset = new THREE.Vector3()
@@ -1418,6 +1420,7 @@ export class Game {
     }
     this.physics.step(dt)
     this.collectHits(dt)
+    if (!inMenu) this.exhaustPops()
     this.emitSparks(dt)
     this.vehicle.capture()
     for (const opponent of this.opponents) {
@@ -1575,7 +1578,9 @@ export class Game {
     this.camera.lookBack=(phase==='racing'||phase==='countdown')&&!!this.input.state.lookBack
     for (const opponent of this.opponents) {
       opponent.vehicle.render(phase === 'paused' ? 1 : alpha, phase === 'paused' ? 0 : dt)
-      this.opponentFlames.get(opponent.id)?.update(opponent.vehicle.controller.nitro.intensity, phase === 'paused' ? 0 : dt)
+      const b = opponent.vehicle.controller.backfire
+      _rivalPop.flash = b.flash; _rivalPop.kind = b.flashKind; _rivalPop.strength = b.strength; _rivalPop.count = b.count
+      this.opponentFlames.get(opponent.id)?.update(opponent.vehicle.controller.nitro.intensity, phase === 'paused' ? 0 : dt, _rivalPop)
       opponent.vehicle.model.root.visible = opponent.vehicle.position.distanceToSquared(this.vehicle.position) < 300 * 300
     }
     this.vehicle.render(phase === 'paused' ? 1 : alpha, phase === 'paused' ? 0 : dt)
@@ -1864,7 +1869,21 @@ export class Game {
     }
   }
 
-  /** Crashes, wall scrapes and curb strikes for every car, then clear for the next frame. */
+  /**
+   * Exhaust pops this tick, heard per car (a pop lasts one tick, so this runs
+   * in fixedUpdate, not per frame). Nitro lighting also kicks the camera.
+   */
+  private exhaustPops(): void {
+    const ctrl = this.vehicle.controller
+    if (ctrl.backfire.popped) this.audio.backfire(-1, ctrl.backfire.popped, ctrl.backfire.strength)
+    if (ctrl.nitro.ignited) this.camera.jolt(0.55)
+    for (let i = 0; i < this.opponents.length; i++) {
+      const b = this.opponents[i].vehicle.controller.backfire
+      if (b.popped) this.audio.backfire(i, b.popped, b.strength)
+    }
+  }
+
+    /** Crashes, wall scrapes and curb strikes for every car, then clear for the next frame. */
   private updateHitAudio(phase: GamePhase): void {
     const live = phase === 'racing' || phase === 'finished' || phase === 'countdown'
     for (let slot = 0; slot <= this.opponents.length; slot++) {

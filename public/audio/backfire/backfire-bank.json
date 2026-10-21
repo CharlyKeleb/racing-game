@@ -1,0 +1,54 @@
+{
+  "rate": 44100,
+  "kinds": {
+    "crackle": [
+      {
+        "source": "antilag",
+        "start": 0,
+        "length": 9702
+      },
+      {
+        "source": "antilag",
+        "start": 10584,
+        "length": 9702
+      },
+      {
+        "source": "antilag",
+        "start": 21168,
+        "length": 9702
+      },
+      {
+        "source": "supercar",
+        "start": 31752,
+        "length": 11025
+      },
+      {
+        "source": "supercar",
+        "start": 43659,
+        "length": 11025
+      }
+    ],
+    "bang": [
+      {
+        "source": "engine",
+        "start": 55566,
+        "length": 12831
+      },
+      {
+        "source": "vintage",
+        "start": 69279,
+        "length": 26460
+      },
+      {
+        "source": "vintage",
+        "start": 96621,
+        "length": 26460
+      },
+      {
+        "source": "deep",
+        "start": 123963,
+        "length": 24255
+      }
+    ]
+  }
+}
