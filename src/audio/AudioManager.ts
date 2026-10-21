@@ -1,3 +1,4 @@
+import { narrationMix, NARRATION_GAME_LEVEL } from './narrationMix'
 import { TracksideAmbience } from './TracksideAmbience'
 import type { SpotterCue } from '../racing/ProximityRadar'
 import type { TracksideEmitter } from '../world/atmospherePlan'
@@ -107,7 +108,12 @@ export class AudioManager {
   /** One second of white noise for the intro whooshes and impacts, made on first use. */
   private noise: AudioBuffer | null = null
 
+  private volume = 1
+  private mixTarget: number | null = null
+  private readonly unsubscribeNarration: () => void
+
   constructor() {
+    this.unsubscribeNarration = narrationMix.subscribe(() => this.applyNarrationMix())
     // Howler suspends its AudioContext 30 s after load (and after each of its
     // own sounds ends) when no Howl is playing. This game borrows that context
     // for the engine and never plays a Howl, so the engine went silent mid-race.
@@ -442,10 +448,23 @@ export class AudioManager {
   }
 
   setVolume(volume: number): void {
-    Howler.volume(volume)
-    // CarSound's make-up gain and limiter set the loudness; 0.9 keeps ~1 dB of
-    // headroom at full volume (redline peaks ≈ −1 dBFS, measured offline).
-    if (this.master) this.master.gain.value = volume * 0.9
+    this.volume = volume
+    this.applyNarrationMix()
+  }
+
+  private applyNarrationMix(): void {
+    const ducked = narrationMix.getState().voices > 0
+    const level = this.volume * (ducked ? NARRATION_GAME_LEVEL : 1)
+    Howler.volume(level)
+    if (!this.master || !this.ctx) return
+    const target = level * .9
+    if (target === this.mixTarget) return
+    const gain = this.master.gain
+    const now = this.ctx.currentTime
+    gain.cancelScheduledValues(now)
+    gain.setValueAtTime(gain.value, now)
+    gain.setTargetAtTime(target, now, ducked ? .035 : .2)
+    this.mixTarget = target
   }
 
   update(state: CarSoundState, tyres?: TyreBrakeInput): void {
@@ -577,6 +596,7 @@ export class AudioManager {
   }
 
   dispose(): void {
+    this.unsubscribeNarration()
     this.clearSpotter()
     this.clearOpponents()
     this.impacts?.dispose()

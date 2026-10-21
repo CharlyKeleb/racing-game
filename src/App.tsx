@@ -3,6 +3,7 @@ import type { Game } from './engine/Game'
 import { gameStore } from './stores/gameStore'
 import { GameContext } from './ui/GameContext'
 import { useGame, useTelemetry } from './ui/hooks'
+import { Narration } from './ui/Narration'
 import { MainMenu } from './ui/MainMenu'
 import { isTouchDevice } from './engine/device'
 
@@ -70,6 +71,7 @@ export default function App() {
           </div>
         )}
         {phase === 'menu' && <MainMenu />}
+        <Narration />
         <Suspense fallback={<div className="boot" role="status">Loading…</div>}>
           {phase === 'garage' && <Garage />}
           {phase === 'intro' && <RaceIntro />}

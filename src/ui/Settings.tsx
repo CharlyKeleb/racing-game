@@ -1,3 +1,5 @@
+import { narrationClip } from '../audio/narration'
+import { NarratorPreview } from './NarratorPreview'
 import { CockpitSettings } from './CockpitSettings'
 import type { TrackLook } from '../world/TrackLook'
 import { Help } from './Help'
@@ -73,6 +75,14 @@ export function Settings({ onClose }: { onClose?: () => void }) {
           <Segmented<number> help label="Laps" value={settings.laps} options={[[1,'1'],[3,'3'],[5,'5']]} onPick={laps=>update({laps})}/>
         </>}
         {section === 'audio' && <>
+          <Segmented<'off' | 'duo' | 'camille' | 'alex'> label="Commentary" value={settings.narrator} options={[[ 'duo','Alex & Camille'],['alex','Alex only'],['camille','Camille only'],['off','Off']]} onPick={narrator=>update({narrator})}/>
+          <p className="settings__help">Alex & Camille share commentary, with a different voice chosen for each moment. Camille has an English accent; Alex has an American accent. Game audio lowers automatically while the narrator speaks. Text appears even when a recording is unavailable. Race callouts must be enabled.</p>
+          <label className="ui-field settings__volume">
+            <span className="ui-field__label">Narrator voice <em>{Math.round(settings.narratorVolume * 100)}%</em></span>
+            <input aria-label="Narrator voice volume" className="ui-range" type="range" min={0} max={1} step={.05} value={settings.narratorVolume} onChange={e=>update({narratorVolume:Number(e.target.value)})}/>
+          </label>
+          <NarratorPreview key={settings.narrator}/>
+          {settings.narrator !== 'off' && settings.narrator !== 'duo' && !narrationClip(settings.narrator, 'raceComplete') && <p className="settings__help">Normal-finish commentary currently has subtitles only. The finish voice recording is not available yet.</p>}
           <Segmented<number> label="Spotter sounds" value={settings.spotterAudio?1:0} options={[[1,'On'],[0,'Off']]} onPick={v=>update({spotterAudio:v===1})}/>
           <p className="settings__help">Directional tones for a car alongside; a rising tone when clear. Independent of the radar and text.</p>
           <label className="ui-field settings__volume">

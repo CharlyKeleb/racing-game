@@ -13,6 +13,7 @@ import { RaceManager } from './RaceManager'
 import type { RaceEntry } from './RaceStandings'
 import { RecoveryMonitor } from './RecoveryMonitor'
 
+const FINISHED: InputState = { throttle: 0, brake: .75, steer: 0, handbrake: false, nitro: false }
 const HOLD: InputState = { throttle: 0, brake: 0, steer: 0, handbrake: true, nitro: false }
 const COLORS = [0x27b8eb, 0xffd447, 0xe64f67]
 const NAMES = ['Raven', 'Torque', 'Viper']
@@ -60,8 +61,13 @@ export class Opponent {
     this.pose.speed = this.vehicle.controller.forwardSpeed
   }
   drive(dt: number, traffic: readonly TrafficCar[], gap: number, laneLimit: number): void {
-    // Finished cars keep driving a cool-down lap instead of parking on the line.
-    const active = this.race.state === 'racing' || this.race.state === 'finished'
+    // Cross the line, brake to a stop, then hold the car without starting another lap.
+    if (this.race.state === 'finished') {
+      this.vehicle.controller.drafting = 0
+      this.vehicle.fixedUpdate(Math.abs(this.pose.speed) < .8 ? HOLD : FINISHED, dt)
+      return
+    }
+    const active = this.race.state === 'racing'
     const controller = this.vehicle.controller
     this.resources.charge = controller.nitro.charge
     this.resources.boosting = controller.nitro.active

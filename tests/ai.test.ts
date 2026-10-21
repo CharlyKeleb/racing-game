@@ -107,6 +107,16 @@ it('drives a complete checkpoint-validated procedural lap using real vehicle phy
       opponent.capture(1 / 60)
     }
     expect({ state: opponent.race.state, gate: opponent.race.lastCheckpoint, index: opponent.driver.progress.index, pose: opponent.pose, resets }).toMatchObject({ state: 'finished', resets: 0 })
+    const finishTime = opponent.entry.finishMs
+    for (let i = 0; i < 60 * 8; i++) {
+      opponent.readPose()
+      opponent.drive(1 / 60, [opponent.pose], 100, 2)
+      physics.step(1 / 60)
+      opponent.capture(1 / 60)
+    }
+    opponent.readPose()
+    expect(Math.abs(opponent.pose.speed)).toBeLessThan(1)
+    expect(opponent.entry.finishMs).toBe(finishTime)
   } finally { opponent.dispose(); track.dispose(); physics.dispose() }
 }, 30000)
 

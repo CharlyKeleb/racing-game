@@ -59,6 +59,9 @@ export interface Settings {
   proximityRadar: boolean
   spotterVisual: boolean
   /** Quick Race callouts (#90): text on/off, and their chime volume (0 = text only). */
+  commentaryVersion: 1
+  narrator: 'off' | 'duo' | 'camille' | 'alex'
+  narratorVolume: number
   callouts: boolean
   calloutVolume: number
   spotterAudio: boolean
@@ -169,6 +172,9 @@ const defaultSettings: Settings = {
   speedLines: !(typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches),
   proximityRadar: true,
   spotterVisual: true,
+  commentaryVersion: 1,
+  narrator: 'duo',
+  narratorVolume: .8,
   callouts: true,
   calloutVolume: .6,
   spotterAudio: false,
@@ -191,7 +197,11 @@ function loadSettings(): Settings {
   try {
     const raw = localStorage.getItem(SETTINGS_KEY)
     if (!raw) return defaultSettings
-    const merged: Settings = { ...defaultSettings, ...JSON.parse(raw) }
+    const saved = JSON.parse(raw)
+    const merged: Settings = { ...defaultSettings, ...saved }
+    // Move the earlier single-narrator setup to the requested commentary duo once.
+    if (saved.commentaryVersion !== 1 && merged.narrator !== 'off') merged.narrator = 'duo'
+    merged.commentaryVersion = 1
     if (merged.trackLook !== 'default' && merged.trackLook !== 'road-focus') merged.trackLook = defaultSettings.trackLook
     const savedCockpits = merged.cockpits
     merged.cockpits = {}
@@ -203,6 +213,8 @@ function loadSettings(): Settings {
     if (merged.drivingLine !== 'corners' && merged.drivingLine !== 'full') merged.drivingLine = 'off'
     if (merged.transmission !== 'manual') merged.transmission = 'auto'
     for(const key of ['proximityRadar','spotterVisual','spotterAudio'] as const)if(typeof merged[key]!=='boolean')merged[key]=defaultSettings[key]
+    if (!['off', 'duo', 'camille', 'alex'].includes(merged.narrator)) merged.narrator = defaultSettings.narrator
+    merged.narratorVolume = typeof merged.narratorVolume === 'number' && Number.isFinite(merged.narratorVolume) ? Math.max(0, Math.min(1, merged.narratorVolume)) : defaultSettings.narratorVolume
     if (typeof merged.callouts !== 'boolean') merged.callouts = defaultSettings.callouts
     merged.calloutVolume = typeof merged.calloutVolume === 'number' && Number.isFinite(merged.calloutVolume) ? Math.max(0, Math.min(1, merged.calloutVolume)) : defaultSettings.calloutVolume
     merged.tracksideVolume = typeof merged.tracksideVolume === 'number' && Number.isFinite(merged.tracksideVolume) ? Math.max(0, Math.min(1, merged.tracksideVolume)) : defaultSettings.tracksideVolume
