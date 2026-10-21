@@ -1,5 +1,6 @@
 import type { Standing } from '../racing/RaceStandings'
 import { createStore } from 'zustand/vanilla'
+import type { Callout } from '../racing/RaceCallouts'
 import type { LaunchGrade } from '../racing/LaunchControl'
 import type { InvalidReason, LapResult } from '../racing/TimeTrial'
 
@@ -103,6 +104,8 @@ export interface Telemetry {
   trialGateCount: number
   /** The player ended the session (results showing). */
   trialEnded: boolean
+  /** Race callout on screen (#90), or null. */
+  callout: Callout | null
   fps: number
   /** Car position on the XZ plane and yaw (0 = facing +Z), for the minimap. */
   carX: number
@@ -194,6 +197,7 @@ export const initialTelemetry: Telemetry = {
   trialNextGate: 1,
   trialGateCount: 0,
   trialEnded: false,
+  callout: null,
   fps: 0,
   carX: 0,
   carZ: 0,

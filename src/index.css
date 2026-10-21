@@ -427,6 +427,34 @@ kbd { font-family: inherit; font-size: 11px; padding: 1px 6px; border: 1px solid
   100% { opacity: 0; }
 }
 
+/* Quick Race callouts (#90): one short line below the top HUD, clear of the road. */
+.race-callout-slot { position: absolute; top: 15%; left: 50%; transform: translateX(-50%); pointer-events: none; }
+.race-callout {
+  display: flex; align-items: baseline; gap: 12px; padding: 6px 22px; white-space: nowrap;
+  background: rgba(4, 10, 18, 0.7); border-left: 3px solid var(--accent-2); transform: skewX(var(--skew));
+  animation: race-callout 2.2s ease-out both;
+}
+.race-callout > * { transform: skewX(var(--unskew)); }
+.race-callout b { font-style: italic; font-weight: 900; font-size: clamp(18px, 2.6vw, 26px); text-transform: uppercase; letter-spacing: 0.04em; }
+.race-callout span { font-weight: 800; font-size: clamp(15px, 2vw, 20px); color: var(--accent-2); }
+.race-callout--lead { border-color: var(--accent); }
+.race-callout--lead span, .race-callout--finalLap span { color: var(--accent); }
+.race-callout--finalLap { border-color: #fff; }
+.race-callout--lostLead { border-color: #ff4d3d; }
+.race-callout--lostLead span { color: #ff4d3d; }
+.race-callout--finish { border-color: var(--accent); }
+@keyframes race-callout {
+  0% { opacity: 0; transform: skewX(var(--skew)) translateY(-8px); }
+  10% { opacity: 1; transform: skewX(var(--skew)) translateY(0); }
+  82% { opacity: 1; }
+  100% { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .race-callout { animation: race-callout-fade 2.2s linear both; }
+  @keyframes race-callout-fade { 0%, 85% { opacity: 1; } 100% { opacity: 0; } }
+}
+@media (max-width: 640px) { .race-callout-slot { top: 19%; } .race-callout { padding: 4px 14px; gap: 8px; } }
+
 /* Launch (#91): rev band under the gantry through the countdown, then the grade call. */
 .launch-cue {
   position: absolute; top: 58%; left: 50%; transform: translateX(-50%); width: min(360px, calc(100vw - 32px));
