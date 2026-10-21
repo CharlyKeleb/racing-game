@@ -26,6 +26,17 @@ describe('Drivetrain', () => {
     expect(d.update(0, 0.36, 1, -1, 1)).toBeLessThan(0)
   })
 
+  it('fades reverse drive out toward the reverse speed cap (#6)', () => {
+    const d = new Drivetrain(cfg.engine)
+    d.update(0, 0.36, 1, -1, 1 / 60)
+    const standing = d.update(-0.5, 0.36, 1, 0, 1)
+    const half = d.update(-5, 0.36, 1, 0, 1)
+    expect(half).toBeLessThan(0)
+    expect(Math.abs(half)).toBeLessThan(Math.abs(standing) * 0.6)
+    expect(d.update(-10, 0.36, 1, 0, 1)).toBeCloseTo(0)
+    expect(d.update(-14, 0.36, 1, 0, 1)).toBeGreaterThanOrEqual(0)
+  })
+
   it('goes back to first from reverse when asked, even with no drive pedal', () => {
     // In reverse the brake pedal drives, so pressing throttle sends throttle 0 here.
     const d = new Drivetrain(cfg.engine)

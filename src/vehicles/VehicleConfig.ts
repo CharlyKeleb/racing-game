@@ -65,6 +65,8 @@ export interface EngineConfig {
   /** Optional: highest rpm a downshift under braking may land at (default shiftUpRpm − 500). */
   brakeDownshiftRpm?: number
   shiftTimeSec: number
+  /** Reverse tops out here, m/s (default 10 ≈ 36 km/h): drive fades to nothing as the car nears it. */
+  maxReverseSpeed?: number
 }
 
 export interface NitroConfig {
