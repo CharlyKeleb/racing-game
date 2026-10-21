@@ -170,7 +170,7 @@ const defaultSettings: Settings = {
   cameraMotion: !(typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches),
   fovEffects: !(typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches),
   speedLines: !(typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches),
-  proximityRadar: true,
+  proximityRadar: false,
   spotterVisual: true,
   commentaryVersion: 1,
   narrator: 'duo',
