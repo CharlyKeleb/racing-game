@@ -1,0 +1,102 @@
+{
+  "source": "ElevenLabs_2026-10-21T10_43_59_Alex Carter_gen_sp100_s50_sb75_v4.mp3",
+  "sha256": "b6727dff5dde2a5c38afdf95ff952799d2c602775d9e697346db6fd85e9cf0fa",
+  "clips": [
+    {
+      "id": "introduction",
+      "start": 0,
+      "end": 11.22,
+      "transcript": "Hey, I'm Alex Carter. I'll be with you from the first green light to the finish line. First time here, take a breath. We'll get you up to speed. Alright, let's go racing!",
+      "durationSeconds": 11.22
+    },
+    {
+      "id": "welcome",
+      "start": 11.22,
+      "end": 16.17,
+      "transcript": "Welcome to the grid. Find your rhythm. Make every corner count.",
+      "durationSeconds": 4.95
+    },
+    {
+      "id": "countdown",
+      "start": 16.17,
+      "end": 18.7,
+      "transcript": "Eyes on the lights. Get ready.",
+      "durationSeconds": 2.53
+    },
+    {
+      "id": "start",
+      "start": 18.7,
+      "end": 21.78,
+      "transcript": "Go! Settle in and pick your moment.",
+      "durationSeconds": 3.08
+    },
+    {
+      "id": "overtake",
+      "start": 21.78,
+      "end": 24.27,
+      "transcript": "Nice move keep it clean",
+      "durationSeconds": 2.49
+    },
+    {
+      "id": "lead",
+      "start": 24.27,
+      "end": 26.94,
+      "transcript": "You're in the lead. Keep your focus.",
+      "durationSeconds": 2.67
+    },
+    {
+      "id": "lostLead",
+      "start": 26.94,
+      "end": 29.52,
+      "transcript": "They've taken the lead. Stay close.",
+      "durationSeconds": 2.58
+    },
+    {
+      "id": "finalLap",
+      "start": 29.52,
+      "end": 31.97,
+      "transcript": "Final app make it count",
+      "durationSeconds": 2.45
+    },
+    {
+      "id": "finish",
+      "start": 31.97,
+      "end": 34.96,
+      "transcript": "That was close! A photo finish!",
+      "durationSeconds": 2.99
+    },
+    {
+      "id": "quickTip",
+      "start": 34.96,
+      "end": 38.82,
+      "transcript": "Break before the corner, then ease onto the power as you exit.",
+      "durationSeconds": 3.86
+    },
+    {
+      "id": "timeTrial",
+      "start": 38.82,
+      "end": 43.77,
+      "transcript": "It's you against the clock. Pass every checkpoint and build a clean lap.",
+      "durationSeconds": 4.95
+    },
+    {
+      "id": "drift",
+      "start": 43.77,
+      "end": 49.19,
+      "transcript": "Build speed, then tap the brake as you turn. Link your slides and bank your points. You You You You You You You",
+      "durationSeconds": 5.42
+    },
+    {
+      "id": "freeRoam",
+      "start": 49.19,
+      "end": 52.61056,
+      "transcript": "The road is yours. Explore at your own pace.",
+      "durationSeconds": 3.421
+    }
+  ],
+  "processing": {
+    "gainDb": 6,
+    "peakLimiter": 0.89,
+    "source": "Regenerated directly from original source; same cut boundaries."
+  }
+}

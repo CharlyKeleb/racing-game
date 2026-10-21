@@ -1,0 +1,95 @@
+{
+  "source": "ElevenLabs_2026-10-21T11_21_52_Mariva Viva Muse - Warm and Energetic_pvc_sp93_s65_sb100_v4.mp3",
+  "sha256": "1039e6ded003831d01d2637d63e089cde399996d829b69fbfe457cac38b5ec35",
+  "durationSeconds": 65.071,
+  "processing": {
+    "gainDb": 2,
+    "peakLimiter": 0.89
+  },
+  "clips": [
+    {
+      "id": "introduction",
+      "start": 0,
+      "end": 10.3878,
+      "transcript": "Hello, I'm Camille Laurent. You handle the wheel. I'll keep an eye on the race. New to this? No pressure. We'll take it one corner at a time. Right then, shall we?"
+    },
+    {
+      "id": "welcome",
+      "start": 10.3878,
+      "end": 15.2288,
+      "transcript": "Here we are, on the grid. Find your flow and give them something to chase."
+    },
+    {
+      "id": "countdown",
+      "start": 15.2288,
+      "end": 18.0156,
+      "transcript": "Watch those lights. Any second now."
+    },
+    {
+      "id": "start",
+      "start": 18.0156,
+      "end": 21.7741,
+      "transcript": "Away we go! Find some space and build your pace."
+    },
+    {
+      "id": "overtake",
+      "start": 21.7741,
+      "end": 25.0875,
+      "transcript": "Beautifully done! That's another place yours."
+    },
+    {
+      "id": "lead",
+      "start": 25.0875,
+      "end": 27.9242,
+      "transcript": "You're out in front! Keep it tidy from here."
+    },
+    {
+      "id": "lostLead",
+      "start": 27.9242,
+      "end": 31.6389,
+      "transcript": "Someone slipped past. You're still in this. Stay on them."
+    },
+    {
+      "id": "finalLap",
+      "start": 31.6389,
+      "end": 34.6329,
+      "transcript": "One lap to go. Leave nothing on the table."
+    },
+    {
+      "id": "finish",
+      "start": 34.6329,
+      "end": 38.7185,
+      "transcript": "Oh, that was incredibly tight. We'll need the photo for that one."
+    },
+    {
+      "id": "quickTip",
+      "start": 38.7185,
+      "end": 43.6804,
+      "transcript": "Get your braking done before you turn in. Then feed the power back in as the road opens up."
+    },
+    {
+      "id": "timeTrial",
+      "start": 43.6804,
+      "end": 49.6642,
+      "transcript": "Just you, the circuit and the stopwatch. Hit every checkpoint. Let's put a clean lap together."
+    },
+    {
+      "id": "drift",
+      "start": 49.6642,
+      "end": 56.487,
+      "transcript": "Carry some speed, turn in and give the brake a quick tap. Hold that slide, link the next one, then bank it."
+    },
+    {
+      "id": "freeRoam",
+      "start": 56.487,
+      "end": 60.3165,
+      "transcript": "No clock to chase here. Pick a road and see where it takes you."
+    },
+    {
+      "id": "raceComplete",
+      "start": 60.3165,
+      "end": 65.071,
+      "transcript": "Across the line. Nicely done. Take a breath. You've earned it."
+    }
+  ]
+}

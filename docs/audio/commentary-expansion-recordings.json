@@ -1,0 +1,332 @@
+[
+  {
+    "source": "ElevenLabs_2026-10-21T11_49_53_Alex Carter_gen_sp100_s50_sb75_v4.mp3",
+    "sha256": "e211c3a658abe93cdeb4b4469d8c398dee8a12fead94aab3da139e11b65d880b",
+    "clips": [
+      {
+        "voice": "alex",
+        "clip": "overtake-v1",
+        "start": 0,
+        "end": 2.3156,
+        "gainDb": 4.1,
+        "peakLimiter": 0.89,
+        "automaticTranscript": "Clean pass, now build a gap.",
+        "durationSeconds": 2.316
+      },
+      {
+        "voice": "alex",
+        "clip": "overtake-v2",
+        "start": 2.3156,
+        "end": 4.9472,
+        "gainDb": 4.2,
+        "peakLimiter": 0.89,
+        "automaticTranscript": "You made that one stick! Keep pushing!",
+        "durationSeconds": 2.632
+      },
+      {
+        "voice": "alex",
+        "clip": "lead-v1",
+        "start": 4.9472,
+        "end": 7.6616,
+        "gainDb": 4.1,
+        "peakLimiter": 0.89,
+        "automaticTranscript": "First place is yours. Set the pace.",
+        "durationSeconds": 2.714
+      },
+      {
+        "voice": "alex",
+        "clip": "lead-v2",
+        "start": 7.6616,
+        "end": 10.2727,
+        "gainDb": 4.0,
+        "peakLimiter": 0.89,
+        "automaticTranscript": "You've got the lead, make them chase you.",
+        "durationSeconds": 2.611
+      },
+      {
+        "voice": "alex",
+        "clip": "lostLead-v1",
+        "start": 10.2727,
+        "end": 12.9531,
+        "gainDb": 4.2,
+        "peakLimiter": 0.89,
+        "automaticTranscript": "You've lost the lead. Look for your chance.",
+        "durationSeconds": 2.68
+      },
+      {
+        "voice": "alex",
+        "clip": "lostLead-v2",
+        "start": 12.9531,
+        "end": 16.0247,
+        "gainDb": 4.2,
+        "peakLimiter": 0.89,
+        "automaticTranscript": "Leeds changed hands, they're still a race to run.",
+        "durationSeconds": 3.072
+      },
+      {
+        "voice": "alex",
+        "clip": "finalLap-v1",
+        "start": 16.0247,
+        "end": 18.4317,
+        "gainDb": 4.2,
+        "peakLimiter": 0.89,
+        "automaticTranscript": "Last time around, bring it home.",
+        "durationSeconds": 2.407
+      },
+      {
+        "voice": "alex",
+        "clip": "finalLap-v2",
+        "start": 18.4317,
+        "end": 21.815,
+        "gainDb": 4.0,
+        "peakLimiter": 0.89,
+        "automaticTranscript": "One more lap, stay sharp all the way to the line.",
+        "durationSeconds": 3.383
+      },
+      {
+        "voice": "alex",
+        "clip": "finish-v1",
+        "start": 21.815,
+        "end": 25.4227,
+        "gainDb": 3.8,
+        "peakLimiter": 0.89,
+        "automaticTranscript": "Nothing between you at the line. That's a photo finish.",
+        "durationSeconds": 3.608
+      },
+      {
+        "voice": "alex",
+        "clip": "finish-v2",
+        "start": 25.4227,
+        "end": 27.9718,
+        "gainDb": 3.8,
+        "peakLimiter": 0.89,
+        "automaticTranscript": "Wow, that one's too close to call.",
+        "durationSeconds": 2.549
+      },
+      {
+        "voice": "alex",
+        "clip": "raceComplete-v1",
+        "start": 27.9718,
+        "end": 30.9194,
+        "gainDb": 3.9,
+        "peakLimiter": 0.89,
+        "automaticTranscript": "You're across the line, that's your race done.",
+        "durationSeconds": 2.948
+      },
+      {
+        "voice": "alex",
+        "clip": "raceComplete-v2",
+        "start": 30.9194,
+        "end": 33.410625,
+        "gainDb": 3.9,
+        "peakLimiter": 0.89,
+        "automaticTranscript": "And that's the flag. Take a breather.",
+        "durationSeconds": 2.491
+      }
+    ]
+  },
+  {
+    "source": "ElevenLabs_2026-10-21T11_50_30_Mariva Viva Muse - Warm and Energetic_pvc_sp93_s65_sb100_v4.mp3",
+    "sha256": "361342f1105afc7538abcbc318775fe1d0c6620ddcee151c3909ec81576fde2f",
+    "clips": [
+      {
+        "voice": "camille",
+        "clip": "overtake-v1",
+        "start": 0,
+        "end": 3.0715,
+        "gainDb": 1.2,
+        "peakLimiter": 0.89,
+        "automaticTranscript": "Lovely bit of racing on to the next one",
+        "durationSeconds": 3.071
+      },
+      {
+        "voice": "camille",
+        "clip": "overtake-v2",
+        "start": 3.0715,
+        "end": 5.9224,
+        "gainDb": 0.3,
+        "peakLimiter": 0.89,
+        "automaticTranscript": "There's your opening, and through you go!",
+        "durationSeconds": 2.851
+      },
+      {
+        "voice": "camille",
+        "clip": "lead-v1",
+        "start": 5.9224,
+        "end": 9.1289,
+        "gainDb": 0.5,
+        "peakLimiter": 0.89,
+        "automaticTranscript": "Clear road ahead, this is your race to control.",
+        "durationSeconds": 3.207
+      },
+      {
+        "voice": "camille",
+        "clip": "lead-v2",
+        "start": 9.1289,
+        "end": 11.7824,
+        "gainDb": 0.3,
+        "peakLimiter": 0.89,
+        "automaticTranscript": "Nobody in front now, find that rhythm.",
+        "durationSeconds": 2.654
+      },
+      {
+        "voice": "camille",
+        "clip": "lostLead-v1",
+        "start": 11.7824,
+        "end": 14.6663,
+        "gainDb": 0.3,
+        "peakLimiter": 0.89,
+        "automaticTranscript": "They found a way through, keep them within reach.",
+        "durationSeconds": 2.884
+      },
+      {
+        "voice": "camille",
+        "clip": "lostLead-v2",
+        "start": 14.6663,
+        "end": 17.5735,
+        "gainDb": 0.5,
+        "peakLimiter": 0.89,
+        "automaticTranscript": "You've got company up front again, be patient.",
+        "durationSeconds": 2.907
+      },
+      {
+        "voice": "camille",
+        "clip": "finalLap-v1",
+        "start": 17.5735,
+        "end": 20.675,
+        "gainDb": 0.6,
+        "peakLimiter": 0.89,
+        "automaticTranscript": "Just one lap left, keep those corners tidy.",
+        "durationSeconds": 3.102
+      },
+      {
+        "voice": "camille",
+        "clip": "finalLap-v2",
+        "start": 20.675,
+        "end": 23.5155,
+        "gainDb": 0.7,
+        "peakLimiter": 0.89,
+        "automaticTranscript": "This is the last one. Let's finish it properly.",
+        "durationSeconds": 2.841
+      },
+      {
+        "voice": "camille",
+        "clip": "finish-v1",
+        "start": 23.5155,
+        "end": 26.9473,
+        "gainDb": 0.6,
+        "peakLimiter": 0.89,
+        "automaticTranscript": "You couldn't get much closer than that. We'll leave another look.",
+        "durationSeconds": 3.432
+      },
+      {
+        "voice": "camille",
+        "clip": "finish-v2",
+        "start": 26.9473,
+        "end": 30.1406,
+        "gainDb": 0.5,
+        "peakLimiter": 0.89,
+        "automaticTranscript": "Together at the line, that was quite a finish.",
+        "durationSeconds": 3.193
+      },
+      {
+        "voice": "camille",
+        "clip": "raceComplete-v1",
+        "start": 30.1406,
+        "end": 33.3968,
+        "gainDb": 0.6,
+        "peakLimiter": 0.89,
+        "automaticTranscript": "There we are. Check it flag. You can breathe again.",
+        "durationSeconds": 3.256
+      },
+      {
+        "voice": "camille",
+        "clip": "raceComplete-v2",
+        "start": 33.3968,
+        "end": 36.5191875,
+        "gainDb": 0.7,
+        "peakLimiter": 0.89,
+        "automaticTranscript": "Run complete, a moment to catch your breath.",
+        "durationSeconds": 3.122
+      }
+    ]
+  },
+  {
+    "source": "ElevenLabs_2026-10-21T11_51_43_Mariva Viva Muse - Warm and Energetic_pvc_sp93_s65_sb100_v4.mp3",
+    "sha256": "c9085aef4f4efea76a759f5882c44cc5b1f0829907fe13e7d507b0112e0dc5c4",
+    "clips": [
+      {
+        "voice": "alex",
+        "clip": "overtake-exchange",
+        "start": 0,
+        "end": 1.6244,
+        "gainDb": 1.8,
+        "peakLimiter": 0.89,
+        "automaticTranscript": "That's one way through!",
+        "durationSeconds": 1.624
+      },
+      {
+        "voice": "camille",
+        "clip": "overtake-exchange",
+        "start": 1.6244,
+        "end": 4.989375,
+        "gainDb": 1.9,
+        "peakLimiter": 0.89,
+        "automaticTranscript": "Lovely timing. Now keep it tidy.",
+        "durationSeconds": 3.365
+      }
+    ]
+  },
+  {
+    "source": "ElevenLabs_2026-10-21T11_52_18_Mariva Viva Muse - Warm and Energetic_pvc_sp93_s65_sb100_v4.mp3",
+    "sha256": "5bd7788d85f3776b5c486573e2cd74c89239f26b1662a0c748646ef2f4ef009f",
+    "clips": [
+      {
+        "voice": "alex",
+        "clip": "lead-exchange",
+        "start": 0,
+        "end": 1.473,
+        "gainDb": 1.8,
+        "peakLimiter": 0.89,
+        "automaticTranscript": "Clear road ahead!",
+        "durationSeconds": 1.473
+      },
+      {
+        "voice": "camille",
+        "clip": "lead-exchange",
+        "start": 1.473,
+        "end": 4.5975625,
+        "gainDb": 0.9,
+        "peakLimiter": 0.89,
+        "automaticTranscript": "For now, keep an eye on those mirrors.",
+        "durationSeconds": 3.125
+      }
+    ]
+  },
+  {
+    "source": "ElevenLabs_2026-10-21T11_53_09_Mariva Viva Muse - Warm and Energetic_pvc_sp93_s65_sb100_v4.mp3",
+    "sha256": "81e63cbb515112971fae0fd0e378765d72347bb5eb8d3e3210438ec32706965d",
+    "clips": [
+      {
+        "voice": "alex",
+        "clip": "raceComplete-exchange",
+        "start": 0,
+        "end": 1.6139,
+        "gainDb": 4.3,
+        "peakLimiter": 0.89,
+        "automaticTranscript": "And that's the flag!",
+        "durationSeconds": 1.614
+      },
+      {
+        "voice": "camille",
+        "clip": "raceComplete-exchange",
+        "start": 1.6139,
+        "end": 4.6759375,
+        "gainDb": 2.4,
+        "peakLimiter": 0.89,
+        "automaticTranscript": "Race done. Time to catch your breath.",
+        "durationSeconds": 3.062
+      }
+    ]
+  }
+]

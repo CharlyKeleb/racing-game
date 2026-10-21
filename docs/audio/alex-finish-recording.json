@@ -1,0 +1,10 @@
+{
+  "source": "ElevenLabs_2026-10-21T11_13_23_Alex Carter_gen_sp100_s50_sb75_v4.mp3",
+  "sha256": "bc4cb341c0ed561b75ae522ff901e711618addc01e9c3d9cc18cd6a121b376e0",
+  "durationSeconds": 3.082,
+  "transcript": "That's the finish! Well driven!",
+  "processing": {
+    "gainDb": 6,
+    "peakLimiter": 0.89
+  }
+}
