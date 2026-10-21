@@ -20,6 +20,8 @@ export class RaceIntroCamera {
   private readonly ray = new RAPIER.Ray({x:0,y:0,z:0},{x:0,y:0,z:1})
   /** Whip-pan strength this frame, 0..1 (drives the blur). */
   whip = 0
+  /** Which way the current whip swings, ±1 (for the streak overlay on Low). */
+  whipDirection = 1
   constructor(camera: THREE.PerspectiveCamera) { this.camera = camera }
   update(progress: number, player: THREE.Object3D, pole: THREE.Object3D, world?: RAPIER.World): void {
     const seconds = Math.max(0,Math.min(1,progress)) * RACE_INTRO_SECONDS
@@ -69,6 +71,7 @@ export class RaceIntroCamera {
       const dir = i % 2 === 0 ? 1 : -1
       swing = dir * WHIP_ANGLE * (lead < 1 ? lead * lead : -(2 - lead) * (2 - lead))
       this.whip = lead < 1 ? lead * lead : (2 - lead) * (2 - lead)
+      this.whipDirection = dir
     }
     if (swing !== 0) {
       const dx = this.look.x - this.position.x, dz = this.look.z - this.position.z

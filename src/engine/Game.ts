@@ -14,6 +14,7 @@ import { RainSurface } from '../effects/RainSurface'
 import { RainImpacts } from '../effects/RainImpacts'
 import { WetRoads } from '../effects/WetRoads'
 import { motionExposure } from '../effects/MotionBlur'
+import { WhipStreaks } from '../effects/WhipStreaks'
 import { performanceCapture } from './PerformanceCapture'
 import { hudCoversPoint } from '../stores/hudLayoutStore'
 import { driftEvent, readDriftRecord, saveDriftRecord } from '../racing/driftEvents'
@@ -172,6 +173,7 @@ const DRIVE_IN_DIST = 12
  */
 export class Game {
   private readonly introCamera: RaceIntroCamera
+  private readonly whipStreaks = new WhipStreaks()
   private readonly renderer: Renderer
   private readonly assets = new AssetManager()
   private readonly input = new InputManager()
@@ -329,6 +331,7 @@ export class Game {
   constructor(container: HTMLElement) {
     this.renderer = new Renderer(container, gameStore.getState().settings.renderer)
     this.introCamera = new RaceIntroCamera(this.renderer.camera)
+    this.renderer.scene.add(this.whipStreaks.mesh)
     this.finishCamera = new RaceFinishCamera(this.renderer.camera)
     this.loop = new GameLoop({
       fixedUpdate: (dt) => this.fixedUpdate(dt),
@@ -1648,6 +1651,9 @@ export class Game {
       : phase === 'finished' && this.finish.active && !this.finish.reducedMotion ? motionExposure(this.vehicle.speedKmh, blurAmount * (1 - .7 * THREE.MathUtils.smoothstep(this.finish.progress, 0, .1)), dt) : 0
     if (this.blurCamera !== cameraMode || this.blurLookBack !== this.camera.lookBack) { exposure = 0; this.blurCamera = cameraMode; this.blurLookBack = this.camera.lookBack }
     this.renderer.setMotionBlur(exposure, this.vehicle.model.body)
+    // Without post FX (Low) the whip has no motion blur: streak overlay instead (#46).
+    const streaks = phase === 'intro' && !this.renderer.postfxActive && blurAmount > 0 ? this.introCamera.whip * Math.min(1, blurAmount / 0.5) : 0
+    this.whipStreaks.update(camera, streaks, this.introCamera.whipDirection, frameDt)
     const staging = phase === 'intro' || phase === 'countdown'
     if (staging) this.updateStaging(phase, dt)
     else if (phase === 'racing' && this.lightsShown > 0) {
@@ -2237,6 +2243,7 @@ export class Game {
     this.audio.dispose()
     this.audio.onMenuMusicState = null
     this.spoiler?.dispose()
+    this.whipStreaks.dispose()
     this.livery?.dispose()
     this.effects?.dispose()
     this.sparks?.dispose()
