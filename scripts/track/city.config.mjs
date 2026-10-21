@@ -37,22 +37,26 @@ export default {
 
   chunkSize: 200,
 
+  /** An untextured 34 × 11 m card standing across the back alley (an occluder left in the export). */
+  dropNodes: /^Object_68$/,
+
   layers: [
     [M(8, 9), 'veg'],
     [M(34), 'decal'],
     [M(...ROAD), 'road'],
     // Ground plates that also carry building walls (the base material has no suffix).
     [/^material_104_93(_0|_1)?$/, 'ground'],
-    [M(...BUILDINGS), 'barrier'],
+    // Buildings are props (so small ones merge into one draw call per chunk) that still collide.
     [/.*/, 'prop'],
   ],
+  collide: [[M(...BUILDINGS), 'barrier']],
 
   lod: {
     road: [0.01, 0.25],
     ground: [0.05, 0.6],
     decal: [0.01, 0.25],
     barrier: [0.05, 0.5],
-    prop: [0.08, 1],
+    prop: [0.15, 1],
   },
   weld: { road: 'posnrm', ground: 'posnrm', barrier: 'pos', prop: 'posnrm', decal: 'none' },
   /** No text-bearing materials worth keeping unwelded. */
@@ -65,8 +69,12 @@ export default {
   vegKeep: { default: [0.6, 0.25] },
   textures: { high: 512, low: 256 },
 
-  /** 2,455 small meshes: merge each chunk's small props (< this many tris) into one draw call. */
-  mergeSmallProps: 1200,
+  /**
+   * 2,455 small meshes over ~75 materials: merge each chunk's props under this
+   * many tris (lamps, signs, most buildings) into one draw call, or Low runs
+   * ~260 draw calls.
+   */
+  mergeSmallProps: 6000,
 
   /**
    * Clockwise. Gate 0 (start/finish) is on the avenue heading north; the
@@ -79,11 +87,26 @@ export default {
     { at: [290, -505], dir: [1, 0] }, // top street
     { at: [370, -460], dir: [-0.4, 1] }, // into the alley
     { at: [345, -300], dir: [0, 1] }, // alley
-    { at: [340, -50], dir: [0, 1] }, // alley, south
+    { at: [338, -50], dir: [0, 1] }, // alley, south
     { at: [270, 103], dir: [-1, 0] }, // bottom street
     { at: [186, 60], dir: [0, -1] }, // south link back to the avenue
   ],
   checkpointRadius: 14,
+  /** Keep the line in the open alley, not the wider parking deck beside it (lower floor, ramp inside). */
+  lineVia: { 6: [-40, -30, -20, -10, 0].map((z) => [337, z, 1]) },
+
+  /**
+   * At ×32 the source's small level mismatches become 0.5–0.6 m slabs, kerb
+   * bumps and a 1.1 m step across the back alley, which the car can't climb.
+   * Pull everything low within 5 m of the line onto a smoothed profile.
+   */
+  flattenCorridor: { halfWidth: 5, feather: 3, reach: 1.6 },
+  /**
+   * The back alley squeezes past deck supports, overhangs and a raised deck
+   * edge (a 3 m slot in places). Clear a car-height channel through it,
+   * from the top street (gate 3) to the bottom street (gate 7).
+   */
+  clearCorridor: { fromGate: 3, toGate: 7, halfWidth: 6, low: 0.3, high: 2.6 },
 
   gateSurface: M(...LANES),
   lineSurface: M(...LANES),
