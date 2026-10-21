@@ -17,6 +17,8 @@ no attribution is required. They're listed here anyway.
 | Light car-to-car tap | [Car_Door_Hit.wav](https://freesound.org/people/mickyman5000/sounds/340539/) | mickyman5000 | CC0 1.0 |
 | Medium car-to-car hit | [Hood Impact](https://freesound.org/people/LPA134/sounds/329516/) | LPA134 | CC0 1.0 |
 
+Every recorded hit also gets a +4 dB low shelf at 150 Hz and a synthesized
+sub thump (`makeThumpPCM`), because most of these recordings are light on bass.
 Landings, kerb strikes and the wall scrape are still the procedural Foley in
 `src/audio/ImpactPCM.ts` / `ImpactSound.ts`. Until the bank loads, or if it
 fails to load, car and wall hits fall back to the procedural Foley too.
