@@ -43,3 +43,37 @@ export function makeImpactPCM(kind: ImpactKind, strength: number, seed = 1, samp
   for (let i = 0; i < pcm.length; i++) pcm[i] *= gain
   return pcm
 }
+
+/** Body loudness (RMS over the first 150 ms) of the thump per tier, dBFS: ~2 dB under the recorded hit it sits beneath. */
+const THUMP_RMS = [-24, -19, -15]
+
+/**
+ * The low end under a recorded hit (light, medium, heavy tier): a sine that
+ * drops from ~140 Hz to ~50 Hz as it decays, with a quieter second harmonic so
+ * laptop and phone speakers still carry it, and a touch of saturation for
+ * weight. The recordings are mostly mid/high, so this is what makes a crash
+ * land in the chest. Pure: same tier and rate, same samples.
+ */
+export function makeThumpPCM(tier: 0 | 1 | 2, sampleRate = 48000): Float32Array<ArrayBuffer> {
+  const duration = [0.2, 0.3, 0.45][tier]
+  const fStart = [150, 135, 120][tier], fEnd = [72, 56, 46][tier]
+  const pitchTau = [0.035, 0.045, 0.06][tier], ampTau = [0.05, 0.085, 0.13][tier]
+  const n = Math.round(duration * sampleRate)
+  const out = new Float32Array(new ArrayBuffer(n * 4))
+  let phase = 0
+  for (let i = 0; i < n; i++) {
+    const t = i / sampleRate
+    const f = fEnd + (fStart - fEnd) * Math.exp(-t / pitchTau)
+    phase += (2 * Math.PI * f) / sampleRate
+    const env = (1 - Math.exp(-t / 0.0015)) * Math.exp(-t / ampTau)
+    // Fade the last 10% to zero so the buffer never ends on a click.
+    const tail = Math.min(1, (n - i) / (n * 0.1))
+    out[i] = Math.tanh(1.4 * (Math.sin(phase) + 0.3 * Math.sin(2 * phase))) * env * tail
+  }
+  let sum = 0
+  const body = Math.min(n, Math.round(0.15 * sampleRate))
+  for (let i = 0; i < body; i++) sum += out[i] * out[i]
+  const gain = 10 ** (THUMP_RMS[tier] / 20) / Math.sqrt(sum / body)
+  for (let i = 0; i < n; i++) out[i] *= gain
+  return out
+}

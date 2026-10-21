@@ -1,4 +1,4 @@
-import { makeImpactPCM } from './ImpactPCM'
+import { makeImpactPCM, makeThumpPCM } from './ImpactPCM'
 import type { ImpactKind } from './ImpactModel'
 
 /** Shared noise bed for the continuous wall scrape. */
@@ -15,6 +15,13 @@ function noise(ctx: BaseAudioContext): AudioBuffer {
 }
 
 const HIT_GAIN = 1.25
+/** Recorded hits are loudness-matched per tier in the bank; this sets their level in the mix. */
+const RECORDED_GAIN = 1
+/** Low shelf on recorded hits: brings up what body the recordings have (the thump adds the rest). */
+const SHELF_HZ = 150
+const SHELF_DB = 4
+/** Hit strength where the light → medium → heavy tiers change. */
+const TIER_EDGES = [0, .38, .76, 1]
 const SCRAPE_GAIN = 1.1
 const RETRIGGER = .1
 const banks = new WeakMap<BaseAudioContext, Map<ImpactKind, AudioBuffer[]>>()
@@ -36,9 +43,75 @@ function impactBank(ctx: BaseAudioContext): Map<ImpactKind, AudioBuffer[]> {
   return bank
 }
 
+/** Where each recorded hit sits in impact-bank.wav (scripts/audio/build-impact-bank.mjs writes it). */
+export interface ImpactBankIndex {
+  rate: number
+  /** kind → tiers (light, medium, heavy) → variants. Positions in samples at `rate`. */
+  kinds: Partial<Record<ImpactKind, { source: string; start: number; length: number }[][]>>
+}
+
+/** Sub thumps per context, one per tier (makeThumpPCM). */
+const thumps = new WeakMap<BaseAudioContext, AudioBuffer[]>()
+function thumpBank(ctx: BaseAudioContext): AudioBuffer[] {
+  let bank = thumps.get(ctx)
+  if (!bank) {
+    bank = ([0, 1, 2] as const).map((tier) => {
+      const pcm = makeThumpPCM(tier, ctx.sampleRate)
+      const buffer = ctx.createBuffer(1, pcm.length, ctx.sampleRate)
+      buffer.copyToChannel(pcm, 0)
+      return buffer
+    })
+    thumps.set(ctx, bank)
+  }
+  return bank
+}
+
+/** Recorded hits per context: kind → tier → variant buffers. Empty until loaded. */
+const recordings = new WeakMap<BaseAudioContext, Map<ImpactKind, AudioBuffer[][]>>()
+
 /**
- * One car's crash sounds: cached original procedural Foley one-shots and a looping scrape for grinding along a wall. Plays into
- * `destination` (the player's car bus, or a rival's 3D panner).
+ * Cut the decoded bank into one buffer per hit. `decoded` may have been
+ * resampled to the context's rate, so positions are scaled from the index's.
+ */
+export function sliceImpactBank(ctx: BaseAudioContext, decoded: AudioBuffer, index: ImpactBankIndex): Map<ImpactKind, AudioBuffer[][]> {
+  const scale = decoded.sampleRate / index.rate
+  const data = decoded.getChannelData(0)
+  const bank = new Map<ImpactKind, AudioBuffer[][]>()
+  for (const [kind, tiers] of Object.entries(index.kinds) as [ImpactKind, ImpactBankIndex['kinds'][ImpactKind]][]) {
+    if (!tiers || tiers.length !== 3 || tiers.some((v) => v.length === 0)) continue
+    bank.set(kind, tiers.map((variants) => variants.map(({ start, length }) => {
+      const from = Math.round(start * scale), n = Math.max(1, Math.min(data.length - from, Math.round(length * scale)))
+      const buffer = ctx.createBuffer(1, n, decoded.sampleRate)
+      buffer.copyToChannel(data.subarray(from, from + n), 0)
+      return buffer
+    })))
+  }
+  return bank
+}
+
+/**
+ * Load the recorded crash bank (CC0 Freesound, see public/audio/impacts/CREDITS.md).
+ * Until it arrives, or if it fails, hits use the procedural Foley.
+ */
+export async function loadImpactRecordings(ctx: BaseAudioContext, base = '/audio/impacts/'): Promise<boolean> {
+  if (recordings.has(ctx)) return true
+  try {
+    const [wav, index] = await Promise.all([
+      fetch(base + 'impact-bank.wav').then((r) => { if (!r.ok) throw new Error(`impact bank: HTTP ${r.status}`); return r.arrayBuffer() }),
+      fetch(base + 'impact-bank.json').then((r) => { if (!r.ok) throw new Error(`impact index: HTTP ${r.status}`); return r.json() as Promise<ImpactBankIndex> }),
+    ])
+    const decoded = await ctx.decodeAudioData(wav)
+    recordings.set(ctx, sliceImpactBank(ctx, decoded, index))
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * One car's crash sounds: recorded car/wall hits when the bank has loaded (procedural Foley before that, and for landings
+ * and kerbs), plus a looping scrape for grinding along a wall. Plays into `destination` (the player's car bus, or a
+ * rival's 3D panner).
  */
 export class ImpactSound {
   private readonly ctx: BaseAudioContext
@@ -50,7 +123,7 @@ export class ImpactSound {
   private lastStrength = 0
   private lastKind: ImpactKind = 'curb'
   private readonly bank: Map<ImpactKind, AudioBuffer[]>
-  private readonly voices = new Map<AudioBufferSourceNode, GainNode>()
+  private readonly voices = new Map<AudioBufferSourceNode, AudioNode[]>()
   private readonly scrapeGrit: WaveShaperNode
   private variant = 0
 
@@ -84,18 +157,39 @@ export class ImpactSound {
     // not turn into a machine-gun of one-shots.
     if (t - this.lastHit < RETRIGGER && kind === 'curb' && this.lastKind !== 'curb') return false
     if (t - this.lastHit < RETRIGGER && !(this.lastKind === 'curb' && kind !== 'curb') && s < this.lastStrength + .2) return false
-    if (this.voices.size >= 6) return false
+    if (this.voices.size >= 8) return false
     this.lastHit = t; this.lastStrength = s; this.lastKind = kind
-    const source = this.ctx.createBufferSource(), gain = this.ctx.createGain()
-    const tier = s < .38 ? 0 : s < .76 ? 1 : 2
-    source.buffer = this.bank.get(kind)![tier * 3 + this.variant++ % 3]
-    source.playbackRate.value = .97 + Math.random() * .06
-    gain.gain.value = HIT_GAIN * (.05 + .95 * s ** .85)
-    source.connect(gain).connect(this.destination)
-    this.voices.set(source, gain)
-    source.onended = () => { source.disconnect(); gain.disconnect(); this.voices.delete(source) }
-    source.start(t)
+    const tier = s < TIER_EDGES[1] ? 0 : s < TIER_EDGES[2] ? 1 : 2
+    const recorded = recordings.get(this.ctx)?.get(kind)?.[tier]
+    if (recorded) {
+      // Real hits: the tier sets the weight, strength within it the level; vary pitch so repeats don't sound copied.
+      const within = (s - TIER_EDGES[tier]) / (TIER_EDGES[tier + 1] - TIER_EDGES[tier])
+      const level = RECORDED_GAIN * (.55 + .45 * within)
+      const shelf = this.ctx.createBiquadFilter()
+      shelf.type = 'lowshelf'
+      shelf.frequency.value = SHELF_HZ
+      shelf.gain.value = SHELF_DB
+      this.play(recorded[this.variant++ % recorded.length], .94 + Math.random() * .12, level, t, shelf)
+      // The sub thump under it: the recordings are mostly mid/high, this is the weight.
+      this.play(thumpBank(this.ctx)[tier], .95 + Math.random() * .1, level, t)
+    } else {
+      this.play(this.bank.get(kind)![tier * 3 + this.variant++ % 3], .97 + Math.random() * .06, HIT_GAIN * (.05 + .95 * s ** .85), t)
+    }
     return true
+  }
+
+  /** One one-shot voice, optionally through `filter`, cleaned up when it ends. */
+  private play(buffer: AudioBuffer, rate: number, level: number, at: number, filter?: BiquadFilterNode): void {
+    const source = this.ctx.createBufferSource(), gain = this.ctx.createGain()
+    source.buffer = buffer
+    source.playbackRate.value = rate
+    gain.gain.value = level
+    const nodes: AudioNode[] = [gain]
+    if (filter) { source.connect(filter).connect(gain); nodes.push(filter) } else source.connect(gain)
+    gain.connect(this.destination)
+    this.voices.set(source, nodes)
+    source.onended = () => { source.disconnect(); for (const n of nodes) n.disconnect(); this.voices.delete(source) }
+    source.start(at)
   }
 
   /** Grinding along a wall, 0..1 (follow every frame; 0 = silent). */
@@ -112,7 +206,7 @@ export class ImpactSound {
     this.scrapeGain.disconnect()
     this.scrapeBand.disconnect()
     this.scrapeGrit.disconnect()
-    for (const [source, gain] of this.voices) { source.onended = null; source.stop(); source.disconnect(); gain.disconnect() }
+    for (const [source, nodes] of this.voices) { source.onended = null; source.stop(); source.disconnect(); for (const n of nodes) n.disconnect() }
     this.voices.clear()
   }
 }

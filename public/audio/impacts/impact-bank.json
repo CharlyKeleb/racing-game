@@ -1,0 +1,81 @@
+{
+  "rate": 44100,
+  "kinds": {
+    "wall": [
+      [
+        {
+          "source": "fastCollision",
+          "start": 0,
+          "length": 11025
+        },
+        {
+          "source": "metalHit",
+          "start": 11907,
+          "length": 22050
+        }
+      ],
+      [
+        {
+          "source": "collision",
+          "start": 34839,
+          "length": 35280
+        },
+        {
+          "source": "clank",
+          "start": 71001,
+          "length": 23804
+        }
+      ],
+      [
+        {
+          "source": "crashLong",
+          "start": 95687,
+          "length": 42343
+        },
+        {
+          "source": "crashGlass",
+          "start": 138912,
+          "length": 70560
+        }
+      ]
+    ],
+    "car": [
+      [
+        {
+          "source": "doorHit",
+          "start": 210354,
+          "length": 9702
+        },
+        {
+          "source": "fastCollision",
+          "start": 220938,
+          "length": 11025
+        }
+      ],
+      [
+        {
+          "source": "hood",
+          "start": 232845,
+          "length": 39690
+        },
+        {
+          "source": "clank",
+          "start": 273417,
+          "length": 23804
+        }
+      ],
+      [
+        {
+          "source": "crashLong",
+          "start": 298103,
+          "length": 42343
+        },
+        {
+          "source": "collision",
+          "start": 341328,
+          "length": 35280
+        }
+      ]
+    ]
+  }
+}

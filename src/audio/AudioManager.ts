@@ -7,7 +7,7 @@ import { Howler } from 'howler'
 import { CarSound, type CarSoundState } from './CarSound'
 import { OpponentAudio, type RivalSoundState } from './OpponentAudio'
 import { TyreBrakeSound } from './TyreBrakeSound'
-import { ImpactSound } from './ImpactSound'
+import { ImpactSound, loadImpactRecordings } from './ImpactSound'
 import type { ImpactKind } from './ImpactModel'
 import { DEFAULT_NOISE_PROFILE, tyreBrakeLevels, type CarNoiseProfile, type TyreBrakeInput } from './TyreBrakeModel'
 import { GarageAmbience } from './GarageAmbience'
@@ -175,6 +175,7 @@ export class AudioManager {
     this.tyres = new TyreBrakeSound(ctx, this.noiseProfile)
     this.tyres.output.connect(this.carBus)
     this.impacts = new ImpactSound(ctx, this.fxBus)
+    void loadImpactRecordings(ctx)
     this.driving = new DrivingSound(ctx, this.carBus)
     this.ambience = new GarageAmbience(ctx, this.master)
     this.music = new MenuMusic(ctx, this.master, (playing) => this.onMenuMusicState?.(playing))
