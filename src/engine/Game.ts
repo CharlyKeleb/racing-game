@@ -15,6 +15,8 @@ import { RainImpacts } from '../effects/RainImpacts'
 import { WetRoads } from '../effects/WetRoads'
 import { motionExposure } from '../effects/MotionBlur'
 import { WhipStreaks } from '../effects/WhipStreaks'
+import { DrivingLine } from '../effects/DrivingLine'
+import { BrakingGuide } from '../racing/BrakingGuide'
 import { performanceCapture } from './PerformanceCapture'
 import { hudCoversPoint } from '../stores/hudLayoutStore'
 import { driftEvent, readDriftRecord, saveDriftRecord } from '../racing/driftEvents'
@@ -293,6 +295,10 @@ export class Game {
   /** Quick Race callouts (#90) and the time gap to the nearest car at the player's finish. */
   private readonly callouts = new RaceCallouts()
   private finishGapMs: number | null = null
+  /** Optional braking guide on the road (#93), rebuilt when the car, build, weather or track changes. */
+  private drivingLine?: DrivingLine
+  private brakingGuide: BrakingGuide | null = null
+  private brakingGuideFor: { config: unknown; wet: boolean; line: unknown } = { config: null, wet: false, line: null }
   private rivalRevs: StagingRevs[] = []
   /** Intro seconds as of the last frame, so each cut's sound cue fires once. */
   private introCueAt = 0
@@ -613,6 +619,11 @@ export class Game {
     this.progress = new TrackProgress(this.track.line)
     this.awarenessRoute=new AwarenessRoute(this.track.line)
     this.renderer.scene.add(this.guide.group)
+    this.drivingLine?.dispose()
+    this.drivingLine = new DrivingLine(this.track.line, (x, y, z) => this.physics.groundHeight(x, y, z, (c) => track.isRoadCollider(c)))
+    this.drivingLine.setQuality(gameStore.getState().settings.quality)
+    this.renderer.scene.add(this.drivingLine.mesh)
+    this.brakingGuide = null
     const line = this.track.line
     // Every point: the minimap is zoomed in and highlights the route from the car's index.
     gameStore.setState({
@@ -1641,6 +1652,7 @@ export class Game {
       this.guide.group.visible = settings.mode !== 'freeRoam' || settings.roamGuide
       this.updateGuide(dt)
     }
+    this.updateDrivingLine(phase)
     this.checkpointGates?.update(gameStore.getState().settings.mode === 'timeTrial' && (phase === 'racing' || phase === 'countdown' || phase === 'paused'), (this.race.lastCheckpoint + 1) % this.track.checkpoints.length, phase === 'paused' ? 0 : dt)
     if (this.rivalTags.length > 0) this.updateRivalTags(phase === 'countdown' || phase === 'racing', dt)
     this.benchmark?.frame()
@@ -2007,6 +2019,27 @@ export class Game {
     }
   }
 
+  /** The braking guide, while actually driving: never in menus, the intro, pause, results or Drift. */
+  private updateDrivingLine(phase: GamePhase): void {
+    const line = this.drivingLine
+    if (!line) return
+    const settings = gameStore.getState().settings
+    const show = settings.drivingLine !== 'off' && phase === 'racing' && settings.mode !== 'drift' && !this.camera.lookBack
+    line.mesh.visible = show
+    if (!show) return
+    const wet = settings.weather === 'rain', config = this.vehicle.config
+    const built = this.brakingGuideFor
+    if (!this.brakingGuide || built.config !== config || built.wet !== wet || built.line !== this.track.line) {
+      this.brakingGuide = new BrakingGuide(this.track.line, {
+        grip: config.tires.grip,
+        downforcePerKg: config.downforceCoefficient / config.massKg,
+        brakeDecel: config.brakeForce / config.massKg,
+      }, wet)
+      this.brakingGuideFor = { config, wet, line: this.track.line }
+    }
+    line.update(this.brakingGuide, this.progress.index, Math.abs(this.vehicle.controller.forwardSpeed), settings.drivingLine === 'corners')
+  }
+
   private updateGuide(dt: number): void {
     const p = this.vehicle.position
     this.progress.update(p.x, p.z)
@@ -2248,6 +2281,7 @@ export class Game {
       this.camera.cockpitAdjustment = s.cockpits[this.carId] ?? DEFAULT_COCKPIT_ADJUSTMENT
     }
     this.rain?.setQuality(s.quality)
+    this.drivingLine?.setQuality(s.quality)
     this.rainSurface?.setQuality(s.quality)
     this.wetReflections?.setQuality(s.quality)
     this.rainImpacts?.setQuality(s.quality)
@@ -2300,6 +2334,7 @@ export class Game {
     this.rainSpray?.dispose()
     this.lensDrops?.dispose()
     this.guide?.dispose()
+    this.drivingLine?.dispose()
     this.driftZones?.dispose()
     this.checkpointGates?.dispose()
     this.showroom?.dispose()
