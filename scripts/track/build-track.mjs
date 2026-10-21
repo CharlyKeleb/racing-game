@@ -38,6 +38,10 @@ log('reading', cfg.source)
 const src = await io.read(cfg.source)
 const layerOf = (mat) => cfg.layers.find(([re]) => re.test(mat))[1]
 
+// cfg.scale: uniform factor for sources modelled at the wrong scale (Sketchfab
+// "City" is a ~15 × 24 unit miniature). Every coordinate in the config is in
+// scaled metres.
+const scale = cfg.scale ?? 1
 /** @type {{mat:string, layer:string, pos:Float32Array, nrm:Float32Array|null, uv:Float32Array|null, idx:Uint32Array}[]} */
 const prims = []
 for (const node of src.getRoot().listNodes()) {
@@ -57,9 +61,9 @@ for (const node of src.getRoot().listNodes()) {
     const nrm = n ? new Float32Array(count * 3) : null
     for (let i = 0; i < count; i++) {
       const x = p[i * 3], y = p[i * 3 + 1], z = p[i * 3 + 2]
-      pos[i * 3] = m[0] * x + m[4] * y + m[8] * z + m[12]
-      pos[i * 3 + 1] = m[1] * x + m[5] * y + m[9] * z + m[13]
-      pos[i * 3 + 2] = m[2] * x + m[6] * y + m[10] * z + m[14]
+      pos[i * 3] = (m[0] * x + m[4] * y + m[8] * z + m[12]) * scale
+      pos[i * 3 + 1] = (m[1] * x + m[5] * y + m[9] * z + m[13]) * scale
+      pos[i * 3 + 2] = (m[2] * x + m[6] * y + m[10] * z + m[14]) * scale
       if (n) {
         const a = n[i * 3], b = n[i * 3 + 1], c = n[i * 3 + 2]
         const nx = m[0] * a + m[4] * b + m[8] * c, ny = m[1] * a + m[5] * b + m[9] * c, nz = m[2] * a + m[6] * b + m[10] * c
