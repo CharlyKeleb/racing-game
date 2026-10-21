@@ -1315,7 +1315,7 @@ export class Game {
   }
 
   /** Touch buttons for actions the keyboard maps to keys. */
-  triggerAction(action: 'pause' | 'reset' | 'camera'): void {
+  triggerAction(action: 'pause' | 'reset' | 'camera' | 'shiftUp' | 'shiftDown'): void {
     this.input.trigger(action)
   }
 
@@ -1347,6 +1347,15 @@ export class Game {
 
     const inMenu = phase === 'menu' || phase === 'garage' || phase === 'loading'
     const controls = this.race.controlsEnabled && !inMenu
+    // Manual gearbox: the player's car only (AI keeps its automatic box). Presses
+    // outside driving are dropped so a stray key in a menu can't shift later.
+    const drivetrain = this.vehicle.controller.drivetrain
+    drivetrain.manual = gameStore.getState().settings.transmission === 'manual'
+    const up = this.input.consume('shiftUp'), down = this.input.consume('shiftDown')
+    if (drivetrain.manual && controls && phase === 'racing') {
+      if (up) drivetrain.requestShift(1)
+      else if (down) drivetrain.requestShift(-1)
+    }
     const p = this.vehicle.body.translation(), q = this.vehicle.body.rotation()
     this.playerPose.x = p.x; this.playerPose.z = p.z
     this.playerPose.heading = Math.atan2(2 * (q.w * q.y + q.x * q.z), 1 - 2 * (q.y * q.y + q.x * q.x))

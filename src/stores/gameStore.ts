@@ -48,6 +48,8 @@ export interface Settings {
   speedLines: boolean
   /** Launch assist (#91): a good launch at lights-out from the throttle alone. */
   launchAssist: boolean
+  /** Gearbox (#14): automatic, or manual with E / Q and the pad D-pad. */
+  transmission: 'auto' | 'manual'
   /** Free Roam (#33): speed/gear gauges and route arrows, each optional. */
   roamHud: boolean
   roamGuide: boolean
@@ -128,6 +130,7 @@ const defaultSettings: Settings = {
   spotterAudio: false,
   cockpits: {},
   launchAssist: false,
+  transmission: 'auto',
   roamHud: true,
   roamGuide: true,
   difficulty: 'challenging',
@@ -152,6 +155,7 @@ function loadSettings(): Settings {
     if (typeof merged.fovEffects !== 'boolean') merged.fovEffects = defaultSettings.fovEffects
     if (typeof merged.speedLines !== 'boolean') merged.speedLines = defaultSettings.speedLines
     if (typeof merged.launchAssist !== 'boolean') merged.launchAssist = defaultSettings.launchAssist
+    if (merged.transmission !== 'manual') merged.transmission = 'auto'
     for(const key of ['proximityRadar','spotterVisual','spotterAudio'] as const)if(typeof merged[key]!=='boolean')merged[key]=defaultSettings[key]
     merged.tracksideVolume = typeof merged.tracksideVolume === 'number' && Number.isFinite(merged.tracksideVolume) ? Math.max(0, Math.min(1, merged.tracksideVolume)) : defaultSettings.tracksideVolume
     merged.driftEvent=driftEvent(merged.driftEvent).id
