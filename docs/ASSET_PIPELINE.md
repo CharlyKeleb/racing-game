@@ -136,6 +136,18 @@ To build a bank:
 
 `tests/engineAudio.test.ts` checks that the bank plays at the requested rpm.
 
+## Impact audio
+
+Car-to-car and wall hits play real recordings from
+`public/audio/impacts/impact-bank.wav` + `.json`: three strength tiers (light,
+medium, heavy), each with a couple of variants. Landings, kerbs and the wall
+scrape stay procedural (`ImpactPCM.ts`). To change the recordings, edit
+`SOURCES` / `BANK` in `scripts/audio/build-impact-bank.mjs` (CC0 or CC BY only,
+and list them in `public/audio/impacts/CREDITS.md`). Then run
+`node scripts/audio/build-impact-bank.mjs <download dir>`. It downloads the
+Freesound previews, cuts each one from its first transient, matches loudness
+per tier and writes the bank.
+
 ## Garage
 
 The menu and garage screens use the NFS 2015 workshop
