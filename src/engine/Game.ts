@@ -2185,6 +2185,7 @@ export class Game {
     if (this.camera) {
       this.camera.mode = s.camera
       this.camera.cameraMotion = s.cameraMotion
+      this.camera.fovEffects = s.fovEffects
       this.camera.cockpitCar = this.carId
       this.camera.cockpitAdjustment = s.cockpits[this.carId] ?? DEFAULT_COCKPIT_ADJUSTMENT
     }
