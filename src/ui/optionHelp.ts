@@ -11,6 +11,7 @@ export const optionHelp: Record<string,string> = {
   'Speed lines':'The streaking overlay at the screen edges while nitro burns.',
   'Transmission':'Automatic shifts for you. Manual: E shifts up and Q down (D-pad up and down on a gamepad, + and − on touch). The engine hits the limiter if you leave it too late. Hold brake at a standstill for reverse in both modes.',
   'Race callouts':'Quick Race only: a short message for an overtake, taking or losing the lead, the final lap and a photo finish. Position changes are only called once they stick, so side-by-side battles don\'t spam. The chime volume is under Audio.',
+  'Braking guide':'A line on the road ahead that turns from green (go) to yellow (lift) to red (brake) as you approach a corner too fast, and gets wider as it does, so it works without colour too. Corners shows it only into and through corners; Full shows the whole lap. It follows the middle of the road and plans speeds for your car and upgrades, a little cautiously (more so in the rain). It is a guide to braking points, not the fastest racing line, and never steers or brakes for you.',
   'Laps':'The number of complete laps needed to finish the race. Your choice is saved for future races.',
   'Quality':'Lower quality reduces rendering work. Choose Low if the game is not running smoothly.',
 }
