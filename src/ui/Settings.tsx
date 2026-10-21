@@ -56,7 +56,9 @@ export function Settings({ onClose }: { onClose?: () => void }) {
             <input aria-label="Motion blur" className="ui-range" type="range" min={0} max={1} step={.05} value={settings.motionBlur} onChange={e=>update({motionBlur:Number(e.target.value)})}/>
             <span className="settings__help">Speed-scaled road and wheel blur. Your car body and HUD stay sharp. Set to zero to turn off; requires Post effects.</span>
           </label>
-          <Segmented<number> label="Camera movement" value={settings.cameraMotion?1:0} options={[[1,'On'],[0,'Off']]} onPick={v=>update({cameraMotion:v===1})}/>
+          <Segmented<number> help label="Camera movement" value={settings.cameraMotion?1:0} options={[[1,'On'],[0,'Off']]} onPick={v=>update({cameraMotion:v===1})}/>
+          <Segmented<number> help label="Speed FOV" value={settings.fovEffects?1:0} options={[[1,'On'],[0,'Off']]} onPick={v=>update({fovEffects:v===1})}/>
+          <Segmented<number> help label="Speed lines" value={settings.speedLines?1:0} options={[[1,'On'],[0,'Off']]} onPick={v=>update({speedLines:v===1})}/>
           <Segmented<number> help label="Launch assist" value={settings.launchAssist?1:0} options={[[0,'Off'],[1,'On']]} onPick={v=>update({launchAssist:v===1})}/>
           <p className="settings__help">Camera movement controls extra head motion, shake and view fades. Reduced-motion preference disables these too.</p>
           <SettingChoices<CameraMode> preview={camera=><SettingScene cockpit={camera==='cockpit'}/>} label="Camera" value={settings.camera} options={[[ 'chase','Chase'],['cockpit','Cockpit']]} onPick={camera=>update({camera})}/>

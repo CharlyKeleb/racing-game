@@ -45,6 +45,8 @@ export class ChaseCamera {
   lookBack = false
   private wasLookingBack = false
   cameraMotion = true
+  /** Speed and nitro FOV widening; off keeps the lens fixed (motion comfort). */
+  fovEffects = true
   cockpitCar = 'porsche911'
   cockpitAdjustment: Readonly<CockpitAdjustment> = DEFAULT_COCKPIT_ADJUSTMENT
   private readonly head = new FeedbackSpring(12, .9)
@@ -243,9 +245,10 @@ export class ChaseCamera {
 
     // Kick is already smoothed, so it is added directly: fast in, slow out.
     const inCockpit = this.mode === 'cockpit' && gridFraming === 0
-    const fov = inCockpit ? cockpitProfile(this.cockpitCar).fov + this.cockpitAdjustment.fov : this.baseFov + gridFraming * 4 + this.maxFovBoost * speedT
+    const fovFx = this.fovEffects && !this.reduced?.matches
+    const fov = inCockpit ? cockpitProfile(this.cockpitCar).fov + this.cockpitAdjustment.fov : this.baseFov + gridFraming * 4 + (fovFx ? this.maxFovBoost * speedT : 0)
     const speedFov = THREE.MathUtils.lerp(this.camera.fov - this.appliedKick, fov, damp(4, dt))
-    this.appliedKick = (inCockpit ? movement ? 2 : 0 : this.nitroFovKick) * this.kick
+    this.appliedKick = fovFx ? (inCockpit ? movement ? 2 : 0 : this.nitroFovKick) * this.kick : 0
     const next = speedFov + this.appliedKick
     if (Math.abs(this.camera.fov - next) > 0.0001) {
       this.camera.fov = next
