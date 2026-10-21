@@ -7,6 +7,7 @@ import { createStore } from 'zustand/vanilla'
 import type { GameModeId } from '../racing/gameModes'
 import { defaultQuality, isMobile } from '../engine/device'
 import { DEFAULT_BUILD, sanitizeBuild, type CarBuild } from '../vehicles/CarBuild'
+import { addPreset, deletePreset, duplicatePreset, renamePreset, sanitizePresets, type BuildPreset } from '../vehicles/BuildPresets'
 import { selectableCars } from '../vehicles/carRegistry'
 import { isAiDifficulty, type AiDifficulty } from '../racing/AiProfiles'
 import { isMusicTrack, MUSIC_TRACKS, type MusicTrackId } from '../audio/musicTracks'
@@ -100,12 +101,48 @@ export interface GameState {
   resetBuild(): void
   liveryHistory: Record<string, LiveryDesign[]>
   undoLivery(): void
+  /** Named garage setups per car id (#35). */
+  presets: Record<string, BuildPreset[]>
+  /** Save the current car's build as a new preset (no-op when its slots are full). */
+  savePreset(name: string): void
+  /** Replace the current car's build with a saved setup. */
+  applyPreset(build: CarBuild): void
+  renamePreset(id: string, name: string): void
+  duplicatePreset(id: string): void
+  deletePreset(id: string): void
 }
 
 const SETTINGS_KEY = 'racing-game:settings'
 /** Per-car builds, { [carId]: CarBuild }. The old single build (racing-game:build) migrates to the Porsche. */
 const BUILDS_KEY = 'racing-game:builds'
 const LEGACY_BUILD_KEY = 'racing-game:build'
+/** Named build presets, { [carId]: BuildPreset[] }. */
+const PRESETS_KEY = 'racing-game:presets'
+
+function loadPresets(): Record<string, BuildPreset[]> {
+  try {
+    return sanitizePresets(JSON.parse(localStorage.getItem(PRESETS_KEY) ?? '{}'))
+  } catch {
+    return {}
+  }
+}
+
+function savePresets(presets: Record<string, BuildPreset[]>): void {
+  try {
+    localStorage.setItem(PRESETS_KEY, JSON.stringify(presets))
+  } catch {
+    // storage unavailable — presets just won't persist
+  }
+}
+
+/** Replace one car's preset list and persist. Called from store actions, after the store exists. */
+function setPresets(car: string, list: BuildPreset[]): void {
+  const presets = { ...gameStore.getState().presets, [car]: list }
+  gameStore.setState({ presets })
+  savePresets(presets)
+}
+
+const presetId = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`
 
 // First run: pick quality from the device. Phones start on Low with post FX
 // off; the renderer's dynamic resolution then holds 60 fps from there.
@@ -218,6 +255,7 @@ export const gameStore = createStore<GameState>()((set, get) => ({
   settings: initialSettings,
   builds: initialBuilds,
   liveryHistory: {},
+  presets: loadPresets(),
   build: initialBuilds[initialSettings.car] ?? DEFAULT_BUILD,
   setPhase: (phase) => set({ phase }),
   setError: (error) => set({ error }),
@@ -252,6 +290,27 @@ export const gameStore = createStore<GameState>()((set, get) => ({
     const builds = { ...get().builds, [car]: build }
     set({ build, builds, liveryHistory: { ...get().liveryHistory, [car]: history.slice(0, -1) } })
     saveBuilds(builds)
+  },
+  savePreset: (name) => {
+    const car = get().settings.car
+    setPresets(car, addPreset(get().presets[car] ?? [], presetId(), name, get().build))
+  },
+  applyPreset: (build) => {
+    const builds = { ...get().builds, [get().settings.car]: build }
+    set({ build, builds })
+    saveBuilds(builds)
+  },
+  renamePreset: (id, name) => {
+    const car = get().settings.car
+    setPresets(car, renamePreset(get().presets[car] ?? [], id, name))
+  },
+  duplicatePreset: (id) => {
+    const car = get().settings.car
+    setPresets(car, duplicatePreset(get().presets[car] ?? [], id, presetId()))
+  },
+  deletePreset: (id) => {
+    const car = get().settings.car
+    setPresets(car, deletePreset(get().presets[car] ?? [], id))
   },
   resetBuild: () => {
     const builds = { ...get().builds, [get().settings.car]: DEFAULT_BUILD }
