@@ -2,17 +2,20 @@ import * as THREE from 'three'
 import { BANG, NONE, type PopKind } from '../vehicles/Backfire'
 import type { VehicleConfig } from '../vehicles/VehicleConfig'
 
+/** Nitro flame length at full boost, m (a perfect boost runs a little longer). */
 const FLAME_LENGTH = 0.8
-/** Radius at the pipe; the cone is squashed vertically to match oval tips. */
-const FLAME_RADIUS = 0.075
 const OVAL = 0.62
 /** Fireball diameter at full bloom, m: a crackle, and a bang. */
 const CRACKLE_SIZE = 0.34
 const BANG_SIZE = 0.62
 const FIREBALL_VARIANTS = 3
-/** Glow puffs streaming down each jet: the flame's soft, turbulent body around the core cone. */
-const PUFFS = 24
-const PUFF_FLOW = 2.6
+/** Flame puffs per pipe: billowing billboards that flow out of the pipe and grow, like burning gas. */
+const PUFFS = 18
+/** Puff cycles per second (how fast the gas streams out). */
+const PUFF_FLOW = 3.1
+/** Puff size at the pipe and at the end of the flame, m: the plume widens as it leaves. */
+const PUFF_START = 0.12
+const PUFF_END = 0.42
 
 /** Fallback exhaust tips when the config has none: twin pipes low at the rear bumper. */
 export function defaultExhausts(cfg: VehicleConfig): [number, number, number][] {
@@ -27,24 +30,6 @@ export function defaultExhausts(cfg: VehicleConfig): [number, number, number][] 
 function seeded(seed: number): () => number {
   let s = seed
   return () => (s = (s * 16807) % 2147483647) / 2147483647
-}
-
-/**
- * Core texture, wrapped round the flame cone (v along it): opaque and white-hot
- * at the pipe, fading smoothly to the tip. The flowing glow puffs around it
- * carry the turbulence; any banding here turned into zigzags on the thin cone.
- */
-function plumeTexture(): THREE.CanvasTexture {
-  const c = document.createElement('canvas')
-  c.width = 4
-  c.height = 128
-  const g = c.getContext('2d')!
-  for (let y = 0; y < 128; y++) {
-    const along = 1 - y / 127 // 0 at the pipe, 1 at the tip
-    g.fillStyle = `rgba(255,255,255,${Math.pow(1 - along, 1.5).toFixed(3)})`
-    g.fillRect(0, y, 4, 1)
-  }
-  return new THREE.CanvasTexture(c)
 }
 
 /** Soft radial glow for the hot spot at the pipe outlet. */
@@ -97,8 +82,28 @@ function fireColor(t: number, out: THREE.Color): THREE.Color {
   return out.copy(FIRE_STOPS[i]).lerp(FIRE_STOPS[i + 1], x - i)
 }
 
+/**
+ * Nitro flame colour along the plume, like real exhaust fire: blue-white at
+ * the nozzle, white-yellow in the body, orange at the edges, dark red as it
+ * dies. Under 1 on green/blue so it stays fire-coloured untone-mapped.
+ */
+const JET_STOPS = [new THREE.Color(0.8, 0.9, 1.7), new THREE.Color(1.9, 1.5, 0.75), new THREE.Color(1.8, 0.9, 0.22), new THREE.Color(1.2, 0.36, 0.05), new THREE.Color(0.35, 0.06, 0.01)]
+function jetColor(t: number, out: THREE.Color): THREE.Color {
+  const x = Math.min(0.999, Math.max(0, t)) * (JET_STOPS.length - 1)
+  const i = Math.floor(x)
+  return out.copy(JET_STOPS[i]).lerp(JET_STOPS[i + 1], x - i)
+}
+
+const _m = new THREE.Matrix4()
+const _q = new THREE.Quaternion()
+const _qSpin = new THREE.Quaternion()
+const _qView = new THREE.Quaternion()
+const _pos = new THREE.Vector3()
+const _scale = new THREE.Vector3()
+const _axisZ = new THREE.Vector3(0, 0, 1)
+const _jet = new THREE.Color()
+
 interface Pipe {
-  jet: THREE.Group
   phase: number
   glow: THREE.Sprite
   ball: THREE.Sprite
@@ -126,12 +131,14 @@ const NO_POP: ExhaustPop = { flash: 0, kind: NONE, strength: 0, count: 0 }
  * Exhaust fire, parented to the car body (the node that leans) so it stays on
  * the pipes through squat, dive and roll.
  *
- * - Nitro: a three-layer jet out of each tip, a white-hot core, a blue body and
- *   a violet outer haze, with streaks flowing down it and the length and
- *   angle flickering per pipe, plus a glow at the outlet.
- * - Backfires: a fireball per pipe, like a real race car popping on the
- *   overrun: a white-hot flash that blooms into a turbulent orange ball and
- *   cools to red as it fades (~0.1 s for a crackle, ~0.17 s for a bang).
+ * - Nitro: a billowing plume of lumpy fire billboards per pipe, like a real
+ *   car shooting flames: small, dense and blue-white at the nozzle, growing
+ *   and widening into white-yellow, then orange fire that drifts, turns and
+ *   dies away dark red, plus a small glow at the outlet. One instanced draw
+ *   call for all pipes.
+ * - Backfires: a fireball per pipe, like a race car popping on the overrun: a
+ *   white-hot flash that blooms into a turbulent orange ball and cools to red
+ *   as it fades (~0.1 s for a crackle, ~0.17 s for a bang).
  *
  * Additive and bloom-bright; MeshBasic/Sprite materials only, so WebGPU needs
  * no node twin. Nothing is drawn while there's no nitro and no pop.
@@ -139,45 +146,23 @@ const NO_POP: ExhaustPop = { flash: 0, kind: NONE, strength: 0, count: 0 }
 export class NitroFlames {
   readonly group = new THREE.Group()
   private readonly pipes: Pipe[] = []
-  private readonly geometry: THREE.ConeGeometry
   private readonly materials: THREE.Material[] = []
   private readonly textures: THREE.Texture[] = []
   private readonly fireballs: THREE.Texture[] = []
-  private readonly plume: THREE.CanvasTexture
   private time = 0
-  /** Flame body: two point clouds (outer haze, inner glow) across all pipes, one draw call each. */
-  private readonly outerPuffs: THREE.Points
-  private readonly innerPuffs: THREE.Points
-  private readonly puffPositions: Float32Array[] = []
-  private readonly puffColors: Float32Array[] = []
+  /** The nitro flame: lumpy fire billboards for every pipe in one instanced draw call. */
+  private readonly puffs: THREE.InstancedMesh
+  private readonly puffGeometry = new THREE.PlaneGeometry(1, 1)
+  /**
+   * The camera the flame billboards turn to face (Game sets it once). Without
+   * one they face straight back, which still reads from the chase camera.
+   */
+  static camera: THREE.Camera | null = null
 
   constructor(cfg: VehicleConfig) {
-    // Cone tip points -Z (backwards), base at the pipe.
-    this.geometry = new THREE.ConeGeometry(FLAME_RADIUS, FLAME_LENGTH, 20, 1, true)
-    this.geometry.rotateX(-Math.PI / 2)
-    this.geometry.translate(0, 0, -FLAME_LENGTH / 2)
-
-    this.plume = plumeTexture()
-    this.textures.push(this.plume)
-    const flameMat = (color: number, intensity: number, opacity: number) => {
-      const m = new THREE.MeshBasicMaterial({
-        color: new THREE.Color(color).multiplyScalar(intensity),
-        alphaMap: this.plume,
-        transparent: true,
-        opacity,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-        side: THREE.DoubleSide,
-        fog: false,
-        toneMapped: false,
-      })
-      this.materials.push(m)
-      return m
-    }
-    const core = flameMat(0xd8f4ff, 3.4, 1)
     const glowTex = glowTexture()
     this.textures.push(glowTex)
-    const glowMat = new THREE.SpriteMaterial({ map: glowTex, color: new THREE.Color(0x9fd0ff).multiplyScalar(2.5), blending: THREE.AdditiveBlending, depthWrite: false, fog: false, toneMapped: false })
+    const glowMat = new THREE.SpriteMaterial({ map: glowTex, color: new THREE.Color(0xd6e4ff).multiplyScalar(1.7), blending: THREE.AdditiveBlending, depthWrite: false, fog: false, toneMapped: false })
     this.materials.push(glowMat)
     for (let v = 0; v < FIREBALL_VARIANTS; v++) {
       const t = fireballTexture(101 + v * 37)
@@ -186,11 +171,6 @@ export class NitroFlames {
     }
 
     for (const [x, y, z] of cfg.exhausts ?? defaultExhausts(cfg)) {
-      const jet = new THREE.Group()
-      jet.position.set(x, y, z - 0.01)
-      const inner = new THREE.Mesh(this.geometry, core)
-      inner.scale.set(0.6, 0.6 * OVAL, 0.55)
-      jet.add(inner)
       const glow = new THREE.Sprite(glowMat)
       glow.position.set(x, y, z - 0.03)
       const ballMat = new THREE.SpriteMaterial({ map: this.fireballs[0], blending: THREE.AdditiveBlending, depthWrite: false, fog: false, toneMapped: false, transparent: true })
@@ -199,26 +179,16 @@ export class NitroFlames {
       const ball = new THREE.Sprite(ballMat)
       const flash = new THREE.Sprite(flashMat)
       ball.visible = flash.visible = false
-      this.pipes.push({ jet, phase: this.pipes.length * 0.37, glow, ball, ballMat, flash, flashMat, x, y, z })
-      this.group.add(jet, glow, ball, flash)
+      this.pipes.push({ phase: this.pipes.length * 0.37, glow, ball, ballMat, flash, flashMat, x, y, z })
+      this.group.add(glow, ball, flash)
     }
-    const puffs = (size: number) => {
-      const count = this.pipes.length * PUFFS
-      const positions = new Float32Array(count * 3), colors = new Float32Array(count * 4)
-      const geometry = new THREE.BufferGeometry()
-      geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3).setUsage(THREE.DynamicDrawUsage))
-      geometry.setAttribute('color', new THREE.BufferAttribute(colors, 4).setUsage(THREE.DynamicDrawUsage))
-      const material = new THREE.PointsMaterial({ size, map: glowTex, vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false, toneMapped: false, sizeAttenuation: true })
-      this.materials.push(material)
-      this.puffPositions.push(positions)
-      this.puffColors.push(colors)
-      const points = new THREE.Points(geometry, material)
-      points.frustumCulled = false
-      this.group.add(points)
-      return points
-    }
-    this.outerPuffs = puffs(0.36)
-    this.innerPuffs = puffs(0.17)
+    const puffMat = new THREE.MeshBasicMaterial({ map: this.fireballs[1], transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false, toneMapped: false, side: THREE.DoubleSide })
+    this.materials.push(puffMat)
+    this.puffs = new THREE.InstancedMesh(this.puffGeometry, puffMat, Math.max(1, this.pipes.length * PUFFS))
+    this.puffs.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
+    this.puffs.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(this.puffs.count * 3), 3).setUsage(THREE.DynamicDrawUsage)
+    this.puffs.frustumCulled = false
+    this.group.add(this.puffs)
     this.group.visible = false
   }
 
@@ -232,19 +202,15 @@ export class NitroFlames {
     const fire = pop.flash > 0.01
     this.group.visible = jet || fire
     if (!this.group.visible) return
-    this.outerPuffs.visible = this.innerPuffs.visible = jet
+    this.puffs.visible = jet
     if (jet) this.updatePuffs(intensity)
     for (let i = 0; i < this.pipes.length; i++) {
       const p = this.pipes[i]
-      p.jet.visible = p.glow.visible = jet
+      p.glow.visible = jet
       if (jet) {
         const t = this.time * 41 + i * 1.7
         const flicker = 0.8 + 0.12 * Math.sin(t) + 0.08 * Math.sin(t * 2.7 + 1) + 0.05 * Math.sin(t * 6.3 + i)
-        const width = 0.75 + 0.25 * Math.min(intensity, 1.4)
-        p.jet.scale.set(width, width, intensity * flicker)
-        // A little wander, as the exhaust gas buffets the flame.
-        p.jet.rotation.set(0.04 * Math.sin(t * 0.37 + i), 0.05 * Math.sin(t * 0.29 + 2 * i), 0)
-        const glow = 0.14 + 0.08 * Math.min(intensity, 1.4) * flicker
+        const glow = 0.09 + 0.06 * Math.min(intensity, 1.4) * flicker
         p.glow.scale.set(glow, glow * OVAL, 1)
       }
       p.ball.visible = p.flash.visible = fire
@@ -253,37 +219,50 @@ export class NitroFlames {
   }
 
   /**
-   * Glow puffs flow from each pipe to the flame tip and recycle, wandering a
-   * little more the further they get: blue-white near the pipe, violet at
-   * the tip, fading out. Positions are in the body's space.
+   * Flame puffs flow out of each pipe and recycle: small, blue-white and
+   * dense at the nozzle, growing into billowing white-yellow then orange
+   * fire, drifting and turning as they go, dying out dark red. Each is a
+   * lumpy fire billboard turned to face the camera, so the plume has no hard
+   * edge from any side. All pipes, one instanced draw call, no allocation.
    */
   private updatePuffs(intensity: number): void {
-    const length = FLAME_LENGTH * 1.15 * Math.min(1.4, intensity)
-    for (let layer = 0; layer < 2; layer++) {
-      const pos = this.puffPositions[layer], col = this.puffColors[layer]
-      const outer = layer === 0
-      for (let i = 0; i < this.pipes.length; i++) {
-        const p = this.pipes[i]
-        for (let k = 0; k < PUFFS; k++) {
-          const n = i * PUFFS + k
-          // 0 at the pipe, 1 at the tip; each puff flows back and starts over.
-          const t = (k / PUFFS + this.time * PUFF_FLOW + p.phase) % 1
-          const seed = n * 12.9898
-          const wander = (outer ? 0.05 : 0.025) * t
-          pos[n * 3] = p.x + wander * Math.sin(this.time * 23 + seed)
-          pos[n * 3 + 1] = p.y + wander * OVAL * Math.sin(this.time * 29 + seed * 1.7)
-          pos[n * 3 + 2] = p.z - 0.02 - t * length
-          // Hot blue-white at the pipe to blue, then violet at the tip (values past 1 bloom).
-          const fade = Math.pow(1 - t, outer ? 1.3 : 1.8) * Math.min(1, Math.max(0, t - 0.06) * 8)
-          col[n * 4] = outer ? 0.35 + 0.55 * t : 0.7 - 0.3 * t
-          col[n * 4 + 1] = outer ? 0.45 - 0.25 * t : 0.85 - 0.25 * t
-          col[n * 4 + 2] = outer ? 1.6 : 1.8
-          col[n * 4 + 3] = fade * (outer ? 0.3 : 0.5)
-        }
+    const boost = Math.min(1.4, intensity)
+    const length = FLAME_LENGTH * (0.75 + 0.45 * boost)
+    // Billboards face the camera: its rotation, seen from the flames' parent space.
+    const camera = NitroFlames.camera
+    this.group.updateWorldMatrix(true, false)
+    if (camera) {
+      camera.getWorldQuaternion(_qView)
+      this.group.getWorldQuaternion(_q).invert()
+      _qView.premultiply(_q)
+    } else _qView.setFromAxisAngle(THREE.Object3D.DEFAULT_UP, Math.PI)
+    const colors = this.puffs.instanceColor!
+    for (let i = 0; i < this.pipes.length; i++) {
+      const p = this.pipes[i]
+      for (let k = 0; k < PUFFS; k++) {
+        const n = i * PUFFS + k
+        const t = (k / PUFFS + this.time * PUFF_FLOW + p.phase) % 1 // 0 at the pipe, 1 at the end
+        const seed = n * 12.9898
+        // Turbulence: the further out, the more the gas wanders.
+        const wander = 0.09 * t * t
+        _pos.set(
+          p.x + wander * Math.sin(this.time * 9 + seed),
+          p.y + wander * 0.7 * Math.sin(this.time * 11 + seed * 1.7) + 0.05 * t * t,
+          p.z - 0.03 - t * length,
+        )
+        const size = (PUFF_START + (PUFF_END - PUFF_START) * Math.pow(t, 0.8)) * (0.85 + 0.25 * boost) * (0.85 + 0.3 * Math.abs(Math.sin(seed)))
+        _scale.set(size, size, 1)
+        _qSpin.setFromAxisAngle(_axisZ, seed + this.time * (1.5 + (n % 3)))
+        _m.compose(_pos, _q.copy(_qView).multiply(_qSpin), _scale)
+        this.puffs.setMatrixAt(n, _m)
+        // Additive: brightness is opacity. Fade in off the nozzle, burn, die away.
+        const fade = Math.min(1, t * 9) * Math.pow(1 - t, 1.1) * (0.75 + 0.3 * boost)
+        jetColor(t * 0.95, _jet).multiplyScalar(fade)
+        colors.setXYZ(n, _jet.r, _jet.g, _jet.b)
       }
     }
-    this.outerPuffs.geometry.attributes.position.needsUpdate = this.outerPuffs.geometry.attributes.color.needsUpdate = true
-    this.innerPuffs.geometry.attributes.position.needsUpdate = this.innerPuffs.geometry.attributes.color.needsUpdate = true
+    this.puffs.instanceMatrix.needsUpdate = true
+    colors.needsUpdate = true
   }
 
   private fireball(p: Pipe, pop: ExhaustPop, i: number): void {
@@ -309,9 +288,7 @@ export class NitroFlames {
 
   dispose(): void {
     this.group.removeFromParent()
-    this.geometry.dispose()
-    this.outerPuffs.geometry.dispose()
-    this.innerPuffs.geometry.dispose()
+    this.puffGeometry.dispose()
     for (const t of this.textures) t.dispose()
     for (const m of this.materials) m.dispose()
   }

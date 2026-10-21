@@ -343,6 +343,7 @@ export class Game {
   constructor(container: HTMLElement) {
     this.renderer = new Renderer(container, gameStore.getState().settings.renderer)
     this.introCamera = new RaceIntroCamera(this.renderer.camera)
+    NitroFlames.camera = this.renderer.camera
     this.renderer.scene.add(this.whipStreaks.mesh)
     this.finishCamera = new RaceFinishCamera(this.renderer.camera)
     this.loop = new GameLoop({
