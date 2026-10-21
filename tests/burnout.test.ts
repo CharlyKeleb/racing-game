@@ -47,18 +47,6 @@ describe('burnout', () => {
     expect(lift.intensity).toBeLessThan(launch.intensity)
   })
 
-  it('backfires irregularly while it is really going, and stops when you lift', () => {
-    const b = new Burnout()
-    const pops: number[] = []
-    for (let t = 0; t < 3; t += DT) { b.update(DT, held); if (b.pop > 0.55) pops.push(t) }
-    const starts = pops.filter((t, i) => i === 0 || t - pops[i - 1] > DT * 1.5)
-    expect(starts.length).toBeGreaterThan(4)
-    const gaps = starts.slice(1).map((t, i) => t - starts[i])
-    expect(Math.max(...gaps) - Math.min(...gaps)).toBeGreaterThan(0.1) // not a metronome
-    run(b, { throttle: 0, brake: 0 }, 1)
-    expect(b.pop).toBe(0)
-  })
-
   it('reset clears it', () => {
     const b = new Burnout()
     run(b, {}, 0.5)

@@ -8,6 +8,8 @@ import { CarSound, type CarSoundState } from './CarSound'
 import { OpponentAudio, type RivalSoundState } from './OpponentAudio'
 import { TyreBrakeSound } from './TyreBrakeSound'
 import { ImpactSound, loadImpactRecordings } from './ImpactSound'
+import { BackfireSound, loadBackfireRecordings } from './BackfireSound'
+import { BANG, type PopKind } from '../vehicles/Backfire'
 import type { ImpactKind } from './ImpactModel'
 import { DEFAULT_NOISE_PROFILE, tyreBrakeLevels, type CarNoiseProfile, type TyreBrakeInput } from './TyreBrakeModel'
 import { GarageAmbience } from './GarageAmbience'
@@ -71,6 +73,7 @@ export class AudioManager {
   /** The player's tyres and brakes, and what they're made of. */
   private tyres: TyreBrakeSound | null = null
   private impacts: ImpactSound | null = null
+  private backfires: BackfireSound | null = null
   private driving: DrivingSound | null = null
   private trackside: TracksideAmbience | null = null
   private tracksideAreas: readonly TracksideEmitter[] | undefined
@@ -176,6 +179,8 @@ export class AudioManager {
     this.tyres.output.connect(this.carBus)
     this.impacts = new ImpactSound(ctx, this.fxBus)
     void loadImpactRecordings(ctx)
+    this.backfires = new BackfireSound(ctx, this.fxBus)
+    void loadBackfireRecordings(ctx)
     this.driving = new DrivingSound(ctx, this.carBus)
     this.ambience = new GarageAmbience(ctx, this.master)
     this.music = new MenuMusic(ctx, this.master, (playing) => this.onMenuMusicState?.(playing))
@@ -553,6 +558,29 @@ export class AudioManager {
     rival.update(Object.assign(this.rivalState, state))
   }
 
+  /** An exhaust pop: `car` -1 is the player, otherwise the rival's index (heard where it is). */
+  backfire(car: number, kind: PopKind, strength: number): void {
+    if (this.paused || kind === 0 || this.scene !== 'race') return
+    const played = (car < 0 ? this.backfires : this.rivals[car]?.backfires)?.pop(kind, strength)
+    // Your own bang: the engine dips for a moment so the "POOO" punches through
+    // rather than being squashed into it by the limiter.
+    if (played && car < 0 && kind === BANG) this.duckEngine(0.45 * strength, 0.06)
+  }
+
+  /** Drop the player's engine and tyres by `depth` (0..1), hold briefly, then recover. */
+  private duckEngine(depth: number, hold: number): void {
+    const ctx = this.ctx
+    if (!ctx || !this.duck) return
+    const t = ctx.currentTime
+    const g = this.duck.gain
+    // Never lift an existing deeper duck (a crash) early.
+    const target = Math.min(g.value, 1 - depth)
+    g.cancelScheduledValues(t)
+    g.setValueAtTime(g.value, t)
+    g.linearRampToValueAtTime(target, t + 0.01)
+    g.setTargetAtTime(1, t + hold, 0.12)
+  }
+
   /** A hit on a car: `car` -1 is the player, otherwise the rival's index (heard where it is). */
   impact(car: number, kind: ImpactKind, strength: number): void {
     if (this.paused || strength <= 0) return
@@ -580,6 +608,7 @@ export class AudioManager {
     this.clearSpotter()
     this.clearOpponents()
     this.impacts?.dispose()
+    this.backfires?.dispose()
     this.driving?.dispose()
     this.trackside?.dispose(); this.trackside = null; this.tracksideAreas = undefined
     this.engineBank = null

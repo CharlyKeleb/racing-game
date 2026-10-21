@@ -35,6 +35,10 @@ export interface NitroInput {
  * `intensity` ramps toward the target (1, or `perfectBoost`) so the thrust and
  * camera kick in over a few frames rather than in one step.
  */
+/** Ignition kick: up to this share of the boost force extra, fading over SURGE_SEC seconds. */
+const SURGE_SHARE = 0.6
+const SURGE_SEC = 0.45
+
 export class Nitro {
   /** Tank level, 0..1. */
   charge = 0
@@ -48,6 +52,10 @@ export class Nitro {
   missedAt = 0
   /** Smoothed boost amount: 0..1, up to `perfectBoost` during a perfect boost. */
   intensity = 0
+  /** True on the tick a burn lights (for the bang, the flash and the camera punch). */
+  ignited = false
+  /** The kick as it lights: 1 at ignition, gone after SURGE_SEC (see surgeForce). */
+  surge = 0
   /** Seconds since the current burn started. */
   burnTime = 0
   private perfectLeft = 0
@@ -63,6 +71,8 @@ export class Nitro {
 
   update(input: NitroInput, dt: number): void {
     const cfg = this.cfg
+    this.ignited = false
+    this.surge = Math.max(0, this.surge - dt / SURGE_SEC)
     const pressed = input.wantsBoost && !this.wasHeld
     this.wasHeld = input.wantsBoost
     this.releasedFor = input.wantsBoost ? 0 : this.releasedFor + dt
@@ -81,6 +91,8 @@ export class Nitro {
       if (this.charge <= 0 || this.releasedFor > cfg.releaseGraceSec) this.stopBurn()
     } else if (input.wantsBoost && this.charge >= cfg.minCharge) {
       this.active = true
+      this.ignited = true
+      this.surge = 1
       this.burnTime = 0
       this.attempted = false
       this.missed = false
@@ -124,6 +136,15 @@ export class Nitro {
   }
 
   /**
+   * Extra thrust as the nitro lights, N: a shove in the back on top of the
+   * ramping boost, gone within half a second. Kept apart from `force` so the
+   * steady boost (and top speed) is unchanged.
+   */
+  get surgeForce(): number {
+    return this.cfg.force * SURGE_SHARE * this.surge * this.surge
+  }
+
+  /**
    * Multiplier on aerodynamic drag. Drag grows with v², so scaling it by
    * 1/(1+b)² raises the drag-limited top speed by the fraction b.
    */
@@ -146,6 +167,8 @@ export class Nitro {
     this.missed = false
     this.releasedFor = 0
     this.wasHeld = false
+    this.ignited = false
+    this.surge = 0
     this.stopBurn()
   }
 }

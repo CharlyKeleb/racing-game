@@ -1,6 +1,7 @@
 import type { EngineBankMessage } from './engineWorklet'
 import { TyreBrakeSound } from './TyreBrakeSound'
 import { ImpactSound } from './ImpactSound'
+import { BackfireSound } from './BackfireSound'
 import type { CarNoiseProfile, TyreBrakeLevels } from './TyreBrakeModel'
 
 /** Speed of sound, m/s, for the doppler shift. */
@@ -54,6 +55,8 @@ export class OpponentAudio {
   private readonly tyreAir: BiquadFilterNode
   /** Its crashes and wall scrapes, placed where it is. */
   readonly impacts: ImpactSound
+  /** Its exhaust pops, placed where it is. */
+  readonly backfires: BackfireSound
   private readonly wind: AudioBufferSourceNode
   private readonly windGain: GainNode
   private doppler = 1
@@ -93,6 +96,7 @@ export class OpponentAudio {
     this.tyres.output.connect(this.tyreAir).connect(this.panner)
 
     this.impacts = new ImpactSound(ctx, this.panner)
+    this.backfires = new BackfireSound(ctx, this.panner)
 
     // Wind rush as it passes.
     const buf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate)
@@ -160,6 +164,7 @@ export class OpponentAudio {
     this.sampled?.port.close()
     this.tyres.dispose()
     this.impacts.dispose()
+    this.backfires.dispose()
     this.wind.disconnect()
     this.air.disconnect()
     this.tyreAir.disconnect()
