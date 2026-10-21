@@ -320,6 +320,28 @@ export class AudioManager {
     src.stop(t + 0.2)
   }
 
+  /**
+   * Race callout chime (#90): short, original, and quiet under the engine.
+   * Rising for gains, falling for losing the lead, a two-tone bell for the final lap.
+   */
+  playCallout(kind: 'overtake' | 'lead' | 'lostLead' | 'finalLap' | 'finish', volume: number): void {
+    const ctx = this.ctx
+    if (!ctx || this.paused || volume <= 0 || kind === 'finish') return
+    const notes = kind === 'lead' ? [587, 740, 880] : kind === 'overtake' ? [660, 880] : kind === 'lostLead' ? [660, 494] : [988, 740, 988, 740]
+    const step = kind === 'finalLap' ? .14 : .09
+    notes.forEach((frequency, i) => {
+      const time = ctx.currentTime + i * step
+      const tone = ctx.createOscillator(), gain = ctx.createGain()
+      tone.type = kind === 'finalLap' ? 'triangle' : 'sine'; tone.frequency.value = frequency
+      gain.gain.setValueAtTime(.0001, time)
+      gain.gain.exponentialRampToValueAtTime(.1 * volume, time + .01)
+      gain.gain.exponentialRampToValueAtTime(.0001, time + .22)
+      tone.connect(gain).connect(this.fxBus)
+      tone.onended = () => { tone.disconnect(); gain.disconnect() }
+      tone.start(time); tone.stop(time + .24)
+    })
+  }
+
   /** A small rising interval for a bank/transition, falling for a broken chain. */
   playDriftCue(kind: 'bank' | 'link' | 'bust'): void {
     const ctx = this.ctx

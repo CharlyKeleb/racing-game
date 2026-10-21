@@ -55,6 +55,9 @@ export interface Settings {
   roamGuide: boolean
   proximityRadar: boolean
   spotterVisual: boolean
+  /** Quick Race callouts (#90): text on/off, and their chime volume (0 = text only). */
+  callouts: boolean
+  calloutVolume: number
   spotterAudio: boolean
   cockpits: Record<string, CockpitAdjustment>
   difficulty: AiDifficulty
@@ -127,6 +130,8 @@ const defaultSettings: Settings = {
   speedLines: !(typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches),
   proximityRadar: true,
   spotterVisual: true,
+  callouts: true,
+  calloutVolume: .6,
   spotterAudio: false,
   cockpits: {},
   launchAssist: false,
@@ -157,6 +162,8 @@ function loadSettings(): Settings {
     if (typeof merged.launchAssist !== 'boolean') merged.launchAssist = defaultSettings.launchAssist
     if (merged.transmission !== 'manual') merged.transmission = 'auto'
     for(const key of ['proximityRadar','spotterVisual','spotterAudio'] as const)if(typeof merged[key]!=='boolean')merged[key]=defaultSettings[key]
+    if (typeof merged.callouts !== 'boolean') merged.callouts = defaultSettings.callouts
+    merged.calloutVolume = typeof merged.calloutVolume === 'number' && Number.isFinite(merged.calloutVolume) ? Math.max(0, Math.min(1, merged.calloutVolume)) : defaultSettings.calloutVolume
     merged.tracksideVolume = typeof merged.tracksideVolume === 'number' && Number.isFinite(merged.tracksideVolume) ? Math.max(0, Math.min(1, merged.tracksideVolume)) : defaultSettings.tracksideVolume
     merged.driftEvent=driftEvent(merged.driftEvent).id
     if (!['drift', 'timeTrial', 'freeRoam'].includes(merged.mode)) merged.mode = 'quick'

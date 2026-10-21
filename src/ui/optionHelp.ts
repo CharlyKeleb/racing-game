@@ -10,6 +10,7 @@ export const optionHelp: Record<string,string> = {
   'Speed FOV':'Widens the view as you go faster and kicks it out when nitro fires. Off keeps the lens fixed.',
   'Speed lines':'The streaking overlay at the screen edges while nitro burns.',
   'Transmission':'Automatic shifts for you. Manual: E shifts up and Q down (D-pad up and down on a gamepad, + and − on touch). The engine hits the limiter if you leave it too late. Hold brake at a standstill for reverse in both modes.',
+  'Race callouts':'Quick Race only: a short message for an overtake, taking or losing the lead, the final lap and a photo finish. Position changes are only called once they stick, so side-by-side battles don\'t spam. The chime volume is under Audio.',
   'Laps':'The number of complete laps needed to finish the race. Your choice is saved for future races.',
   'Quality':'Lower quality reduces rendering work. Choose Low if the game is not running smoothly.',
 }

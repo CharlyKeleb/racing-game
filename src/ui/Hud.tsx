@@ -54,6 +54,7 @@ export function Hud() {
       <ProximityDisplay />
       <HudFeedback />
       <HudStartLights />
+      <HudCallout />
       <HudLaunch />
       <HudTrialCall />
       <HudGauges />
@@ -242,6 +243,16 @@ function HudLaunch() {
     return <div className={`hud-nitro-call launch-call launch-call--${t.grade}`}>{LAUNCH_CALLS[t.grade]}</div>
   }
   return null
+}
+
+/** Quick Race callout (#90): one short line under the top of the screen, announced to screen readers. */
+function HudCallout() {
+  const callout = useTelemetry(s => s.callout)
+  return <div className="race-callout-slot" aria-live="polite">
+    {callout && <div key={callout.id} className={`race-callout race-callout--${callout.kind}`}>
+      <b>{callout.text}</b>{callout.detail && <span className="mono">{callout.detail}</span>}
+    </div>}
+  </div>
 }
 
 function HudGauges() {

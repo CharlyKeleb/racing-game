@@ -47,6 +47,7 @@ import { Headlights } from '../effects/Headlights'
 import { TrackProgress } from '../racing/TrackProgress'
 import { InputManager, type InputState } from '../input/InputManager'
 import { LaunchControl } from '../racing/LaunchControl'
+import { RaceCallouts } from '../racing/RaceCallouts'
 import { COUNTDOWN_SEC, RaceManager, START_LIGHTS, startLightsLit } from '../racing/RaceManager'
 import { draftingStrength } from '../racing/Drafting'
 import { Opponent } from '../racing/Opponent'
@@ -289,6 +290,9 @@ export class Game {
   private readonly playerRevs = new StagingRevs(0)
   /** Skill launch at lights-out, graded in fixedUpdate (#91). */
   private readonly launch = new LaunchControl()
+  /** Quick Race callouts (#90) and the time gap to the nearest car at the player's finish. */
+  private readonly callouts = new RaceCallouts()
+  private finishGapMs: number | null = null
   private rivalRevs: StagingRevs[] = []
   /** Intro seconds as of the last frame, so each cut's sound cue fires once. */
   private introCueAt = 0
@@ -802,6 +806,8 @@ export class Game {
     const token = this.opponentToken
     const { settings } = gameStore.getState()
     const opponentCount = isSoloMode(settings.mode) ? 0 : settings.opponents
+    this.callouts.reset()
+    this.finishGapMs = null
     this.trialEnded = false
     this.driftChallenge.reset(driftEvent(settings.driftEvent))
     this.driftNewBest = false
@@ -1189,6 +1195,7 @@ export class Game {
     this.clearAwareness()
     this.driftChallenge.bust()
     this.trial.invalidate('reset')
+    this.callouts.quiet(this.race.timer.totalMs)
     this.playerEntry.checkpoint = this.race.lastCheckpoint
     this.playerEntry.index = this.progress.index
     // Free Roam goes anywhere, so put the car on the nearest gate rather than the last one passed.
@@ -1256,6 +1263,20 @@ export class Game {
       saveTrialRecord(r.track, r.car, r.build, this.trial.personalBest)
     }
     this.audio.playDriftCue(result.valid && result.sessionBest ? 'bank' : result.valid ? 'link' : 'bust')
+  }
+
+  /** At the player's finish: time to the nearest car, ms (finished ones by finish time, the rest by distance at the player's speed). */
+  private nearestFinishGap(): number | null {
+    const mine = this.playerEntry.finishMs
+    if (mine === null || this.opponents.length === 0) return null
+    const speed = Math.max(5, Math.abs(this.vehicle.controller.forwardSpeed))
+    const at = this.standings.distance(this.playerEntry)
+    let gap = Infinity
+    for (const o of this.opponents) {
+      const e = o.entry
+      gap = Math.min(gap, e.finishMs !== null ? Math.abs(mine - e.finishMs) : (Math.abs(at - this.standings.distance(e)) / speed) * 1000)
+    }
+    return Number.isFinite(gap) ? gap : null
   }
 
   /** Where a car in `entry`'s place goes back on the road: centreline, road height, facing the race direction. */
@@ -1470,6 +1491,7 @@ export class Game {
       const standings = this.standings.snapshot(this.entries)
       this.finishPosition = standings.find(row => row.player)?.position ?? 1
       this.finishFieldSize = this.entries.length
+      this.finishGapMs = this.nearestFinishGap()
       this.finish.start(matchMedia('(prefers-reduced-motion: reduce)').matches)
       // Slide toward whichever side has more room before a wall (a paved pit
       // lane behind a pit wall reads as wide road, so measure, don't guess).
@@ -2015,6 +2037,7 @@ export class Game {
       previousStandings.length !== this.entries.length ||
       this.entries.some(entry => previousStandings.find(row => row.id === entry.id)?.finishMs !== entry.finishMs)
     const standings = refreshStandings ? this.standings?.snapshot(this.entries) ?? [] : previousStandings
+    this.updateCallouts(standings)
     if (refreshStandings) this.standingsPublishedAt = now
     const previousLabels = telemetryStore.getState().rivalLabels
     const labelsUnchanged = previousLabels.length === this.opponents.length && this.opponents.every((o, i) => {
@@ -2105,8 +2128,28 @@ export class Game {
       trialGateCount: this.track.checkpoints.length,
       trialEnded: this.trialEnded,
       standings,
+      callout: this.callouts.current,
       opponents: this.opponents.map(o => ({ id: o.id, x: o.vehicle.position.x, z: o.vehicle.position.z })),
     })
+  }
+
+  /** Quick Race only, while racing or just finished; never over the countdown or the finish sting. */
+  private updateCallouts(standings: readonly { player: boolean; position: number }[]): void {
+    const { settings, phase } = gameStore.getState()
+    if (settings.mode !== 'quick' || !settings.callouts || (this.race.state !== 'racing' && this.race.state !== 'finished')) {
+      this.callouts.current = null
+      return
+    }
+    const shown = this.callouts.update({
+      timeMs: this.race.timer.totalMs,
+      position: standings.find((row) => row.player)?.position ?? 1,
+      fieldSize: standings.length,
+      lap: this.race.lap,
+      totalLaps: this.race.totalLaps,
+      finished: this.playerEntry.finishMs !== null,
+      finishGapMs: this.finishGapMs,
+    })
+    if (shown && shown.kind !== 'finish' && phase === 'racing') this.audio.playCallout(shown.kind, settings.calloutVolume)
   }
 
   /** Meters to the finish: the rest of this lap plus every lap after it. */
