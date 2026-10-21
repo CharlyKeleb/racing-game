@@ -36,3 +36,57 @@ describe('commentary duo', () => {
     }
   })
 })
+
+it('avoids repeating a take for the same speaker and event when alternatives are recorded', () => {
+  const director = new CommentaryDirector(() => 0)
+  const available = () => [0, 1, 2]
+  const first = director.chooseTake('alex', 'overtake', available)
+  const next = director.chooseTake('alex', 'overtake', available)
+  expect(first).toEqual({ speaker: 'alex', variant: 0 })
+  expect(next).toEqual({ speaker: 'alex', variant: 1 })
+  expect(director.chooseTake('alex', 'lead', available)?.variant).toBe(0)
+})
+
+it('does not select a new variation until its recording is available', () => {
+  const director = new CommentaryDirector(() => .99)
+  const baseOnly = () => [0]
+  for (let i = 0; i < 10; i++) expect(director.chooseTake('duo', 'overtake', baseOnly)?.variant).toBe(0)
+  expect(director.chooseTake('duo', 'lead', () => [])).toBeNull()
+})
+
+it('only selects occasional complete exchanges in duo mode, spaced 45 seconds apart', () => {
+  const director = new CommentaryDirector(() => 0)
+  expect(director.chooseExchange('alex', 'lead', () => true, 0)).toBe(false)
+  expect(director.chooseExchange('duo', 'lead', () => false, 0)).toBe(false)
+  expect(director.chooseExchange('duo', 'lead', () => true, 0)).toBe(true)
+  director.markExchangeHeard()
+  expect(director.chooseExchange('duo', 'overtake', () => true, 44999)).toBe(false)
+  expect(director.chooseExchange('duo', 'raceComplete', () => true, 45000)).toBe(true)
+  const quietDirector = new CommentaryDirector(() => .9)
+  expect(quietDirector.chooseExchange('duo', 'lead', () => true, 0)).toBe(true)
+  quietDirector.markExchangeHeard()
+  expect(quietDirector.chooseExchange('duo', 'lead', () => true, 45000)).toBe(false)
+})
+
+it('does not start an exchange with a third consecutive Alex line', () => {
+  const director = new CommentaryDirector(() => 0)
+  director.markExchangeHeard()
+  director.recordSpeaker('alex')
+  director.recordSpeaker('alex')
+  expect(director.chooseExchange('duo', 'lead', () => true, 0)).toBe(false)
+  director.recordSpeaker('camille')
+  expect(director.chooseExchange('duo', 'lead', () => true, 0)).toBe(true)
+})
+
+
+it('retries at the finish if the first exchange was interrupted before Camille spoke', () => {
+  const director = new CommentaryDirector(() => .99)
+  expect(director.chooseExchange('duo', 'lead', () => true, 10000)).toBe(true)
+  expect(director.needsExchange).toBe(true)
+  expect(director.chooseExchange('duo', 'raceComplete', () => true, 15000)).toBe(true)
+  director.markExchangeHeard()
+  expect(director.needsExchange).toBe(false)
+  director.startRace()
+  expect(director.needsExchange).toBe(true)
+  expect(director.chooseExchange('duo', 'overtake', () => true, 16000)).toBe(true)
+})
