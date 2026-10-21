@@ -77,7 +77,7 @@ export class TireSmoke {
         this.emitDebt[i] = 0
         continue
       }
-      let debt = (this.emitDebt[i] ?? 0) + this.rate * (0.25 + 0.75 * k) * (1 + 0.5 * burnout) * Math.min(dt, .05) * this.emission
+      let debt = (this.emitDebt[i] ?? 0) + this.rate * (0.25 + 0.75 * k) * (1 + 0.3 * burnout) * Math.min(dt, .05) * this.emission
       while (debt >= 1) {
         this.spawn(w, carVelocity, k)
         debt -= 1
@@ -90,9 +90,11 @@ export class TireSmoke {
   private spawn(w: WheelState, carVel: { x: number; y: number; z: number }, k: number): void {
     const spread = w.cfg.width
     const shade = 0.84 + Math.random() * 0.08
-    _p.x = w.contactPoint.x + (Math.random() - 0.5) * spread
+    // In a burnout the smoke is born just behind the tread, so the spinning tyre itself still shows.
+    const behind = this.burnout * (0.45 + 0.35 * Math.random())
+    _p.x = w.contactPoint.x + (Math.random() - 0.5) * spread + this.throwX * behind
     _p.y = w.contactPoint.y + 0.12
-    _p.z = w.contactPoint.z + (Math.random() - 0.5) * spread
+    _p.z = w.contactPoint.z + (Math.random() - 0.5) * spread + this.throwZ * behind
     // In a burnout the tread flings the smoke back and out from under the car.
     const b = this.burnout, fling = b * (1.5 + 2 * Math.random())
     _p.vx = carVel.x * 0.3 + (Math.random() - 0.5) * (1.6 + 2 * b) + this.throwX * fling

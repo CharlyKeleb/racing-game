@@ -1646,6 +1646,8 @@ export class Game {
       const lightsT = Math.min(1, (COUNTDOWN_SEC - this.race.countdown) / COUNTDOWN_SEC)
       const gridFraming = this.camera.mode === 'cockpit' ? 0 : phase === 'countdown' ? 1 - 0.5 * lightsT * lightsT * (3 - 2 * lightsT) : this.camera.mode === 'chase' ? 0.5 * Math.max(0,1-this.race.timer.totalMs/1200) : 0
       this.camera.driftFraming = gameStore.getState().settings.mode === 'drift' ? .82 : .55
+      const burnout = this.vehicle.controller.burnout
+      this.camera.burnoutHold = burnout.holding ? burnout.intensity : 0
       this.camera.update(this.vehicle.model.root, this.vehicle.speedKmh, dt, this.vehicle.controller.nitro.intensity, this.vehicle.motion,gridFraming,this.vehicle.model.body)
       this.effects.update(this.vehicle, dt)
       this.sparks.update(dt)

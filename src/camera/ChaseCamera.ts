@@ -97,6 +97,16 @@ export class ChaseCamera {
   maxBank = 0.035
   /** In a slide the camera swings toward the direction of travel by up to this share, so you see the car sideways. */
   driftFraming = 0.55
+  /**
+   * Burnout (0..1, set by Game): the chase camera holds the direction it had
+   * when the burnout started instead of turning with the car, so a rotating
+   * burnout swings the car's side and spinning tyres into view, like NFS.
+   * It glides back behind the car once the burnout ends.
+   */
+  burnoutHold = 0
+  private readonly heldDir = new THREE.Vector3(0, 0, 1)
+  private holdActive = false
+  private holdBlend = 0
   /** Extra degrees of FOV at full nitro. */
   nitroFovKick = 9
   /** Extra chase distance at full nitro, meters (the car surges away from the lens). */
@@ -201,6 +211,18 @@ export class ChaseCamera {
           const t = Math.min(1, slip / 0.6) * this.driftFraming
           if (t > 0 && _vdir.dot(_fwd) > 0) _fwd.lerp(_vdir, t).normalize()
         }
+      }
+      if (this.burnoutHold > 0 && !this.holdActive) this.heldDir.copy(_fwd)
+      this.holdActive = this.burnoutHold > 0
+      // Ease in quickly, ease back behind the car slowly once it's over.
+      this.holdBlend += ((this.holdActive ? 1 : 0) - this.holdBlend) * damp(this.holdActive ? 8 : 1.5, dt)
+      if (this.holdBlend > 0.001) {
+        // Interpolate the heading angle (not the vectors): the car can swing a full half-turn.
+        const carYaw = Math.atan2(_fwd.x, _fwd.z)
+        let delta = Math.atan2(this.heldDir.x, this.heldDir.z) - carYaw
+        delta = Math.atan2(Math.sin(delta), Math.cos(delta))
+        const yaw = carYaw + delta * this.holdBlend
+        _fwd.set(Math.sin(yaw), 0, Math.cos(yaw))
       }
       const dist = this.distance + gridFraming * 2.5 + speedT * this.speedPullBack + this.kick * this.nitroPullBack + surge
       _desired.copy(target.position).addScaledVector(_fwd, -dist)
@@ -322,6 +344,7 @@ export class ChaseCamera {
     this.lookBack=this.wasLookingBack=false
     this.camera.up.set(0, 1, 0)
     this.impactY.reset(); this.impactZ.reset(); this.impactRoll.reset()
+    this.holdActive = false; this.holdBlend = 0
     this.lastJolt = -Infinity
     this.kick = this.appliedKick = 0
     this.initialised = false
