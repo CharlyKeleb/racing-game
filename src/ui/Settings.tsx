@@ -98,13 +98,14 @@ export function Settings({ onClose }: { onClose?: () => void }) {
           <div><dt>Steer</dt><dd><kbd>A</kbd> <kbd>D</kbd> / <kbd>←</kbd> <kbd>→</kbd></dd></div>
           <div><dt>Handbrake</dt><dd><kbd>Space</kbd></dd></div>
           <div><dt>Nitro</dt><dd><kbd>Shift</kbd></dd></div>
+          <div><dt>Burnout</dt><dd><kbd>S</kbd> + <kbd>W</kbd> at a standstill</dd></div>
           <div><dt>Shift up / down (manual)</dt><dd><kbd>E</kbd> <kbd>Q</kbd></dd></div>
           <div><dt>Restart run / back to start</dt><dd><kbd>T</kbd></dd></div>
           <div><dt>Launch</dt><dd><kbd>Space</kbd> + <kbd>W</kbd>, let go at lights out</dd></div>
           <div><dt>Camera / reset / pause</dt><dd><kbd>C</kbd> <kbd>R</kbd> <kbd>Esc</kbd></dd></div>
           <div><dt>Look back (hold)</dt><dd><kbd>B</kbd> / gamepad R3</dd></div>
         </dl>}
-        {section === 'controls' && <p className="settings__help">Drift: tap brake or handbrake while turning. Tap nitro again on the cue for a perfect boost. On the grid, hold handbrake or brake, keep the revs in the green band and let go when the lights go out for a launch. Gamepads are supported.</p>}
+        {section === 'controls' && <p className="settings__help">Drift: tap brake or handbrake while turning. Tap nitro again on the cue for a perfect boost. On the grid, hold handbrake or brake, keep the revs in the green band and let go when the lights go out for a launch. Burnout: stopped, hold brake and floor the throttle; let go of the brake to launch out of it. Gamepads are supported.</p>}
       </div>
     </div>
     <footer className="settings__footer"><span>Changes save automatically</span>{onClose && <Button variant="primary" onClick={onClose}>Done</Button>}</footer>

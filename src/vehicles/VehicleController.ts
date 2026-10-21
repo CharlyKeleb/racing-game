@@ -2,6 +2,7 @@ import { keyboardSteeringAngle } from './KeyboardSteering'
 import RAPIER from '@dimforge/rapier3d-compat'
 import * as THREE from 'three'
 import type { InputState } from '../input/InputManager'
+import { Burnout, BURNOUT_BRAKE, BURNOUT_THROTTLE } from './Burnout'
 import { Drift, type DriftConfig, type DriftGuide } from './Drift'
 import { Drivetrain, type GearRequest } from './Drivetrain'
 import { Nitro } from './Nitro'
@@ -29,6 +30,11 @@ export interface WheelState {
   /** What the tire is on, for grip and for sand / dust effects. */
   surface: Surface
 }
+
+/** Burnout: tread sliding speed at full spin (m/s; smoke is full at 12), extra visual wheel spin (rad/s) and revs (share of redline). */
+const BURNOUT_SLIDE = 16
+const BURNOUT_SPIN = 70
+const BURNOUT_RPM = 0.8
 
 // Scratch objects — the controller runs at 60 Hz, so avoid per-tick allocation.
 const _q = new THREE.Quaternion()
@@ -73,6 +79,8 @@ export class VehicleController {
   launchPush = 0
   readonly nitro: Nitro
   readonly drift = new Drift()
+  /** Brake + full throttle at a standstill: driven tyres spin and smoke while the car is held. */
+  readonly burnout = new Burnout()
   private eventDrift: DriftConfig | null = null
   setDriftMode(enabled: boolean): void {
     this.eventDrift = enabled ? {...this.cfg.drift, minSpeed:9, entryLock:.4, baseAngle:.46, holdAngle:.78, minAngle:.18, exitTime:.55, counterExitTime:.9, scrub:.025, pathG:.5} : null
@@ -90,6 +98,8 @@ export class VehicleController {
   private brake = 0
   /** Rear wheels (behind the axle midpoint): the ones that let go in a drift. */
   private readonly isRear: boolean[]
+  /** Wheels that spin in a burnout: the driven axle (the rears on an AWD car; the fronts hold). */
+  private readonly burnoutWheel: boolean[]
   /** Fraction of the drivetrain's force each wheel gets (0 for undriven wheels). */
   private readonly driveShare: number[]
   private readonly drivenRadius: number
@@ -134,6 +144,7 @@ export class VehicleController {
     )
     this.drivenRadius = cfg.wheels.find((w) => w.driven)?.radius ?? 0.35
     this.isRear = cfg.wheels.map((w) => !isFront(w))
+    this.burnoutWheel = cfg.wheels.map((w) => w.driven && (rearDriven > 0 ? !isFront(w) : isFront(w)))
     this.wheels = cfg.wheels.map((w) => ({
       cfg: w,
       suspension: new Suspension(cfg.suspension),
@@ -188,9 +199,14 @@ export class VehicleController {
     const reversing = this.drivetrain.gear < 0
     // Total speed, not forward speed: forward speed crosses 0 mid-spin.
     const stopped = _vel.length() < 1
+    // Both pedals at a standstill is a burnout, which wants 1st (brake-then-throttle
+    // used to drop into reverse first and back away instead).
+    const burnoutPedals = input.throttle >= BURNOUT_THROTTLE && input.brake >= BURNOUT_BRAKE
     const gearRequest: GearRequest = !stopped
       ? 0
-      : input.brake > 0.1 && input.throttle < 0.1
+      : burnoutPedals
+        ? 1
+        : input.brake > 0.1 && input.throttle < 0.1
         ? -1
         : input.throttle > 0.1 && input.brake < 0.1
           ? 1
@@ -220,8 +236,20 @@ export class VehicleController {
       dt,
     )
 
+    this.burnout.update(dt, {
+      throttle: input.throttle,
+      brake: input.brake,
+      handbrake: input.handbrake,
+      speed,
+      forward: this.drivetrain.gear > 0 || (stopped && burnoutPedals),
+      grounded: groundedCount > 0,
+    })
+
     const gearBefore = this.drivetrain.gear
     const driveForce = this.drivetrain.update(this.forwardSpeed, this.drivenRadius, driveThrottle, gearRequest, dt, brakeInput)
+    const burn = this.burnout.intensity
+    // The engine screams against the spinning tyres (the drivetrain alone would sit at its clutch-slip revs).
+    if (burn > 0) this.drivetrain.rpm = Math.max(this.drivetrain.rpm, cfg.engine.idleRpm + (cfg.engine.redlineRpm * BURNOUT_RPM - cfg.engine.idleRpm) * burn * input.throttle)
     const downshift = this.drivetrain.gear > 0 && this.drivetrain.gear < gearBefore
 
     // Drift: entries (fast turn-in, brake-tap, downshift, handbrake) and exits.
@@ -304,7 +332,8 @@ export class VehicleController {
       const vLong = _vel.dot(_wFwd)
       const vLat = _vel.dot(_wRight)
 
-      let longitudinal = driveForce * this.driveShare[i]
+      // Held in a burnout, the drive goes into spinning the tyres, not moving the car.
+      let longitudinal = this.burnout.holding ? 0 : driveForce * this.driveShare[i]
       const brake = (cfg.brakeForce / this.wheels.length) * brakeInput + (wc.handbrake && input.handbrake ? cfg.handbrakeForce / 2 : 0)
       if (brake > 0) {
         // Clamp so brakes stop the wheel instead of reversing it.
@@ -333,6 +362,11 @@ export class VehicleController {
       )
       w.slip = tire.slip
       w.slide = tire.slide
+      if (burn > 0 && this.burnoutWheel[i]) {
+        // The tread is spinning over the road: that's what smokes, marks and squeals.
+        w.slip = Math.max(w.slip, burn)
+        w.slide = Math.max(w.slide, burn * BURNOUT_SLIDE)
+      }
 
       // Apply tire forces slightly above the contact patch to tame body roll.
       _point.copy(w.contactPoint).addScaledVector(_up, wc.radius * 0.6)
@@ -342,7 +376,7 @@ export class VehicleController {
         .addScaledVector(_wRight, tire.lateral * dt)
       body.applyImpulseAtPoint(_impulse, _point, true)
 
-      w.spin += (vLong / wc.radius) * dt
+      w.spin += (vLong / wc.radius + (this.burnoutWheel[i] ? burn * BURNOUT_SPIN : 0)) * dt
     }
 
     if (cfg.arcade.enabled) {
@@ -515,6 +549,7 @@ export class VehicleController {
     this.drivetrain.reset()
     this.nitro.reset()
     this.drift.reset()
+    this.burnout.reset()
     for (const w of this.wheels) {
       w.suspension.reset()
       w.slip = 0
