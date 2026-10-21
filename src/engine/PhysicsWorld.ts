@@ -44,9 +44,9 @@ export class PhysicsWorld {
    * roof over the street (a station canopy, a deck), not floor: look on below
    * it, up to three roofs deep. A roof with nothing under it is no floor at all.
    */
-  floorHeight(x: number, nearY: number, z: number, headroom = 1.5): number | null {
-    let h = this.groundHeight(x, nearY, z)
-    for (let i = 0; i < 3 && h !== null && h > nearY + headroom; i++) h = this.groundHeight(x, h - 4.05, z)
+  floorHeight(x: number, nearY: number, z: number, only?: (collider: RAPIER.Collider) => boolean, headroom = 1.5): number | null {
+    let h = this.groundHeight(x, nearY, z, only)
+    for (let i = 0; i < 3 && h !== null && h > nearY + headroom; i++) h = this.groundHeight(x, h - 4.05, z, only)
     return h !== null && h > nearY + headroom ? null : h
   }
 
