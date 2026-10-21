@@ -456,6 +456,17 @@ kbd { font-family: inherit; font-size: 11px; padding: 1px 6px; border: 1px solid
 }
 
 /* Quick Race callouts (#90): one short line below the top HUD, clear of the road. */
+.hud-now-playing {
+  position: absolute; left: 0; bottom: calc(100% + 10px); display: grid; gap: 2px; min-width: 180px; max-width: 260px;
+  padding: 8px 12px; border-left: 3px solid var(--accent); background: rgba(8, 10, 14, .72); color: #fff; pointer-events: none;
+  animation: hud-now-playing 6s ease-out both;
+}
+.hud-now-playing .eyebrow { font-size: 9px; letter-spacing: .14em; color: var(--accent); }
+.hud-now-playing b { font-style: italic; font-weight: 900; font-size: 15px; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hud-now-playing span:last-child { font-size: 11px; opacity: .75; }
+@keyframes hud-now-playing { 0% { opacity: 0; transform: translateX(-12px); } 8%, 85% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .hud-now-playing { animation-name: hud-now-playing-fade; } @keyframes hud-now-playing-fade { 0%, 85% { opacity: 1; } 100% { opacity: 0; } } }
+.overlay--touch .hud-now-playing { display: none; }
 .race-callout-slot { position: absolute; top: 15%; left: 50%; transform: translateX(-50%); pointer-events: none; }
 .race-callout {
   display: flex; align-items: baseline; gap: 12px; padding: 6px 22px; white-space: nowrap;

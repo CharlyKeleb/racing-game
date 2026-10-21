@@ -41,6 +41,9 @@ export interface Settings {
   menuMusic: boolean
   /** Track id from audio/musicTracks.ts. */
   musicTrack: MusicTrackId
+  /** In-race soundtrack on/off, and its level (0..1, under the master volume). */
+  raceMusic: boolean
+  raceMusicVolume: number
   camera: CameraMode
   cameraMotion: boolean
   /** Speed and nitro FOV widening (#18). Off by default with prefers-reduced-motion. */
@@ -83,6 +86,8 @@ export interface GameState {
   phase: GamePhase
   /** True only while the menu soundtrack is audibly playing. */
   musicPlaying: boolean
+  /** The in-race track now playing, for the HUD's now-playing card; null off track or with the radio off. */
+  raceTrack: { title: string; artist: string; license: string } | null
   /** Display name of the loaded car, set by the engine. */
   carName: string
   /** True while the garage swaps cars (one drives off, the next drives in). */
@@ -166,6 +171,8 @@ const defaultSettings: Settings = {
   tracksideVolume: .65,
   menuMusic: true,
   musicTrack: MUSIC_TRACKS[0].id,
+  raceMusic: true,
+  raceMusicVolume: .8,
   camera: 'chase',
   cameraMotion: !(typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches),
   fovEffects: !(typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches),
@@ -230,6 +237,8 @@ function loadSettings(): Settings {
     if (merged.renderer !== 'webgpu') merged.renderer = 'webgl'
     if (typeof merged.menuMusic !== 'boolean') merged.menuMusic = defaultSettings.menuMusic
     if (!isMusicTrack(merged.musicTrack)) merged.musicTrack = defaultSettings.musicTrack
+    if (typeof merged.raceMusic !== 'boolean') merged.raceMusic = defaultSettings.raceMusic
+    merged.raceMusicVolume = typeof merged.raceMusicVolume === 'number' && Number.isFinite(merged.raceMusicVolume) ? Math.max(0, Math.min(1, merged.raceMusicVolume)) : defaultSettings.raceMusicVolume
     if (!selectableCars().some((c) => c.id === merged.car)) merged.car = defaultSettings.car
     return merged
   } catch {
@@ -266,6 +275,7 @@ const initialBuilds = loadBuilds()
 export const gameStore = createStore<GameState>()((set, get) => ({
   phase: 'boot',
   musicPlaying: false,
+  raceTrack: null,
   carName: '',
   trackSwitching: false,
   carSwitching: false,

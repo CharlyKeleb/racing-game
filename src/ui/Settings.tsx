@@ -91,9 +91,9 @@ export function Settings({ onClose }: { onClose?: () => void }) {
             <span className="settings__help">Flags, wind and pit equipment on supported circuits. Zero mutes trackside ambience.</span>
           </label>
           <label className="ui-field settings__volume">
-            <span className="ui-field__label">Master volume <Help label="Master volume">Adjusts all game sound, including the engine, tires, effects, menu music and garage ambience. Zero mutes the game.</Help><em>{Math.round(settings.masterVolume*100)}%</em></span>
+            <span className="ui-field__label">Master volume <Help label="Master volume">Adjusts all game sound, including the engine, tires, effects, race and menu music, and garage ambience. Zero mutes the game.</Help><em>{Math.round(settings.masterVolume*100)}%</em></span>
             <input aria-label="Master volume" className="ui-range" type="range" min={0} max={1} step={.05} value={settings.masterVolume} onChange={e=>update({masterVolume:Number(e.target.value)})}/>
-            <span className="settings__help">Engine, tires, effects, menu music and garage ambience.</span>
+            <span className="settings__help">Engine, tires, effects, race and menu music, and garage ambience.</span>
           </label>
           <label className="ui-field settings__volume">
             <span className="ui-field__label">Callout chime <em>{Math.round(settings.calloutVolume * 100)}%</em></span>
@@ -101,6 +101,12 @@ export function Settings({ onClose }: { onClose?: () => void }) {
             <span className="settings__help">The short chime with Quick Race callouts. Zero keeps the text only.</span>
           </label>
           <Segmented<number> label="Menu music" value={settings.menuMusic?1:0} options={[[1,'On'],[0,'Off']]} onPick={v=>update({menuMusic:v===1})}/>
+          <Segmented<number> label="Race music" value={settings.raceMusic?1:0} options={[[1,'On'],[0,'Off']]} onPick={v=>update({raceMusic:v===1})}/>
+          {settings.raceMusic && <label className="ui-field settings__volume">
+            <span className="ui-field__label">Race music volume <em>{Math.round(settings.raceMusicVolume * 100)}%</em></span>
+            <input aria-label="Race music volume" className="ui-range" type="range" min={0} max={1} step={.05} value={settings.raceMusicVolume} onChange={e=>update({raceMusicVolume:Number(e.target.value)})}/>
+            <span className="settings__help">A shuffled rock, drum &amp; bass and electronic playlist from lights out to the results. It dips under commentary and callout chimes.</span>
+          </label>}
         </>}
         {section === 'controls' && <dl className="settings__controls">
           <div><dt>Accelerate</dt><dd><kbd>W</kbd> / <kbd>↑</kbd></dd></div>

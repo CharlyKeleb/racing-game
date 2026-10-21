@@ -1,4 +1,4 @@
-import { narrationMix, NARRATION_GAME_LEVEL } from './narrationMix'
+import { narrationMix, NARRATION_BED_LEVEL, NARRATION_HIT_LEVEL } from './narrationMix'
 import { TracksideAmbience } from './TracksideAmbience'
 import type { SpotterCue } from '../racing/ProximityRadar'
 import type { TracksideEmitter } from '../world/atmospherePlan'
@@ -15,7 +15,8 @@ import type { ImpactKind } from './ImpactModel'
 import { DEFAULT_NOISE_PROFILE, tyreBrakeLevels, type CarNoiseProfile, type TyreBrakeInput } from './TyreBrakeModel'
 import { GarageAmbience } from './GarageAmbience'
 import { MenuMusic } from './MenuMusic'
-import { MUSIC_TRACKS, musicTrack } from './musicTracks'
+import { MUSIC_TRACKS, musicTrack, type MusicTrack } from './musicTracks'
+import { RaceMusic } from './RaceMusic'
 import { decodeWav16, type EngineBank } from './GranularEngine'
 import type { EngineBankMessage } from './engineWorklet'
 import engineWorkletUrl from './engineWorklet.ts?worker&url'
@@ -80,7 +81,12 @@ export class AudioManager {
   private tracksideAreas: readonly TracksideEmitter[] | undefined
   /** Dips the player's engine and tyres under a crash. */
   private duck!: GainNode
+  /** Cues that mark a moment (spotter, callout chime): never ducked, so they stay on their event. */
   private fxBus!: GainNode
+  /** Engine, tyres, rivals, ambience and music: the bed that ducks under the commentary. */
+  private bed!: GainNode
+  /** Crashes and backfires: ducked lightly under the commentary, still felt. */
+  private hitBus!: GainNode
   private noiseProfile: CarNoiseProfile = DEFAULT_NOISE_PROFILE
 
   // Synth stand-in until the recordings load.
@@ -99,6 +105,13 @@ export class AudioManager {
   private music: MenuMusic | null = null
   private musicTrackId: string = MUSIC_TRACKS[0].id
   private musicEnabled = true
+  /** In-race soundtrack; created on unlock, started at lights out (setRaceMusicActive). */
+  private raceMusic: RaceMusic | null = null
+  private raceMusicEnabled = true
+  private raceMusicVolume = 1
+  private raceMusicActive = false
+  /** The race track now playing (null when the radio is off or not racing), for the HUD card. */
+  onRaceMusicTrack: ((track: MusicTrack | null) => void) | null = null
   /** Audible playback state for the UI; false while autoplay is blocked or muted. */
   onMenuMusicState: ((playing: boolean) => void) | null = null
   /** 'menu' = garage room tone, engine held quiet (except a swap's rev); 'race' = engine up, room tone out. */
@@ -113,6 +126,7 @@ export class AudioManager {
 
   private volume = 1
   private mixTarget: number | null = null
+  private ducked = false
   private readonly unsubscribeNarration: () => void
 
   constructor() {
@@ -154,6 +168,7 @@ export class AudioManager {
       void this.ctx.resume()
       // A blocked first play left the element paused; this gesture unblocks it.
       this.music?.retry()
+      this.raceMusic?.retry()
       return
     }
     const ctx = Howler.ctx ?? new AudioContext()
@@ -175,24 +190,34 @@ export class AudioManager {
     // Engine and tyres duck under a crash (see impact), so the hit cuts
     // through instead of being squashed into the engine by the limiter.
     this.duck = ctx.createGain()
-    this.carBus.connect(this.duck).connect(this.master)
+    // Commentary ducks the bed and, less, the hits; the master and the event
+    // cues (start lights, callout chime, finish sting) stay put so a line
+    // never swallows the moment it describes.
+    this.bed = ctx.createGain()
+    this.bed.connect(this.master)
+    this.carBus.connect(this.duck).connect(this.bed)
     // The player's crashes bypass the car bus: they mustn't duck themselves,
     // and the menu holding the engine quiet mustn't mute them.
+    this.hitBus = ctx.createGain()
+    this.hitBus.connect(this.master)
     this.fxBus = ctx.createGain()
     this.fxBus.connect(this.master)
     this.sound = new CarSound(ctx, this.carBus)
     this.tyres = new TyreBrakeSound(ctx, this.noiseProfile)
     this.tyres.output.connect(this.carBus)
-    this.impacts = new ImpactSound(ctx, this.fxBus)
+    this.impacts = new ImpactSound(ctx, this.hitBus)
     void loadImpactRecordings(ctx)
-    this.backfires = new BackfireSound(ctx, this.fxBus)
+    this.backfires = new BackfireSound(ctx, this.hitBus)
     void loadBackfireRecordings(ctx)
     this.driving = new DrivingSound(ctx, this.carBus)
-    this.ambience = new GarageAmbience(ctx, this.master)
-    this.music = new MenuMusic(ctx, this.master, (playing) => this.onMenuMusicState?.(playing))
+    this.ambience = new GarageAmbience(ctx, this.bed)
+    this.music = new MenuMusic(ctx, this.bed, (playing) => this.onMenuMusicState?.(playing))
     this.music.setTrack(musicTrack(this.musicTrackId))
     this.music.setEnabled(this.musicEnabled)
     this.music.setActive(this.scene === 'menu')
+    this.raceMusic = new RaceMusic(ctx, this.bed, (track) => this.onRaceMusicTrack?.(track))
+    this.raceMusic.setEnabled(this.raceMusicEnabled, this.raceMusicVolume)
+    this.raceMusic.setActive(this.raceMusicActive)
     this.sound.setFiringPerRev(this.firingPerRev)
 
     this.synthGain = ctx.createGain()
@@ -351,6 +376,7 @@ export class AudioManager {
       tone.onended = () => { tone.disconnect(); gain.disconnect() }
       tone.start(time); tone.stop(time + .24)
     })
+    this.raceMusic?.dipForChime()
   }
 
   /** A small rising interval for a bank/transition, falling for a broken chain. */
@@ -424,6 +450,19 @@ export class AudioManager {
     this.music.setActive(this.scene === 'menu')
   }
 
+  /** In-race soundtrack on/off and level (0..1); safe before unlock. */
+  setRaceMusic(enabled: boolean, volume: number): void {
+    this.raceMusicEnabled = enabled
+    this.raceMusicVolume = volume
+    this.raceMusic?.setEnabled(enabled, volume)
+  }
+
+  /** Lights out through the results; follow every frame (idempotent). */
+  setRaceMusicActive(active: boolean): void {
+    this.raceMusicActive = active
+    this.raceMusic?.setActive(active)
+  }
+
   /** Menu/garage vs. on track: sets the room tone and whether the engine is heard. */
   setScene(scene: 'menu' | 'race'): void {
     this.scene = scene
@@ -458,18 +497,23 @@ export class AudioManager {
   }
 
   private applyNarrationMix(): void {
-    const ducked = narrationMix.getState().voices > 0
-    const level = this.volume * (ducked ? NARRATION_GAME_LEVEL : 1)
-    Howler.volume(level)
+    Howler.volume(this.volume)
     if (!this.master || !this.ctx) return
-    const target = level * .9
-    if (target === this.mixTarget) return
-    const gain = this.master.gain
+    const ducked = narrationMix.getState().voices > 0
     const now = this.ctx.currentTime
-    gain.cancelScheduledValues(now)
-    gain.setValueAtTime(gain.value, now)
-    gain.setTargetAtTime(target, now, ducked ? .035 : .2)
-    this.mixTarget = target
+    // Quick under the first syllable, slow back up so the release doesn't pump.
+    const glide = (param: AudioParam, target: number) => {
+      param.cancelScheduledValues(now)
+      param.setValueAtTime(param.value, now)
+      param.setTargetAtTime(target, now, ducked ? .035 : .25)
+    }
+    const master = this.volume * .9
+    if (master !== this.mixTarget) { glide(this.master.gain, master); this.mixTarget = master }
+    if (ducked === this.ducked) return
+    this.ducked = ducked
+    this.raceMusic?.setCommentary(ducked)
+    glide(this.bed.gain, ducked ? NARRATION_BED_LEVEL : 1)
+    glide(this.hitBus.gain, ducked ? NARRATION_HIT_LEVEL : 1)
   }
 
   update(state: CarSoundState, tyres?: TyreBrakeInput): void {
@@ -513,7 +557,7 @@ export class AudioManager {
     if (areas !== this.tracksideAreas) {
       this.tracksideAreas = areas
       if (areas?.length) {
-        this.trackside ??= new TracksideAmbience(this.ctx, this.master)
+        this.trackside ??= new TracksideAmbience(this.ctx, this.bed)
         this.trackside.setAreas(areas)
       } else { this.trackside?.dispose(); this.trackside = null }
     }
@@ -526,11 +570,13 @@ export class AudioManager {
   suspend(): void {
     this.clearSpotter()
     this.paused = true
+    this.raceMusic?.setHeld(true)
     void this.ctx?.suspend()
   }
 
   resume(): void {
     this.paused = false
+    this.raceMusic?.setHeld(false)
     void this.ctx?.resume()
   }
 
@@ -545,7 +591,7 @@ export class AudioManager {
     const ctx = this.ctx
     if (!ctx) return
     for (const car of cars) {
-      const rival = new OpponentAudio(ctx, this.master, car.firingPerRev, car.noise ?? DEFAULT_NOISE_PROFILE)
+      const rival = new OpponentAudio(ctx, this.bed, car.firingPerRev, car.noise ?? DEFAULT_NOISE_PROFILE)
       this.rivalNoise.push(car.noise ?? DEFAULT_NOISE_PROFILE)
       this.rivals.push(rival)
       const base = car.audioUrl
@@ -638,11 +684,15 @@ export class AudioManager {
     this.ambience?.dispose()
     this.music?.dispose()
     this.music = null
+    this.raceMusic?.dispose()
+    this.raceMusic = null
     this.sampled?.disconnect()
     this.sampled?.port.close()
     this.master?.disconnect()
     this.limiter?.disconnect()
     this.duck?.disconnect()
+    this.bed?.disconnect()
+    this.hitBus?.disconnect()
     this.fxBus?.disconnect()
     if (this.ctx && this.ctx !== Howler.ctx) void this.ctx.close()
     this.ctx = null

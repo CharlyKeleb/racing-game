@@ -47,6 +47,7 @@ export function Hud() {
       <HudRaceInfo />
       <HudLeaderboard />
       <div className="hud-bl">
+        <HudNowPlaying />
         <Minimap />
       </div>
 
@@ -243,6 +244,17 @@ function HudLaunch() {
     return <div className={`hud-nitro-call launch-call launch-call--${t.grade}`}>{LAUNCH_CALLS[t.grade]}</div>
   }
   return null
+}
+
+/** Race radio card: title and author of the track that just started (credits the CC BY ones too). */
+function HudNowPlaying() {
+  const track = useGame(s => s.raceTrack)
+  if (!track) return null
+  return <div key={track.title} className="hud-now-playing" role="status" aria-label={`Now playing: ${track.title} by ${track.artist}`}>
+    <span className="eyebrow">Race radio</span>
+    <b>{track.title}</b>
+    <span>{track.artist} · {track.license}</span>
+  </div>
 }
 
 /** Quick Race callout (#90): one short line under the top of the screen, announced to screen readers. */

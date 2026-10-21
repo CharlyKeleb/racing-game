@@ -355,6 +355,10 @@ export class Game {
     this.audio.onMenuMusicState = (playing) => {
       if (gameStore.getState().musicPlaying !== playing) gameStore.setState({ musicPlaying: playing })
     }
+    this.audio.onRaceMusicTrack = (track) => {
+      const raceTrack = track && { title: track.title, artist: track.artist, license: track.license }
+      if (gameStore.getState().raceTrack?.title !== raceTrack?.title) gameStore.setState({ raceTrack })
+    }
     this.unsubscribe = gameStore.subscribe((s, prev) => {
       if (s.settings.car !== prev.settings.car && this.vehicle) void this.switchCar(s.settings.car)
       if (s.settings.track !== prev.settings.track && this.track) void this.switchTrack(s.settings.track)
@@ -1575,6 +1579,8 @@ export class Game {
       this.loop.timeScale = this.finish.timeScale
       dt *= this.loop.timeScale
     }
+    // The radio comes on at lights out and plays through the results; a restart's grid is quiet again.
+    this.audio.setRaceMusicActive(phase === 'racing' || phase === 'finished' || phase === 'paused')
     if (phase === 'loading' && this.raceTransition) return
     this.camera.lookBack=(phase==='racing'||phase==='countdown')&&!!this.input.state.lookBack
     for (const opponent of this.opponents) {
@@ -2297,6 +2303,7 @@ export class Game {
     }
     this.audio.setVolume(s.masterVolume)
     this.audio.setMenuMusic(s.musicTrack, s.menuMusic)
+    this.audio.setRaceMusic(s.raceMusic, s.raceMusicVolume)
     if (this.camera) {
       this.camera.mode = s.camera
       this.camera.cameraMotion = s.cameraMotion
@@ -2343,6 +2350,7 @@ export class Game {
     this.input.dispose()
     this.audio.dispose()
     this.audio.onMenuMusicState = null
+    this.audio.onRaceMusicTrack = null
     this.spoiler?.dispose()
     this.whipStreaks.dispose()
     this.livery?.dispose()
