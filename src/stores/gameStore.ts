@@ -172,7 +172,7 @@ const defaultSettings: Settings = {
   menuMusic: true,
   musicTrack: MUSIC_TRACKS[0].id,
   raceMusic: true,
-  raceMusicVolume: .7,
+  raceMusicVolume: .8,
   camera: 'chase',
   cameraMotion: !(typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches),
   fovEffects: !(typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches),

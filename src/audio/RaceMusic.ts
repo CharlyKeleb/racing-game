@@ -1,7 +1,7 @@
 import { RACE_MUSIC_TRACKS, RacePlaylist, type MusicTrack } from './musicTracks'
 
-/** Music level before the setting and master volume: under the engine, like a racing game's radio. */
-const LEVEL = 0.32
+/** Music level before the setting and master volume: up with the engine, like a racing game's radio. */
+const LEVEL = 0.6
 const FADE_IN = 1.6
 const FADE_OUT = 0.8
 /** On top of the bed duck: music drops ~14 dB in all under a commentary line. */
