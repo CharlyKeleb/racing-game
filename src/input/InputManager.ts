@@ -21,7 +21,7 @@ export interface InputState {
 }
 
 /** Edge-triggered actions, consumed once per press. */
-export type InputAction = 'pause' | 'reset' | 'camera' | 'skip' | 'restart'
+export type InputAction = 'pause' | 'reset' | 'camera' | 'skip' | 'restart' | 'shiftUp' | 'shiftDown'
 
 const KEY_ACTIONS: Record<string, InputAction> = {
   Enter: 'skip',
@@ -31,11 +31,14 @@ const KEY_ACTIONS: Record<string, InputAction> = {
   KeyC: 'camera',
   /** Time Trial quick restart / Free Roam back to the start. */
   KeyT: 'restart',
+  /** Manual gearbox (#14). */
+  KeyE: 'shiftUp',
+  KeyQ: 'shiftDown',
 }
 
 const GAMEPAD_DEADZONE = 0.12
 /** Standard mapping button indices. */
-const PAD = { A: 0, B: 1, X: 2, Y: 3, RB: 5, LT: 6, RT: 7, BACK: 8, START: 9, R3: 11 } as const
+const PAD = { A: 0, B: 1, X: 2, Y: 3, RB: 5, LT: 6, RT: 7, BACK: 8, START: 9, R3: 11, UP: 12, DOWN: 13 } as const
 
 export class InputManager {
   readonly state: InputState = { throttle: 0, brake: 0, steer: 0, handbrake: false, nitro: false }
@@ -82,6 +85,8 @@ export class InputManager {
       this.edge(pad, PAD.Y, 'camera')
       this.edge(pad, PAD.B, 'reset')
       this.edge(pad, PAD.BACK, 'restart')
+      this.edge(pad, PAD.UP, 'shiftUp')
+      this.edge(pad, PAD.DOWN, 'shiftDown')
     }
 
     const t = this.touch

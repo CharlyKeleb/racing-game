@@ -25,11 +25,15 @@ export function torqueAt(rpm: number, curve: [number, number][]): number {
 }
 
 /**
- * Engine + automatic gearbox. Pure — fed wheel speed, returns force at the
- * driven wheels. Manual shifting is a later feature (shift() exists).
+ * Engine + gearbox. Pure — fed wheel speed, returns force at the driven
+ * wheels. Automatic by default; with `manual` set the driver picks forward gears
+ * (requestShift) and the box never shifts on its own. Reverse is still engaged
+ * by holding brake at a standstill in both modes.
  */
 export class Drivetrain {
   gear: Gear = 1
+  /** Manual transmission (#14): no automatic up/down shifts. */
+  manual = false
   rpm: number
   private shiftTimer = 0
   private readonly cfg: EngineConfig
@@ -79,7 +83,7 @@ export class Drivetrain {
       this.shiftTimer -= dt
       return 0
     }
-    this.autoShift(braking > BRAKING && throttle < 0.1)
+    if (!this.manual) this.autoShift(braking > BRAKING && throttle < 0.1)
 
     const limiter = this.rpm >= cfg.redlineRpm ? 0 : 1
     const engineTorque = torqueAt(this.rpm, cfg.torqueCurve) * throttle * limiter
@@ -115,6 +119,19 @@ export class Drivetrain {
   /** Rpm a braking downshift may land at: config, else 500 below the upshift point (Sport-mode PDK). */
   private get brakeDownshiftRpm(): number {
     return this.cfg.brakeDownshiftRpm ?? this.cfg.shiftUpRpm - 500
+  }
+
+  /**
+   * Driver's paddle / key shift (manual mode). Up from reverse or neutral goes to 1st;
+   * down stops at 1st (reverse is still brake-at-standstill). Ignored mid-shift.
+   * @returns whether a shift started.
+   */
+  requestShift(direction: 1 | -1): boolean {
+    if (this.shiftTimer > 0) return false
+    const target = direction > 0 ? (this.gear <= 0 ? 1 : this.gear + 1) : this.gear - 1
+    if (target < 1 || target > this.topGear || (direction < 0 && this.gear <= 0)) return false
+    this.shift(target)
+    return true
   }
 
   shift(gear: Gear): void {

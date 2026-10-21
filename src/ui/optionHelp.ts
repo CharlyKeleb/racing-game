@@ -9,6 +9,7 @@ export const optionHelp: Record<string,string> = {
   'Camera movement':'Camera shake at speed, on bumps and on impacts, plus the sway into corners and under acceleration. Off holds the camera steady.',
   'Speed FOV':'Widens the view as you go faster and kicks it out when nitro fires. Off keeps the lens fixed.',
   'Speed lines':'The streaking overlay at the screen edges while nitro burns.',
+  'Transmission':'Automatic shifts for you. Manual: E shifts up and Q down (D-pad up and down on a gamepad, + and − on touch). The engine hits the limiter if you leave it too late. Hold brake at a standstill for reverse in both modes.',
   'Laps':'The number of complete laps needed to finish the race. Your choice is saved for future races.',
   'Quality':'Lower quality reduces rendering work. Choose Low if the game is not running smoothly.',
 }

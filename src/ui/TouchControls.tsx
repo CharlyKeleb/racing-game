@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import type { InputState } from '../input/InputManager'
 import { useGameInstance } from './GameContext'
+import { useGame } from './hooks'
 
 const RELEASED: InputState = { throttle: 0, brake: 0, steer: 0, handbrake: false, nitro: false, lookBack: false }
 
@@ -13,6 +14,7 @@ const RELEASED: InputState = { throttle: 0, brake: 0, steer: 0, handbrake: false
  */
 export function TouchControls() {
   const game = useGameInstance()
+  const manual = useGame((s) => s.settings.transmission === 'manual')
 
   useEffect(() => () => game?.setTouchInput(RELEASED), [game])
 
@@ -25,6 +27,10 @@ export function TouchControls() {
           <Hold className="touch-btn touch-btn--small" label="Drift" onChange={(v) => game?.setTouchInput({ handbrake: v })} />
           <Hold className="touch-btn touch-btn--brake" label="Brake" onChange={(v) => game?.setTouchInput({ brake: v ? 1 : 0 })} />
         </div>
+        {manual && <div className="touch-col touch-col--gears">
+          <button className="touch-btn touch-btn--small" aria-label="Shift up" onPointerDown={() => game?.triggerAction('shiftUp')}>+</button>
+          <button className="touch-btn touch-btn--small" aria-label="Shift down" onPointerDown={() => game?.triggerAction('shiftDown')}>−</button>
+        </div>}
         <div className="touch-col">
           <Hold className="touch-btn touch-btn--nitro" label="N₂O" onChange={(v) => game?.setTouchInput({ nitro: v })} />
           <Hold className="touch-btn touch-btn--gas" label="Gas" onChange={(v) => game?.setTouchInput({ throttle: v ? 1 : 0 })} />

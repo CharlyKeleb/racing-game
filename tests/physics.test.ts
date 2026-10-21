@@ -211,3 +211,47 @@ describe('Drivetrain: braking downshifts', () => {
     expect(d.gear).toBe(4)
   })
 })
+
+describe('Drivetrain: manual gearbox (#14)', () => {
+  it('never shifts on its own, even on the limiter or lugging', () => {
+    const d = new Drivetrain(cfg.engine)
+    d.manual = true
+    // Flat out at a speed that would be far past the upshift point in 1st.
+    for (let i = 0; i < 120; i++) d.update(40, 0.36, 1, 0, 1 / 60)
+    expect(d.gear).toBe(1)
+    expect(d.rpm).toBe(cfg.engine.redlineRpm)
+    // On the limiter there's no drive.
+    expect(d.update(40, 0.36, 1, 0, 1 / 60)).toBe(0)
+    d.shift(4)
+    for (let i = 0; i < 120; i++) d.update(5, 0.36, 0, 0, 1 / 60, 1)
+    expect(d.gear).toBe(4)
+  })
+
+  it('steps one gear per request, waits out the shift time, and stays in range', () => {
+    const d = new Drivetrain(cfg.engine)
+    d.manual = true
+    expect(d.requestShift(-1)).toBe(false)
+    expect(d.requestShift(1)).toBe(true)
+    expect(d.gear).toBe(2)
+    expect(d.requestShift(1)).toBe(false) // mid-shift
+    for (let i = 0; i < 30; i++) d.update(10, 0.36, 0, 0, 1 / 60)
+    for (let g = 3; g <= d.topGear; g++) {
+      expect(d.requestShift(1)).toBe(true)
+      for (let i = 0; i < 30; i++) d.update(10, 0.36, 0, 0, 1 / 60)
+    }
+    expect(d.gear).toBe(d.topGear)
+    expect(d.requestShift(1)).toBe(false)
+    expect(d.requestShift(-1)).toBe(true)
+    expect(d.gear).toBe(d.topGear - 1)
+  })
+
+  it('goes from reverse straight to first on an upshift', () => {
+    const d = new Drivetrain(cfg.engine)
+    d.manual = true
+    d.update(0, 0.36, 1, -1, 1 / 60)
+    expect(d.gear).toBe(-1)
+    expect(d.requestShift(-1)).toBe(false)
+    expect(d.requestShift(1)).toBe(true)
+    expect(d.gear).toBe(1)
+  })
+})
