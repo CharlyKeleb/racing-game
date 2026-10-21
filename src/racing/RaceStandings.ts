@@ -35,6 +35,14 @@ export class RaceStandings {
   private readonly line: readonly Point3[]
   /** Last snapshot's order (id → index), for overtake hysteresis. */
   private readonly places = new Map<number, number>()
+  /**
+   * Last projection per car, reused while its state is unchanged: the player
+   * and every rival are measured several times a tick (AI gaps, HUD, the
+   * snapshot), and a car that hasn't moved needn't be projected again.
+   */
+  private readonly memo = new Map<number, { x: number; z: number; index: number; checkpoint: number; metres: number }>()
+  /** Projections actually computed (memo misses), for tests and profiling. */
+  projections = 0
   constructor(line: readonly Point3[], checkpoints: readonly { position: Point3 }[]) {
     this.line = line
     this.segmentLengths = new Float64Array(line.length)
@@ -66,6 +74,18 @@ export class RaceStandings {
    * metres). Negative while still behind the start line on the grid.
    */
   private sectorMetres(entry: RaceEntry): number {
+    const x = entry.x ?? NaN, z = entry.z ?? NaN
+    let m = this.memo.get(entry.id)
+    // NaN never equals itself, so entries without a position always recompute (they're cheap).
+    if (m && m.x === x && m.z === z && m.index === entry.index && m.checkpoint === entry.checkpoint) return m.metres
+    const metres = this.project(entry)
+    this.projections++
+    if (!m) this.memo.set(entry.id, m = { x, z, index: entry.index, checkpoint: entry.checkpoint, metres })
+    else { m.x = x; m.z = z; m.index = entry.index; m.checkpoint = entry.checkpoint; m.metres = metres }
+    return metres
+  }
+
+  private project(entry: RaceEntry): number {
     const n = this.line.length, count = this.gates.length
     const gate = entry.checkpoint
     const start = this.gates[gate], end = this.gates[(gate + 1) % count]
@@ -214,5 +234,6 @@ export class RaceStandings {
   /** Forget held places (a new race). */
   reset(): void {
     this.places.clear()
+    this.memo.clear()
   }
 }

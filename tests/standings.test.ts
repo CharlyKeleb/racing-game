@@ -90,3 +90,32 @@ describe('race standings', () => {
     expect(standings.overrun(fine)).toBe(0)
   })
 })
+
+describe('standings projection cache (#43)', () => {
+  const line = Array.from({ length: 200 }, (_, i) => ({ x: 100 * Math.cos(i * Math.PI / 100), y: 0, z: 100 * Math.sin(i * Math.PI / 100) }))
+  const gates = [0, 50, 100, 150].map(i => ({ position: line[i] }))
+  const car = (patch: Partial<RaceEntry> = {}): RaceEntry => ({ id: 1, name: 'A', player: true, lap: 1, checkpoint: 0, index: 20, finishMs: null, x: line[20].x, z: line[20].z, ...patch })
+
+  it('projects a car once while it stays put, however often it is measured', () => {
+    const standings = new RaceStandings(line, gates)
+    const entry = car()
+    const first = standings.distance(entry)
+    for (let i = 0; i < 10; i++) expect(standings.distance(entry)).toBe(first)
+    standings.snapshot([entry, car({ id: 2, index: 30, x: line[30].x, z: line[30].z })])
+    expect(standings.projections).toBe(2)
+  })
+
+  it('recomputes when the car moves or passes a gate, and after a reset', () => {
+    const standings = new RaceStandings(line, gates)
+    const entry = car()
+    const before = standings.distance(entry)
+    entry.x = line[22].x; entry.z = line[22].z; entry.index = 22
+    expect(standings.distance(entry)).toBeGreaterThan(before)
+    entry.checkpoint = 1; entry.index = 52; entry.x = line[52].x; entry.z = line[52].z
+    const sector = standings.distance(entry)
+    expect(sector).toBeGreaterThan(before)
+    standings.reset()
+    expect(standings.distance(entry)).toBe(sector)
+    expect(standings.projections).toBe(4)
+  })
+})
