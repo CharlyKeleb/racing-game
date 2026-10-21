@@ -61,6 +61,8 @@ export class Renderer {
   private readonly requested: RendererKind
   private gpuTimer?: GpuTimer
   private postfx?: PostStack
+  /** Post FX are running (off on Low, or by setting): effects that rely on them need a fallback. */
+  get postfxActive(): boolean { return !!this.postfx }
   private haze: HazeSource | null = null
   private quality?: QualityPreset
   private displayDpr = 1
