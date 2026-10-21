@@ -78,6 +78,12 @@ both the axle centers and the computed mount points.
 *above* the wheels. Keep its bottom above the ground clearance so the box
 doesn't scrape. The wheels carry the car, not the box.
 
+Optional `"brakeDisc": { "material": "<name>" }` names the wheel material that
+is the brake disc, so it can glow when hot (#92, `BrakeDiscGlow`). A wheel
+without that material (no disc in the model, or an LOD that dropped it) gets a
+glowing ring behind the spokes instead. `intensity` scales the glow if a disc
+texture reads too bright or too dim.
+
 ## Preparing a car without Blender
 
 `scripts/cars/prepare-car.mjs` applies the same car contract with

@@ -1,3 +1,5 @@
+import { BrakeDiscGlow } from './BrakeDiscGlow'
+import { BrakeHeat, brakeGlow } from './BrakeHeat'
 import { FeedbackSpring } from '../effects/FeedbackSpring'
 import RAPIER from '@dimforge/rapier3d-compat'
 import * as THREE from 'three'
@@ -98,6 +100,9 @@ export class Vehicle {
   /** Headlight lens materials (owned copies), lit at night. */
   private readonly headlights: THREE.MeshStandardMaterial[] = []
   private brakeGlow = 0
+  /** Cosmetic disc heat per axle and its glow (#92). */
+  readonly brakeHeat = new BrakeHeat()
+  private readonly discGlow: BrakeDiscGlow
   /** Night driving: headlight lenses glow and the tail lights run brighter. */
   lightsOn = false
 
@@ -158,6 +163,7 @@ export class Vehicle {
       mesh.material = own
       this.taillights.push(own)
     })
+    this.discGlow = new BrakeDiscGlow(model, config)
     this.prevOffset = config.wheels.map(() => config.suspension.restLength)
     this.currOffset = [...this.prevOffset]
     this.respawn(spawn)
@@ -267,6 +273,9 @@ export class Vehicle {
       for (const mat of this.headlights) mat.emissiveIntensity = lens
       this.brakeGlow += (glowTarget - this.brakeGlow) * (1 - Math.exp(-25 * h))
       for (const mat of this.taillights) mat.emissiveIntensity = this.brakeGlow
+      // Disc heat: braking work in, airflow out. Separate from the lamps (brake pedal, not lamp intensity).
+      this.brakeHeat.update(h, this.controller.braking, this.controller.forwardSpeed)
+      this.discGlow.update(brakeGlow(this.brakeHeat.front), brakeGlow(this.brakeHeat.rear))
     }
   }
 
@@ -274,6 +283,7 @@ export class Vehicle {
   disposeMaterials(): void {
     for (const material of this.headlights) material.dispose()
     for (const material of this.taillights) material.dispose()
+    this.discGlow.dispose()
   }
 
   respawn(spawn: SpawnPoint): void {
@@ -284,6 +294,9 @@ export class Vehicle {
     this.body.setLinvel({ x: 0, y: 0, z: 0 }, true)
     this.body.setAngvel({ x: 0, y: 0, z: 0 }, true)
     this.controller.reset()
+    // A respawn (race start, restart, checkpoint reset) puts the car back with cold discs.
+    this.brakeHeat.reset()
+    this.discGlow?.update(0, 0)
     this.currPos.copy(spawn.position)
     this.currQuat.copy(q)
     this.prevPos.copy(spawn.position)
