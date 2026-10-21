@@ -1288,3 +1288,32 @@ button.menu-track:hover,button.menu-track:focus-visible { border-color:var(--acc
 .overlay--touch .proximity svg { height:88px; }
 @media (max-width:600px) { .proximity { width:98px; bottom:190px; } .proximity svg { height:86px; } }
 @media (max-height:450px) { .proximity { width:94px; } .proximity svg { height:78px; } }
+
+/* Garage build presets (#35). */
+.ui-input { min-width: 0; box-sizing: border-box; padding: 8px 10px; color: inherit; background: #11151c; border: 1px solid #ffffff30; border-radius: 4px; font: inherit; }
+.ui-input:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 1px; }
+.presets { display: flex; flex-direction: column; gap: 12px; }
+.presets__save-row { display: flex; gap: 8px; align-items: center; }
+.presets__save-row .ui-input { flex: 1; }
+.presets__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.presets__row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 6px 8px; background: #ffffff08; border: 1px solid #ffffff12; border-radius: 4px; }
+.presets__row.is-active { border-color: var(--accent-2); }
+.presets__row.is-previewing { background: #19c3ff14; }
+.presets__pick { flex: 1 1 180px; display: flex; align-items: center; gap: 10px; min-width: 0; padding: 2px; color: inherit; background: none; border: 0; text-align: left; cursor: pointer; font: inherit; }
+.presets__name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; }
+.presets__name small { margin-left: 8px; font-size: 10px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.presets__rank { color: var(--muted); }
+.presets__actions, .presets__confirm, .presets__rename { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.presets__rename { flex: 1 1 100%; }
+.presets__rename .ui-input { flex: 1; }
+.presets__confirm { font-size: 13px; }
+.presets__preview { display: flex; flex-direction: column; gap: 10px; padding: 12px; background: #0b1220; border: 1px solid #19c3ff40; border-radius: 4px; }
+.presets__preview header { display: flex; align-items: center; gap: 12px; }
+.presets__preview header div { display: flex; flex-direction: column; }
+.presets__preview dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 16px; margin: 0; }
+.presets__preview dl div { display: flex; justify-content: space-between; gap: 8px; }
+.presets__preview dt { color: var(--muted); }
+.presets__preview dd { margin: 0; }
+.presets__preview em { font-style: normal; margin-left: 4px; color: var(--muted); }
+.presets__preview em.up { color: #2dff5a; }
+.presets__preview em.down { color: #ff4d3d; }

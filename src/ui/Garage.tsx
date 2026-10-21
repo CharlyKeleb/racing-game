@@ -2,10 +2,13 @@ import type { WheelId } from '../vehicles/VehicleConfig'
 import { SPOILERS } from '../vehicles/SpoilerCatalog'
 import { PLATE_STYLES, type PlateStyle } from '../vehicles/PlateStyles'
 import { DEFAULT_LIVERY, hasLivery, type LiveryDesign, type StripePattern, type NumberPanel, type LiveryDecal } from '../vehicles/LiveryDesign'
-import { GiPaintBrush, GiCarWheel, GiIdCard, GiAutoRepair, GiCheckeredFlag } from 'react-icons/gi'
+import { GiPaintBrush, GiCarWheel, GiIdCard, GiAutoRepair, GiCheckeredFlag, GiSave } from 'react-icons/gi'
 import { useEffect, useState } from 'react'
+import { getCar } from '../vehicles/carRegistry'
+import { nextPresetName, PRESET_NAME_MAX, PRESET_SLOTS, previewPreset, sameBuild, type BuildPreset } from '../vehicles/BuildPresets'
 import {
   CALIPER_PRESETS,
+  DEFAULT_BUILD,
   PAINT_PRESETS,
   RIM_PRESETS,
   type CarBuild,
@@ -17,12 +20,12 @@ import {
 import { useGameInstance } from './GameContext'
 import { useGame } from './hooks'
 import { CarPicker } from './CarPicker'
-import { Button, Panel, ScreenHeader, Segmented } from './kit'
+import { Button, ClassBadge, Panel, ScreenHeader, Segmented } from './kit'
 import { CarCard } from './MainMenu'
 import { MenuMusicBar } from './MenuMusicBar'
 import { OrbitLayer } from './OrbitLayer'
 
-type Tab = 'paint' | 'wheels' | 'performance' | 'livery' | 'plates' | 'spoilers'
+type Tab = 'paint' | 'wheels' | 'performance' | 'livery' | 'plates' | 'spoilers' | 'presets'
 const TABS: [Tab, string][] = [
   ['paint', 'Paint'],
   ['wheels', 'Wheels'],
@@ -30,9 +33,10 @@ const TABS: [Tab, string][] = [
   ['livery', 'Livery'],
   ['plates', 'Plates'],
   ['performance', 'Upgrades'],
+  ['presets', 'Presets'],
 ]
 
-const tabIcons = { paint: GiPaintBrush, wheels: GiCarWheel, performance: GiAutoRepair, livery: GiCheckeredFlag, plates: GiIdCard, spoilers: GiAutoRepair }
+const tabIcons = { paint: GiPaintBrush, wheels: GiCarWheel, performance: GiAutoRepair, livery: GiCheckeredFlag, plates: GiIdCard, spoilers: GiAutoRepair, presets: GiSave }
 
 export function Garage() {
   const game = useGameInstance()
@@ -72,7 +76,8 @@ export function Garage() {
           {tab === 'performance' && <PerformanceTab build={build} update={update} />}
           {tab === 'livery' && <LiveryTab build={build} update={update} disabled={switching} />}
           {tab === 'plates' && <PlatesTab build={build} update={update} disabled={switching} side={plateSide} onSide={setPlateSide} />}
-          {tab !== 'livery' && tab !== 'plates' && tab !== 'spoilers' && <Button size="sm" variant="ghost" onClick={reset}>
+          {tab === 'presets' && <PresetsTab build={build} disabled={switching} />}
+          {tab !== 'livery' && tab !== 'plates' && tab !== 'spoilers' && tab !== 'presets' && <Button size="sm" variant="ghost" onClick={reset}>
             Reset to stock
           </Button>}
         </Panel>
@@ -87,6 +92,95 @@ export function Garage() {
           <GiCheckeredFlag aria-hidden="true"/> Race
         </Button>
       </div>
+    </div>
+  )
+}
+
+/**
+ * Named setups for this car (#35): save the current build, preview a preset's
+ * class and stat changes before applying it, rename, duplicate, delete.
+ */
+function PresetsTab({ build, disabled }: { build: CarBuild; disabled: boolean }) {
+  const car = useGame((s) => s.settings.car)
+  const list = useGame((s) => s.presets[car]) ?? []
+  const save = useGame((s) => s.savePreset)
+  const apply = useGame((s) => s.applyPreset)
+  const rename = useGame((s) => s.renamePreset)
+  const duplicate = useGame((s) => s.duplicatePreset)
+  const remove = useGame((s) => s.deletePreset)
+  const [name, setName] = useState('')
+  const [previewing, setPreviewing] = useState<string | null>(null)
+  const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null)
+  const [confirming, setConfirming] = useState<string | null>(null)
+  const stock = getCar(car).stats
+  const full = list.length >= PRESET_SLOTS
+  const rows: (BuildPreset & { stock?: boolean })[] = [{ id: 'stock', name: 'Stock', build: DEFAULT_BUILD, stock: true }, ...list]
+  const target = rows.find((p) => p.id === previewing)
+  const preview = target ? previewPreset(build, target.build, stock) : null
+  return (
+    <div className="presets">
+      <form className="presets__save" onSubmit={(e) => { e.preventDefault(); if (!full) { save(name || nextPresetName(list)); setName('') } }}>
+        <label className="ui-field">
+          <span className="ui-field__label">Save this setup <em>{list.length}/{PRESET_SLOTS}</em></span>
+          <span className="presets__save-row">
+            <input className="ui-input" value={name} maxLength={PRESET_NAME_MAX} placeholder={nextPresetName(list)} aria-label="Preset name" onChange={(e) => setName(e.target.value)} disabled={full || disabled} />
+            <Button size="sm" variant="primary" type="submit" disabled={full || disabled}>Save</Button>
+          </span>
+          {full && <span className="settings__help">All {PRESET_SLOTS} slots are used. Delete one to save another.</span>}
+        </label>
+      </form>
+      <ul className="presets__list" aria-label="Saved setups">
+        {rows.map((p) => {
+          const rank = previewPreset(build, p.build, stock)
+          const active = sameBuild(p.build, build)
+          return (
+            <li key={p.id} className={`presets__row${active ? ' is-active' : ''}${previewing === p.id ? ' is-previewing' : ''}`}>
+              {renaming?.id === p.id ? (
+                <form className="presets__rename" onSubmit={(e) => { e.preventDefault(); rename(p.id, renaming.name); setRenaming(null) }}>
+                  <input className="ui-input" autoFocus value={renaming.name} maxLength={PRESET_NAME_MAX} aria-label={`Rename ${p.name}`} onChange={(e) => setRenaming({ id: p.id, name: e.target.value })} />
+                  <Button size="sm" type="submit">OK</Button>
+                  <Button size="sm" variant="ghost" type="button" onClick={() => setRenaming(null)}>Cancel</Button>
+                </form>
+              ) : (
+                <button className="presets__pick" onClick={() => setPreviewing(previewing === p.id ? null : p.id)} aria-expanded={previewing === p.id}>
+                  <ClassBadge value={rank.carClass} />
+                  <span className="presets__name">{p.name}{p.stock && <small>Factory setup</small>}{active && <small>Current</small>}</span>
+                  <span className="presets__rank mono">{rank.rank}</span>
+                </button>
+              )}
+              {confirming === p.id ? (
+                <span className="presets__confirm" role="alertdialog" aria-label={`Delete ${p.name}?`}>
+                  Delete “{p.name}”?
+                  <Button size="sm" variant="primary" onClick={() => { remove(p.id); setConfirming(null); if (previewing === p.id) setPreviewing(null) }}>Delete</Button>
+                  <Button size="sm" variant="ghost" onClick={() => setConfirming(null)}>Keep</Button>
+                </span>
+              ) : !p.stock && renaming?.id !== p.id && (
+                <span className="presets__actions">
+                  <Button size="sm" variant="ghost" onClick={() => setRenaming({ id: p.id, name: p.name })}>Rename</Button>
+                  <Button size="sm" variant="ghost" disabled={full} onClick={() => duplicate(p.id)}>Duplicate</Button>
+                  <Button size="sm" variant="ghost" onClick={() => setConfirming(p.id)}>Delete</Button>
+                </span>
+              )}
+            </li>
+          )
+        })}
+      </ul>
+      {target && preview && (
+        <section className="presets__preview" aria-label={`Preview ${target.name}`}>
+          <header>
+            <ClassBadge value={preview.carClass} size="lg" />
+            <div><b>{target.name}</b><span className="mono">Rank {preview.rank} <em className={preview.rankDelta > 0 ? 'up' : preview.rankDelta < 0 ? 'down' : ''}>{preview.rankDelta > 0 ? '+' : ''}{preview.rankDelta || '±0'}</em></span></div>
+          </header>
+          <dl>
+            {preview.stats.map((s) => (
+              <div key={s.key}><dt>{s.label}</dt><dd className="mono">{Math.round(s.value * 100)} <em className={s.delta > 0.005 ? 'up' : s.delta < -0.005 ? 'down' : ''}>{s.delta > 0.005 ? '+' : ''}{Math.abs(s.delta) < 0.005 ? '±0' : Math.round(s.delta * 100)}</em></dd></div>
+            ))}
+          </dl>
+          <Button variant="primary" disabled={disabled || sameBuild(target.build, build)} onClick={() => { apply(target.build); setPreviewing(null) }}>
+            {sameBuild(target.build, build) ? 'Already applied' : `Apply ${target.name}`}
+          </Button>
+        </section>
+      )}
     </div>
   )
 }
