@@ -9,6 +9,8 @@ export type GearRequest = -1 | 0 | 1
 const RPM_PER_RAD_S = 60 / (2 * Math.PI)
 /** Brake pedal above this counts as braking for gear selection. */
 const BRAKING = 0.2
+/** Reverse speed cap when the car config doesn't set one, m/s (≈36 km/h). */
+const DEFAULT_MAX_REVERSE = 10
 
 export function torqueAt(rpm: number, curve: [number, number][]): number {
   if (rpm <= curve[0][0]) return curve[0][1]
@@ -24,7 +26,7 @@ export function torqueAt(rpm: number, curve: [number, number][]): number {
 
 /**
  * Engine + automatic gearbox. Pure — fed wheel speed, returns force at the
- * driven wheels. Manual shifting is a later feature (shiftUp/shiftDown exist).
+ * driven wheels. Manual shifting is a later feature (shift() exists).
  */
 export class Drivetrain {
   gear: Gear = 1
@@ -81,7 +83,9 @@ export class Drivetrain {
 
     const limiter = this.rpm >= cfg.redlineRpm ? 0 : 1
     const engineTorque = torqueAt(this.rpm, cfg.torqueCurve) * throttle * limiter
-    const drive = (engineTorque * ratio * cfg.efficiency) / wheelRadius
+    let drive = (engineTorque * ratio * cfg.efficiency) / wheelRadius
+    // Reverse is a crawl, not a second top speed: fade the push out toward the cap.
+    if (this.gear < 0 && wheelSpeed < 0) drive *= Math.max(0, 1 + wheelSpeed / (cfg.maxReverseSpeed ?? DEFAULT_MAX_REVERSE))
     if (throttle > 0.05 || this.gear === 0 || Math.abs(wheelSpeed) < 1) return drive
     // Engine braking off-throttle: pumping losses grow with rpm, so a downshift
     // (revs up) brakes harder — and loads the driven wheels, which is what lets
