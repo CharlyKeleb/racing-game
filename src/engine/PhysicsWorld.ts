@@ -39,6 +39,17 @@ export class PhysicsWorld {
     return hit ? top - hit.timeOfImpact : null
   }
 
+  /**
+   * Like groundHeight, but a surface more than `headroom` m above nearY is a
+   * roof over the street (a station canopy, a deck), not floor: look on below
+   * it, up to three roofs deep. A roof with nothing under it is no floor at all.
+   */
+  floorHeight(x: number, nearY: number, z: number, only?: (collider: RAPIER.Collider) => boolean, headroom = 1.5): number | null {
+    let h = this.groundHeight(x, nearY, z, only)
+    for (let i = 0; i < 3 && h !== null && h > nearY + headroom; i++) h = this.groundHeight(x, h - 4.05, z, only)
+    return h !== null && h > nearY + headroom ? null : h
+  }
+
   step(dt: number): void {
     this.world.timestep = dt
     this.world.step(this.events)

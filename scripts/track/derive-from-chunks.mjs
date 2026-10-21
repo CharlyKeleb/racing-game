@@ -70,20 +70,26 @@ for (const c of manifest.chunks) {
 console.log(`read ${manifest.chunks.length} chunks, ${prims.length} road/ground primitives`)
 
 // ── 1. Centreline ───────────────────────────────────────────────────────────
-const toRuntime = ([x, z]) => [x - ox, z - oz]
+const toRuntime = ([x, z, ...snap]) => [x - ox, z - oz, ...snap]
 const waypoints = manifest.checkpoints.flatMap((g, i) => [
   [g.position[0], g.position[2]],
   ...(cfg.lineVia?.[i] ?? []).map(toRuntime),
 ])
-const line = traceCenterline(prims, cfg.lineSurface, waypoints, { spacing: cfg.lineSpacing ?? 4 })
-const round = (v) => Math.round(v * 100) / 100
-let start = 0
-for (let i = 1; i < line.points.length; i++) {
-  if (Math.hypot(line.points[i][0], line.points[i][2]) < Math.hypot(line.points[start][0], line.points[start][2])) start = i
+// A flattened/cleared corridor was shaped around build-track's line: keep that
+// one, a re-trace over the reshaped chunks would wander off it.
+if (cfg.flattenCorridor) {
+  console.log(`centreline kept from build-track (${manifest.line.length} points)`)
+} else {
+  const line = traceCenterline(prims, cfg.lineSurface, waypoints, { spacing: cfg.lineSpacing ?? 4 })
+  const round = (v) => Math.round(v * 100) / 100
+  let start = 0
+  for (let i = 1; i < line.points.length; i++) {
+    if (Math.hypot(line.points[i][0], line.points[i][2]) < Math.hypot(line.points[start][0], line.points[start][2])) start = i
+  }
+  manifest.line = [...line.points.slice(start), ...line.points.slice(0, start)].map((p) => p.map(round))
+  manifest.lineLength = Math.round(line.length)
+  console.log(`centreline ${manifest.line.length} points, ${(line.length / 1000).toFixed(2)} km`)
 }
-manifest.line = [...line.points.slice(start), ...line.points.slice(0, start)].map((p) => p.map(round))
-manifest.lineLength = Math.round(line.length)
-console.log(`centreline ${manifest.line.length} points, ${(line.length / 1000).toFixed(2)} km`)
 
 // ── 2. Surface map ──────────────────────────────────────────────────────────
 const RES = 1

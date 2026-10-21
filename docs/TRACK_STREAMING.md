@@ -181,9 +181,36 @@ materials are just numbers like `11851Mtl`):
   material). Use it when pavements or freeways run far past the circuit.
 - With no `terrain` layer (a city block) the manifest's `backdrop` is `null`
   and no backdrop file is written.
+- `scale`: uniform factor baked into every vertex, for sources modelled at the
+  wrong size. Config coordinates are then in scaled metres (`topdown.mjs`
+  takes `SCALE=<n>`).
+- `dropNodes`: node-name regex never shipped, for blocker cards an export left
+  standing across a street.
+- `lineVia` points can carry a third value, `[x, z, snap]`: how far (m, default
+  15) the tracer may move them to the middle of the road. Use a small snap to
+  hold the line in a narrow street next to a wider area.
+- `flattenCorridor: { halfWidth, feather, reach }`: smooths the centreline's
+  height profile, then pulls every vertex within `reach` m of it (inside
+  `halfWidth`, blended over `feather`) onto that profile. Big triangles near
+  the line are split first, and squashed walls are dropped (zero-area
+  triangles push cars through a Rapier trimesh). For sources whose street
+  levels don't line up. `derive-from-chunks.mjs` then keeps build-track's
+  line instead of re-tracing it.
+- `clearCorridor: { fromGate, toGate, halfWidth, low, high }`: between those
+  gates, drops every triangle that reaches into the channel from `low` to
+  `high` m above the profile within `halfWidth` of the line: deck supports,
+  overhangs and low beams the route squeezes past.
+
+The Station District (`scripts/track/city.config.mjs`) uses all of these:
+its source is a ×32 miniature with anonymous materials, and its back alley
+needed flattening and a cleared channel before a car could get through.
 
 Collision is checked by `tests/trackEdges.test.ts`, which throws a car off
-the road 60 times per track. Missing floor near the road edge is almost
+the road 60 times per track. The runtime safety walls (`world/SafetyWalls.ts`)
+probe the floor with `PhysicsWorld.floorHeight`, which looks under roofs
+(canopies, decks) and treats a roof over nothing as no floor. Where the edge
+distance jumps between two line points (a side street), they also wall the
+side street's edge, which runs along the probes. Missing floor near the road edge is almost
 always a kerb, edge line or gutter material that fell through to `prop`.
 Run a gap scan against the source and add those materials to `road`, or to
 `collide`.

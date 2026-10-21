@@ -10,7 +10,7 @@ function loadingGame(loadVisuals: () => Promise<void>) {
   gameStore.setState({ settings: { ...savedSettings, opponents: 0 } })
   return makeTestGame({
     track: { loadVisuals, line: [{x:0,y:0,z:0},{x:0,y:0,z:100},{x:100,y:0,z:100},{x:100,y:0,z:0}], spawn: { heading: 0, position: { x: 0, y:0.6, z: 0 } }, isRoadCollider: () => true },
-    physics: { groundHeight: () => 0 },
+    physics: { groundHeight: () => 0, floorHeight: () => 0 },
     opponents: [],
     opponentFlames: new Map(),
     opponentToken: 0,

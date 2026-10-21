@@ -641,7 +641,7 @@ export class Game {
   /** Invisible walls where the track's collision floor ends, so a car can't drop off the world (see SafetyWalls). */
   private buildSafetyWalls(): void {
     this.removeSafetyWalls()
-    const walls = planSafetyWalls(this.track.line, (x, y, z) => this.physics.groundHeight(x, y, z))
+    const walls = planSafetyWalls(this.track.line, (x, y, z) => this.physics.floorHeight(x, y, z))
     if (walls.segments === 0) return
     const body = this.physics.world.createRigidBody(RAPIER.RigidBodyDesc.fixed())
     this.physics.world.createCollider(RAPIER.ColliderDesc.trimesh(walls.vertices, walls.indices).setFriction(0.2).setRestitution(0.1), body)
@@ -856,7 +856,7 @@ export class Game {
       const grid = startingGrid(this.track.line,this.track.spawn.position,opponentCount+1,this.roadEdges)
       const playerSlot = grid[grid.length-1]
       const position = new THREE.Vector3(playerSlot.x,playerSlot.y+0.6,playerSlot.z)
-      const road = this.physics.groundHeight(position.x,position.y,position.z,c=>this.track.isRoadCollider(c))
+      const road = this.physics.floorHeight(position.x,position.y,position.z,c=>this.track.isRoadCollider(c))
       if (road !== null) position.y = road+0.6
       this.vehicle.respawn({position,heading:playerSlot.heading})
       this.driftLastX=position.x;this.driftLastZ=position.z
@@ -866,7 +866,7 @@ export class Game {
       for (let id = 1; id <= opponentCount; id++) {
         const slot = grid[id-1]
         const position = new THREE.Vector3(slot.x,slot.y+0.6,slot.z)
-        const ground = this.physics.groundHeight(position.x,position.y,position.z,c=>this.track.isRoadCollider(c))
+        const ground = this.physics.floorHeight(position.x,position.y,position.z,c=>this.track.isRoadCollider(c))
         if (ground !== null) position.y = ground+0.6
         const rival = loaded[id - 1]
         const opponent = new Opponent(id, rival.scene, rival.config, this.physics.world, this.track, { position, heading: slot.heading }, settings.difficulty)
@@ -1299,7 +1299,7 @@ export class Game {
     const line = this.track.line, n = line.length
     const i = this.standings.recoveryIndex(entry)
     const p = line[i], a = line[(i - 1 + n) % n], b = line[(i + 1) % n]
-    const road = this.physics.groundHeight(p.x, p.y, p.z, (c) => this.track.isRoadCollider(c))
+    const road = this.physics.floorHeight(p.x, p.y, p.z, (c) => this.track.isRoadCollider(c))
     return {
       position: new THREE.Vector3(p.x, (road ?? p.y) + 0.8, p.z),
       heading: Math.atan2(b.x - a.x, b.z - a.z),
@@ -2243,7 +2243,8 @@ export class Game {
       const [x, , z] = w.position
       const wx = spawn.position.x + x * cos + z * sin
       const wz = spawn.position.z - x * sin + z * cos
-      const h = this.physics.groundHeight(wx, spawn.position.y, wz, (c) => c !== this.showroomPad)
+      // floorHeight: a canopy over the grid (Station District) is not the floor.
+      const h = this.physics.floorHeight(wx, spawn.position.y, wz, (c) => c !== this.showroomPad)
       if (h === null) this.showroomPadStale = true
       else top = Math.max(top, h)
     }

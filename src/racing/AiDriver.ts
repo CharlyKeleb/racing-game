@@ -54,6 +54,9 @@ export class AiDriver {
   private stuck = 0
   private reverse = 0
   private recoveryTime = 0
+  /** Line distance (m) at the last real progress, and seconds since. */
+  private idleFrom = -1
+  private idle = 0
 
   readonly line: readonly Point3[]
   readonly pace: number
@@ -101,7 +104,8 @@ export class AiDriver {
     this.elapsed = this.boostTime = this.boostCooldown = this.driftCooldown = this.driftPulse = this.driftingFor = this.exitWindow = 0
     this.cornerBefore = false
     this.integral = this.previousError = this.derivative = this.lane = 0
-    this.stuck = this.reverse = this.recoveryTime = 0
+    this.stuck = this.reverse = this.recoveryTime = this.idle = 0
+    this.idleFrom = -1
     this.needsRecovery = false
     this.targetSpeed = 0
     this.input.throttle = this.input.brake = this.input.steer = 0
@@ -210,7 +214,14 @@ export class AiDriver {
       this.input.handbrake = false
       this.input.nitro = false
     }
-    this.needsRecovery = this.recoveryTime > 10
+    // No real progress along the line for 15 s while trying to drive: wedged in
+    // a pocket and bouncing between two walls (stuck, reverse, bump, stuck),
+    // which resets recoveryTime on every lurch forward.
+    const at = this.distances[index]
+    const gained = (at - this.idleFrom + this.length) % this.length
+    if (this.idleFrom < 0 || (gained > 8 && gained < this.length / 2)) { this.idleFrom = at; this.idle = 0 }
+    else if (this.targetSpeed > 4) this.idle += dt
+    this.needsRecovery = this.recoveryTime > 10 || this.idle > 15
     return this.input
   }
 }

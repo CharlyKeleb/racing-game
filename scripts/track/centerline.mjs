@@ -14,7 +14,8 @@
 /**
  * @param prims   [{ pos: Float32Array, idx: Uint32Array, mat: string }] in source world space
  * @param surface RegExp of materials that form the racing surface
- * @param waypoints [[x, z], ...] in race order; the loop closes back to the first
+ * @param waypoints [[x, z, snap?], ...] in race order; the loop closes back to the first.
+ *                  `snap` (m, default 15) is how far a waypoint may move to the road's middle.
  * @returns {{ points: number[][], length: number }} closed polyline [x, y, z], `spacing` apart
  */
 export function traceCenterline(prims, surface, waypoints, { res = 1, spacing = 4, margin = 20 } = {}) {
@@ -86,11 +87,12 @@ export function traceCenterline(prims, surface, waypoints, { res = 1, spacing = 
   }
 
   // 3. Centre-hugging shortest paths between waypoints
-  const toCell = ([x, z]) => {
+  const toCell = ([x, z, snap = 15]) => {
     let cx = Math.round((x - x0) / res), cz = Math.round((z - z0) / res)
     // Snap to the most central road cell nearby.
     let best = -1, bestD = 0
-    for (let dz = -15; dz <= 15; dz++) for (let dx = -15; dx <= 15; dx++) {
+    const r = Math.round(snap / res)
+    for (let dz = -r; dz <= r; dz++) for (let dx = -r; dx <= r; dx++) {
       const o = (cz + dz) * W + (cx + dx)
       if (cx + dx < 0 || cz + dz < 0 || cx + dx >= W || cz + dz >= H || !road[o]) continue
       const score = dist[o] - Math.hypot(dx, dz) * 0.3

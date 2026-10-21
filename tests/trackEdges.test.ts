@@ -14,7 +14,7 @@ import { planSafetyWalls } from '../src/world/SafetyWalls'
  * road and verge were simplified apart, which wheels dropped into and cars
  * sank through.
  */
-it.each(['singapore', 'nurburgring', 'u2city'])('%s: a car run off the road never falls through the floor', async (id) => {
+it.each(['singapore', 'nurburgring', 'u2city', 'city'])('%s: a car run off the road never falls through the floor', async (id) => {
   const { readFile } = await import('node:fs/promises')
   const { GLTFLoader } = await import('three/examples/jsm/loaders/GLTFLoader.js')
   const { MeshoptDecoder } = await import('three/examples/jsm/libs/meshopt_decoder.module.js')
@@ -30,7 +30,7 @@ it.each(['singapore', 'nurburgring', 'u2city'])('%s: a car run off the road neve
   }
   const track = await StreamedTrack.load(`/models/tracks/${id}/track.json`, { assets: assets as never, world: physics.world, renderer: {} as THREE.WebGLRenderer, camera: new THREE.PerspectiveCamera(), scene: new THREE.Scene(), quality: 'low' })
   physics.step(1 / 60)
-  const walls = planSafetyWalls(track.line, (x, y, z) => physics.groundHeight(x, y, z))
+  const walls = planSafetyWalls(track.line, (x, y, z) => physics.floorHeight(x, y, z))
   physics.world.createCollider(RAPIER.ColliderDesc.trimesh(walls.vertices, walls.indices), physics.world.createRigidBody(RAPIER.RigidBodyDesc.fixed()))
   physics.step(1 / 60)
   const config = resolveVehicleConfig(JSON.parse(await readFile('public/models/cars/porsche911/vehicle-config.json', 'utf8')))
