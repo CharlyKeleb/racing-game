@@ -18,6 +18,9 @@ import { performanceCapture } from './PerformanceCapture'
 import { hudCoversPoint } from '../stores/hudLayoutStore'
 import { driftEvent, readDriftRecord, saveDriftRecord } from '../racing/driftEvents'
 import { DriftZones } from '../effects/DriftZones'
+import { CheckpointGates } from '../effects/CheckpointGates'
+import { TimeTrialSession, readTrialRecord, saveTrialRecord, trialBuildKey } from '../racing/TimeTrial'
+import { isSoloMode } from '../racing/gameModes'
 import { DriftChallenge } from '../racing/DriftChallenge'
 import RAPIER from '@dimforge/rapier3d-compat'
 import * as THREE from 'three'
@@ -143,6 +146,8 @@ function readTyres(ctrl: Vehicle['controller'], out: TyreBrakeInput): TyreBrakeI
 const WRONG_WAY_DELAY = 1.2
 /** Metres past an uncrossed gate before the HUD says the checkpoint was missed. */
 const MISSED_GATE_METRES = 40
+/** How long a Time Trial split / lap call stays on screen, ms of session time. */
+const TRIAL_SPLIT_SHOW_MS = 3000
 /** Garage turntable camera: distance (m) and lens (deg) when there's room. */
 const SHOWROOM_DISTANCE = 7.5
 const SHOWROOM_FOV = 42
@@ -187,6 +192,14 @@ export class Game {
   private blurLookBack = false
   private camera!: ChaseCamera
   private driftZones?: DriftZones
+  /** Time Trial (#31): checkpoint arches, splits and personal bests. */
+  private checkpointGates?: CheckpointGates
+  private readonly trial = new TimeTrialSession()
+  /** Circuit, car and build the session's personal best is stored under. */
+  private trialRecord = { track: '', car: '', build: '' }
+  /** Session clock (race totalMs) at the last split, for the HUD flash. */
+  private trialSplitAtMs = -Infinity
+  private trialEnded = false
   private driftPersonalBest = 0
   private driftNewBest = false
   private driftLastX = 0
@@ -540,7 +553,16 @@ export class Game {
         if (state === 'finished' && gameStore.getState().settings.mode === 'drift') this.finishDriftRun()
         gameStore.getState().setPhase(phase[state])
       },
-      onLap: () => this.publishTelemetry(),
+      onLap: (_lap, timeMs) => {
+        if (gameStore.getState().settings.mode === 'timeTrial') this.completeTrialLap(timeMs)
+        this.publishTelemetry()
+      },
+      onCheckpoint: (index, lapMs) => {
+        if (gameStore.getState().settings.mode !== 'timeTrial') return
+        const delta = this.trial.checkpoint(index, lapMs)
+        this.trialSplitAtMs = this.race.timer.totalMs
+        this.audio.playDriftCue(delta !== null && delta > 0 ? 'bust' : 'link')
+      },
     })
   }
 
@@ -556,6 +578,18 @@ export class Game {
     this.removeSafetyWalls()
     const edges = measureRoadEdges(this.track.line, (x, z) => this.track.surfaceAt(x, z))
     this.roadEdges = edges
+    this.checkpointGates?.dispose()
+    this.checkpointGates = new CheckpointGates(this.track.checkpoints.map((cp) => {
+      const line = this.track.line, n = line.length
+      let i = 0, best = Infinity
+      for (let k = 0; k < n; k++) {
+        const d = (line[k].x - cp.position.x) ** 2 + (line[k].z - cp.position.z) ** 2
+        if (d < best) { best = d; i = k }
+      }
+      const a = line[(i - 1 + n) % n], b = line[(i + 1) % n]
+      return { index: cp.index, position: line[i].clone(), heading: Math.atan2(b.x - a.x, b.z - a.z), left: edges.left[i], right: edges.right[i] }
+    }))
+    this.renderer.scene.add(this.checkpointGates.group)
     this.standingsPublishedAt = -Infinity
     this.standings = new RaceStandings(this.track.line, this.track.checkpoints)
     const track = this.track
@@ -764,7 +798,8 @@ export class Game {
     if (!this.safetyWalls) this.buildSafetyWalls()
     const token = this.opponentToken
     const { settings } = gameStore.getState()
-    const opponentCount = settings.mode === 'drift' ? 0 : settings.opponents
+    const opponentCount = isSoloMode(settings.mode) ? 0 : settings.opponents
+    this.trialEnded = false
     this.driftChallenge.reset(driftEvent(settings.driftEvent))
     this.driftNewBest = false
     this.driftPersonalBest = readDriftRecord(settings.track,settings.driftEvent).score
@@ -833,7 +868,21 @@ export class Game {
       this.audio.setOpponentCars(rivals)
       this.audio.playStart()
       this.prepareRaceIntro()
-      this.race.start(settings.mode === 'drift' ? driftEvent(settings.driftEvent).laps : settings.laps,RACE_INTRO_SECONDS)
+      if (settings.mode === 'freeRoam') {
+        // No intro, lights or laps: straight out onto the circuit.
+        this.race.startFreeRoam()
+        this.camera.snap()
+      } else if (settings.mode === 'timeTrial') {
+        // Straight to the lights (a quick restart shouldn't sit through the cinematic), then laps until you leave.
+        const build = gameStore.getState().build
+        this.trialRecord = { track: settings.track, car: this.carId, build: trialBuildKey(build) }
+        this.trial.start(readTrialRecord(this.trialRecord.track, this.trialRecord.car, this.trialRecord.build))
+        this.trialSplitAtMs = -Infinity
+        this.race.timer.bestLapMs = null
+        this.race.start(Infinity, 0)
+      } else {
+        this.race.start(settings.mode === 'drift' ? driftEvent(settings.driftEvent).laps : settings.laps,RACE_INTRO_SECONDS)
+      }
       this.publishTelemetry()
     } catch (err) {
       this.clearOpponents()
@@ -1136,15 +1185,74 @@ export class Game {
   resetToCheckpoint(): void {
     this.clearAwareness()
     this.driftChallenge.bust()
+    this.trial.invalidate('reset')
     this.playerEntry.checkpoint = this.race.lastCheckpoint
     this.playerEntry.index = this.progress.index
-    const spawn = this.recoverySpawn(this.playerEntry)
+    // Free Roam goes anywhere, so put the car on the nearest gate rather than the last one passed.
+    const spawn = this.race.freeRoam ? this.track.respawnAt(this.nearestCheckpoint()) : this.recoverySpawn(this.playerEntry)
     this.vehicle.respawn(spawn)
     this.camera.snap()
     this.recovery.reset()
     this.driftLastX=spawn.position.x; this.driftLastZ=spawn.position.z
     this.progress.reset()
     this.progress.update(spawn.position.x, spawn.position.z)
+  }
+
+  private nearestCheckpoint(): number {
+    const p = this.vehicle.body.translation()
+    let best = 0, bestD = Infinity
+    for (const cp of this.track.checkpoints) {
+      const d = (cp.position.x - p.x) ** 2 + (cp.position.z - p.z) ** 2
+      if (d < bestD) { bestD = d; best = cp.index }
+    }
+    return best
+  }
+
+  /** Free Roam: back to the start line. */
+  resetToStart(): void {
+    if (!this.race.freeRoam) return
+    this.clearAwareness()
+    this.vehicle.respawn(this.track.spawn)
+    this.camera.snap()
+    this.recovery.reset()
+    this.progress.reset()
+    this.progress.update(this.track.spawn.position.x, this.track.spawn.position.z)
+  }
+
+  /** T / pad Back / pause menu: Time Trial starts a fresh run, Free Roam goes back to the start. */
+  restartSession(): void {
+    const { phase, settings } = gameStore.getState()
+    if (settings.mode === 'freeRoam') {
+      if (phase === 'paused') this.togglePause()
+      this.resetToStart()
+    } else if (phase === 'racing' || phase === 'countdown' || phase === 'paused' || phase === 'finished') {
+      this.startRace()
+    }
+  }
+
+  /** Time Trial: leave the session for its results. */
+  endTrialSession(): void {
+    if (gameStore.getState().settings.mode !== 'timeTrial' || this.race.state === 'idle' || this.trialEnded) return
+    this.trialEnded = true
+    this.race.timer.running = false
+    // Mark the finish as handled so the line cinematic doesn't start: the car just brakes.
+    this.playerEntry.finishMs = this.race.timer.totalMs
+    this.race.state = 'finished'
+    this.finishPosition = 1
+    this.finishFieldSize = 1
+    gameStore.getState().setPhase('finished')
+    this.audio.resume()
+    this.publishTelemetry()
+  }
+
+  private completeTrialLap(lapMs: number): void {
+    const result = this.trial.completeLap(lapMs)
+    this.trialSplitAtMs = this.race.timer.totalMs
+    if (result.personalBest && this.trial.personalBest) {
+      const r = this.trialRecord
+      saveTrialRecord(r.track, r.car, r.build, this.trial.personalBest)
+    }
+    this.audio.playDriftCue(result.valid && result.sessionBest ? 'bank' : result.valid ? 'link' : 'bust')
   }
 
   /** Where a car in `entry`'s place goes back on the road: centreline, road height, facing the race direction. */
@@ -1235,6 +1343,7 @@ export class Game {
     if (phase === 'paused') return
     const racing = phase === 'racing' && this.race.state === 'racing'
     if (this.input.consume('reset') && racing) this.resetToCheckpoint()
+    if (this.input.consume('restart') && isSoloMode(gameStore.getState().settings.mode) && gameStore.getState().settings.mode !== 'drift' && (phase === 'racing' || phase === 'countdown')) this.restartSession()
 
     const inMenu = phase === 'menu' || phase === 'garage' || phase === 'loading'
     const controls = this.race.controlsEnabled && !inMenu
@@ -1342,6 +1451,8 @@ export class Game {
     this.playerEntry.index = this.progress.update(position.x, position.z)
     this.playerEntry.x = position.x
     this.playerEntry.z = position.z
+    // Time Trial: driving past a gate without going through it voids the lap.
+    if (racing && this.trial.valid && gameStore.getState().settings.mode === 'timeTrial' && this.standings.overrun(this.playerEntry) > MISSED_GATE_METRES) this.trial.invalidate('missed')
     if (this.race.state === 'finished' && this.playerEntry.finishMs === null) {
       this.playerEntry.finishMs = this.race.timer.totalMs
       const standings = this.standings.snapshot(this.entries)
@@ -1492,8 +1603,11 @@ export class Game {
       this.camera.update(this.vehicle.model.root, this.vehicle.speedKmh, dt, this.vehicle.controller.nitro.intensity, this.vehicle.motion,gridFraming,this.vehicle.model.body)
       this.effects.update(this.vehicle, dt)
       this.sparks.update(dt)
+      const settings = gameStore.getState().settings
+      this.guide.group.visible = settings.mode !== 'freeRoam' || settings.roamGuide
       this.updateGuide(dt)
     }
+    this.checkpointGates?.update(gameStore.getState().settings.mode === 'timeTrial' && (phase === 'racing' || phase === 'countdown' || phase === 'paused'), (this.race.lastCheckpoint + 1) % this.track.checkpoints.length, phase === 'paused' ? 0 : dt)
     if (this.rivalTags.length > 0) this.updateRivalTags(phase === 'countdown' || phase === 'racing', dt)
     this.benchmark?.frame()
     // Every car, for the haze and the spray.
@@ -1864,7 +1978,7 @@ export class Game {
     const t = this.progress.tangent()
     _forward.set(0, 0, 1).applyQuaternion(this.vehicle.quaternion)
     const against = _forward.x * t.x + _forward.z * t.z < -0.4 && this.vehicle.speedKmh > 12
-    this.wrongWayTime = against && !this.vehicle.controller.drift.active && gameStore.getState().phase === 'racing' ? this.wrongWayTime + dt : 0
+    this.wrongWayTime = against && !this.vehicle.controller.drift.active && gameStore.getState().phase === 'racing' && !this.race.freeRoam ? this.wrongWayTime + dt : 0
   }
 
   private finishDriftRun(): void {
@@ -1958,7 +2072,23 @@ export class Game {
       trackIndex: this.progress.index,
       distanceLeft: this.distanceLeft(),
       wrongWay: this.wrongWayTime > WRONG_WAY_DELAY,
-      missedCheckpoint: this.race.state === 'racing' && !!this.standings && this.standings.overrun(this.playerEntry) > MISSED_GATE_METRES,
+      missedCheckpoint: this.race.state === 'racing' && !this.race.freeRoam && !!this.standings && this.standings.overrun(this.playerEntry) > MISSED_GATE_METRES,
+      freeRoam: this.race.freeRoam,
+      trialLap: this.trial.laps.length + 1,
+      trialLaps: this.trial.laps.length,
+      trialValidLaps: this.trial.validLaps,
+      trialValid: this.trial.valid,
+      trialInvalidReason: this.trial.invalidReason,
+      trialSessionBestMs: this.trial.sessionBest?.lapMs ?? null,
+      trialPersonalBestMs: this.trial.personalBest?.lapMs ?? null,
+      trialSplitIndex: this.trial.lastSplitIndex,
+      trialSplitMs: this.trial.lastSplitMs,
+      trialDeltaMs: this.trial.lastDeltaMs,
+      trialSplitShow: this.race.timer.totalMs - this.trialSplitAtMs < TRIAL_SPLIT_SHOW_MS,
+      trialLastLap: this.trial.lastLap,
+      trialNextGate: (this.race.lastCheckpoint + 1) % this.track.checkpoints.length,
+      trialGateCount: this.track.checkpoints.length,
+      trialEnded: this.trialEnded,
       standings,
       opponents: this.opponents.map(o => ({ id: o.id, x: o.vehicle.position.x, z: o.vehicle.position.z })),
     })
@@ -1967,8 +2097,11 @@ export class Game {
   /** Meters to the finish: the rest of this lap plus every lap after it. */
   /** Metres to the finish, from the same centreline measure as the standings gaps. */
   private distanceLeft(): number {
-    if (!this.standings || this.race.state === 'finished') return 0
-    return Math.max(0, this.race.totalLaps * this.standings.lapLength - this.standings.distance(this.playerEntry))
+    if (!this.standings || this.race.state === 'finished' || this.race.freeRoam) return 0
+    const lap = this.standings.lapLength
+    // Time Trial has no lap target: what's left of this lap.
+    if (!Number.isFinite(this.race.totalLaps)) return Math.max(0, lap - (this.standings.distance(this.playerEntry) % lap))
+    return Math.max(0, this.race.totalLaps * lap - this.standings.distance(this.playerEntry))
   }
 
   /** Menu and garage show the car in the showroom; racing shows the track. */
@@ -2108,6 +2241,7 @@ export class Game {
     this.lensDrops?.dispose()
     this.guide?.dispose()
     this.driftZones?.dispose()
+    this.checkpointGates?.dispose()
     this.showroom?.dispose()
     this.track?.dispose()
     this.headlights?.dispose()

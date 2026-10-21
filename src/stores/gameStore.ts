@@ -4,6 +4,7 @@ import type { MinimapRaster } from '../world/MinimapData'
 import { sanitizeLivery, type LiveryDesign } from '../vehicles/LiveryDesign'
 import { driftEvent, type DriftEventId } from '../racing/driftEvents'
 import { createStore } from 'zustand/vanilla'
+import type { GameModeId } from '../racing/gameModes'
 import { defaultQuality, isMobile } from '../engine/device'
 import { DEFAULT_BUILD, sanitizeBuild, type CarBuild } from '../vehicles/CarBuild'
 import { selectableCars } from '../vehicles/carRegistry'
@@ -23,7 +24,7 @@ export type CameraMode = 'chase' | 'cockpit'
 export type Weather = 'dry' | 'rain'
 
 export interface Settings {
-  mode: 'quick' | 'drift'
+  mode: GameModeId
   driftEvent: DriftEventId
   trackLook: TrackLook
   quality: QualityPreset
@@ -43,6 +44,9 @@ export interface Settings {
   cameraMotion: boolean
   /** Launch assist (#91): a good launch at lights-out from the throttle alone. */
   launchAssist: boolean
+  /** Free Roam (#33): speed/gear gauges and route arrows, each optional. */
+  roamHud: boolean
+  roamGuide: boolean
   proximityRadar: boolean
   spotterVisual: boolean
   spotterAudio: boolean
@@ -118,6 +122,8 @@ const defaultSettings: Settings = {
   spotterAudio: false,
   cockpits: {},
   launchAssist: false,
+  roamHud: true,
+  roamGuide: true,
   difficulty: 'challenging',
   opponents: 3,
   laps: 3,
@@ -141,7 +147,9 @@ function loadSettings(): Settings {
     for(const key of ['proximityRadar','spotterVisual','spotterAudio'] as const)if(typeof merged[key]!=='boolean')merged[key]=defaultSettings[key]
     merged.tracksideVolume = typeof merged.tracksideVolume === 'number' && Number.isFinite(merged.tracksideVolume) ? Math.max(0, Math.min(1, merged.tracksideVolume)) : defaultSettings.tracksideVolume
     merged.driftEvent=driftEvent(merged.driftEvent).id
-    if (merged.mode !== 'drift') merged.mode = 'quick'
+    if (!['drift', 'timeTrial', 'freeRoam'].includes(merged.mode)) merged.mode = 'quick'
+    if (typeof merged.roamHud !== 'boolean') merged.roamHud = defaultSettings.roamHud
+    if (typeof merged.roamGuide !== 'boolean') merged.roamGuide = defaultSettings.roamGuide
     if (!isAiDifficulty(merged.difficulty)) merged.difficulty = 'challenging'
     merged.opponents = [0, 1, 3].includes(merged.opponents) ? merged.opponents : 3
     if (!isTimeOfDay(merged.timeOfDay)) merged.timeOfDay = defaultSettings.timeOfDay

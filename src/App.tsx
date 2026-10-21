@@ -20,6 +20,8 @@ export default function App() {
   const containerRef = useRef<HTMLDivElement>(null)
   const [game, setGame] = useState<Game | null>(null)
   const finishProgress = useTelemetry(s => s.finishProgress)
+  // An ended Time Trial session has no finish line cinematic: straight to its results.
+  const trialEnded = useTelemetry(s => s.trialEnded)
   const phase = useGame((s) => s.phase)
   const error = useGame((s) => s.error)
   const progress = useGame((s) => s.loadProgress)
@@ -74,7 +76,7 @@ export default function App() {
           {(phase === 'countdown' || phase === 'racing' || phase === 'paused') && <Hud />}
           {(phase === 'countdown' || phase === 'racing') && touch && <TouchControls />}
           {phase === 'paused' && <PauseMenu />}
-          {phase === 'finished' && (finishProgress < 1 ? <RaceFinish /> : <Results />)}
+          {phase === 'finished' && (finishProgress < 1 && !trialEnded ? <RaceFinish /> : <Results />)}
         </Suspense>
       </div>
     </GameContext.Provider>

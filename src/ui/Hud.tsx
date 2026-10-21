@@ -54,6 +54,7 @@ export function Hud() {
       <HudFeedback />
       <HudStartLights />
       <HudLaunch />
+      <HudTrialCall />
       <HudGauges />
     </div>
   )
@@ -62,6 +63,9 @@ export function Hud() {
 function HudRaceInfo() {
   const t = useTelemetry(useShallow(s => ({ bestLapMs: s.bestLapMs, currentLapMs: s.currentLapMs, lap: s.lap, fieldSize: s.standings.length, position: s.standings.find(entry => entry.player)?.position ?? 1, totalLaps: s.totalLaps })))
   const drift = useGame(s => s.settings.mode === 'drift')
+  const mode = useGame(s => s.settings.mode)
+  if (mode === 'timeTrial') return <div className="hud-tl" data-tag-exclusion><TrialHud /></div>
+  if (mode === 'freeRoam') return <div className="hud-tl" data-tag-exclusion><RoamHud /></div>
   return (
     <>
       <div className="hud-tl" data-tag-exclusion>
@@ -85,6 +89,60 @@ function HudRaceInfo() {
       </div>
     </>
   )
+}
+
+/** Time Trial: lap, live time, session best and PB, the next gate, and whether this lap still counts. */
+function TrialHud() {
+  const t = useTelemetry(useShallow(s => ({ currentLapMs: s.currentLapMs, lap: s.trialLap, valid: s.trialValid, reason: s.trialInvalidReason, best: s.trialSessionBestMs, pb: s.trialPersonalBestMs, next: s.trialNextGate, gates: s.trialGateCount })))
+  const gate = t.next === 0 ? 'Finish' : `${t.next}/${Math.max(1, t.gates - 1)}`
+  return <>
+    <div className="hud-lap">
+      <span className="eyebrow">Lap</span>
+      <b>{t.lap}</b>
+    </div>
+    <div className="hud-times">
+      <div><span className="eyebrow">Time</span><span className={`mono${t.valid ? '' : ' trial-invalid-time'}`}>{formatTime(t.currentLapMs)}</span></div>
+      <div><span className="eyebrow">Best</span><span className="mono">{formatTime(t.best)}</span></div>
+      <div><span className="eyebrow">PB</span><span className="mono">{formatTime(t.pb)}</span></div>
+    </div>
+    <div className="hud-trial-gate">
+      <span className="eyebrow">Checkpoint</span>
+      <b>{gate}</b>
+      {!t.valid && <span className="hud-trial-gate__invalid">{t.reason === 'reset' ? 'Lap void · reset' : 'Lap void · missed gate'}</span>}
+      <small><kbd>T</kbd> restart</small>
+    </div>
+  </>
+}
+
+/** Free Roam: no clock, just what the keys do. */
+function RoamHud() {
+  return <div className="hud-roam">
+    <b>Free roam</b>
+    <small><kbd>R</kbd> nearest checkpoint · <kbd>T</kbd> back to start · <kbd>Esc</kbd> menu</small>
+  </div>
+}
+
+/** Time Trial split at each checkpoint and the lap call at the line, NFS style: green ahead of your PB, red behind. */
+function HudTrialCall() {
+  const t = useTelemetry(useShallow(s => ({ show: s.trialSplitShow, index: s.trialSplitIndex, split: s.trialSplitMs, delta: s.trialDeltaMs, lap: s.trialLastLap, gates: s.trialGateCount })))
+  const mode = useGame(s => s.settings.mode)
+  const phase = useGame(s => s.phase)
+  if (mode !== 'timeTrial' || phase !== 'racing' || !t.show || t.index < 0) return null
+  const delta = t.delta === null ? null : `${t.delta <= 0 ? '−' : '+'}${(Math.abs(t.delta) / 1000).toFixed(3)}`
+  const tone = t.delta === null ? '' : t.delta <= 0 ? ' is-ahead' : ' is-behind'
+  if (t.index === 0 && t.lap) {
+    const label = !t.lap.valid ? 'Lap void' : t.lap.personalBest ? 'New personal best' : t.lap.sessionBest ? 'Session best' : 'Lap'
+    return <div className={`trial-call trial-call--lap${t.lap.valid ? tone : ' is-void'}${t.lap.personalBest ? ' is-pb' : ''}`} key={`lap-${t.split}`} role="status">
+      <span>{label}</span>
+      <b className="mono">{formatTime(t.lap.lapMs)}</b>
+      {t.lap.valid && delta && <em className="mono">{delta}</em>}
+    </div>
+  }
+  return <div className={`trial-call${tone}`} key={`cp-${t.index}-${t.split}`} role="status">
+    <span>Checkpoint {t.index}/{Math.max(1, t.gates - 1)}</span>
+    <b className="mono">{formatTime(t.split)}</b>
+    {delta && <em className="mono">{delta}</em>}
+  </div>
 }
 
 function HudLeaderboard() {
@@ -188,7 +246,9 @@ function HudLaunch() {
 function HudGauges() {
   const t = useTelemetry(useShallow(s => ({ gear: s.gear, nitro: s.nitro, nitroActive: s.nitroActive, nitroCue: s.nitroCue, nitroPerfect: s.nitroPerfect, nitroReady: s.nitroReady, nitroWindow: s.nitroWindow, redlineRpm: s.redlineRpm, rpm: s.rpm, speedKmh: s.speedKmh })))
   const sweep = useGame(s => s.phase === 'countdown')
+  const hidden = useGame(s => s.settings.mode === 'freeRoam' && !s.settings.roamHud)
   const shift = t.gear > 0 && t.rpm >= t.redlineRpm * .94
+  if (hidden) return null
   return (
       <div className="speedo">
         <div className="speedo__side">

@@ -18,6 +18,7 @@ const SCALE = 100 / 520
 export function Minimap() {
   const id = useId().replace(/:/g, '')
   const drift = useGame(s => s.settings.mode === 'drift')
+  const mode = useGame(s => s.settings.mode)
   const gate = useTelemetry(s=>s.driftGate)
   const opponents = useTelemetry((s) => s.opponents)
   const data = useGame((s) => s.minimap)
@@ -97,7 +98,7 @@ export function Minimap() {
         <circle className="minimap__rim" cx="50" cy="50" r="48" />
         <text className="minimap__north" x={50 + Math.sin(northAngle) * 40} y={50 - Math.cos(northAngle) * 40} textAnchor="middle" dominantBaseline="central">N</text>
       </svg>
-      <div className="minimap__dist mono">{drift ? `${(distanceLeft / 1000).toFixed(2)} KM / TO FINISH` : `${(distanceLeft / 1000).toFixed(2)} km`}</div>
+      {mode !== 'freeRoam' && <div className="minimap__dist mono">{drift ? `${(distanceLeft / 1000).toFixed(2)} KM / TO FINISH` : mode === 'timeTrial' ? `${(distanceLeft / 1000).toFixed(2)} km to line` : `${(distanceLeft / 1000).toFixed(2)} km`}</div>}
     </div>
   )
 }

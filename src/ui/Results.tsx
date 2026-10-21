@@ -18,6 +18,8 @@ export function Results() {
   const standings = useTelemetry((s) => s.standings)
   const total = useTelemetry((s) => s.totalMs)
   const best = useTelemetry((s) => s.bestLapMs)
+  const trial = useGame(s => s.settings.mode === 'timeTrial')
+  if (trial) return <TrialResults />
   return (
     <div className={`screen screen--center ${drift ? '' : 'screen--race-results'}`}>
       <Panel title={drift ? 'Drift complete' : undefined} className="results-panel">
@@ -48,6 +50,37 @@ export function Results() {
         <Button variant="ghost" onClick={() => game?.quitToMenu()}>
           Main menu
         </Button>
+      </Panel>
+    </div>
+  )
+}
+
+/** Time Trial session summary: best laps and whether this one set a new personal best. */
+function TrialResults() {
+  const game = useGameInstance()
+  const track = useGame(s => s.trackName)
+  const car = useGame(s => s.carName)
+  const t = useTelemetry(useShallow(s => ({ best: s.trialSessionBestMs, pb: s.trialPersonalBestMs, laps: s.trialLaps, valid: s.trialValidLaps, total: s.totalMs })))
+  const newPb = t.best !== null && t.best === t.pb
+  return (
+    <div className="screen screen--center screen--race-results">
+      <Panel className="results-panel">
+        <div className="race-result__hero">
+          <span className="eyebrow">{track} / TIME TRIAL / {car}</span>
+          <h1>{newPb ? 'NEW PERSONAL BEST' : 'SESSION COMPLETE'}</h1>
+          <div className="race-result__position mono">{formatTime(t.best)}<small> SESSION BEST</small></div>
+          <p>{t.best === null ? 'No valid lap this time. Drive through every checkpoint without a reset.' : newPb ? 'That lap is the new benchmark for this car and build.' : `Your personal best still stands at ${formatTime(t.pb)}.`}</p>
+        </div>
+        <dl className="results">
+          <dt>Personal best</dt>
+          <dd className="mono">{formatTime(t.pb)}</dd>
+          <dt>Laps</dt>
+          <dd className="mono">{t.valid} valid / {t.laps}</dd>
+          <dt>Session time</dt>
+          <dd className="mono">{formatTime(t.total)}</dd>
+        </dl>
+        <Button variant="primary" size="lg" onClick={() => game?.startRace()} autoFocus>New session</Button>
+        <Button variant="ghost" onClick={() => game?.quitToMenu()}>Main menu</Button>
       </Panel>
     </div>
   )

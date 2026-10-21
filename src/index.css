@@ -390,6 +390,43 @@ kbd { font-family: inherit; font-size: 11px; padding: 1px 6px; border: 1px solid
   100% { opacity: 0; transform: skewX(var(--skew)) scale(1.06); }
 }
 
+/* Time Trial (#31): gate counter, void lap, and the split / lap call. */
+.hud-trial-gate, .hud-roam {
+  display: flex; flex-direction: column; justify-content: center; gap: 2px; padding: 6px 18px;
+  background: var(--glass-flat); transform: skewX(var(--skew));
+}
+.hud-trial-gate > *, .hud-roam > * { transform: skewX(var(--unskew)); }
+.hud-trial-gate b { font-style: italic; font-weight: 900; font-size: 24px; line-height: 1; color: #2de0ff; }
+.hud-trial-gate small, .hud-roam small { font-size: 11px; color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; }
+.hud-trial-gate kbd, .hud-roam kbd { font-size: 0.9em; }
+.hud-trial-gate__invalid { font-size: 12px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: #ff4d3d; }
+.trial-invalid-time { color: #ff4d3d; text-decoration: line-through; text-decoration-thickness: 2px; }
+.hud-roam b { font-style: italic; font-weight: 900; font-size: 22px; text-transform: uppercase; letter-spacing: 0.04em; }
+.trial-call {
+  position: absolute; top: 20%; left: 50%; transform: translateX(-50%) skewX(var(--skew));
+  display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 26px; pointer-events: none;
+  background: rgba(4, 12, 20, 0.72); border-top: 3px solid #2de0ff; text-transform: uppercase; white-space: nowrap;
+  animation: trial-call 3s ease-out both;
+}
+.trial-call > * { transform: skewX(var(--unskew)); }
+.trial-call span { font-size: 12px; font-weight: 800; letter-spacing: 0.14em; color: #c9d4e3; }
+.trial-call b { font-style: italic; font-weight: 900; font-size: clamp(24px, 3.4vw, 34px); line-height: 1.05; color: #fff; }
+.trial-call em { font-style: italic; font-weight: 900; font-size: clamp(20px, 2.6vw, 26px); }
+.trial-call.is-ahead { border-color: #2dff5a; }
+.trial-call.is-ahead em { color: #2dff5a; text-shadow: 0 0 16px rgba(45, 255, 90, 0.6); }
+.trial-call.is-behind { border-color: #ff4d3d; }
+.trial-call.is-behind em { color: #ff4d3d; text-shadow: 0 0 16px rgba(255, 77, 61, 0.6); }
+.trial-call.is-void { border-color: #ff4d3d; }
+.trial-call.is-void b { color: var(--muted); text-decoration: line-through; }
+.trial-call.is-pb { border-color: var(--accent); }
+.trial-call.is-pb span { color: var(--accent); }
+@keyframes trial-call {
+  0% { opacity: 0; transform: translateX(-50%) skewX(var(--skew)) scale(1.3); }
+  8% { opacity: 1; transform: translateX(-50%) skewX(var(--skew)) scale(1); }
+  85% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
 /* Launch (#91): rev band under the gantry through the countdown, then the grade call. */
 .launch-cue {
   position: absolute; top: 58%; left: 50%; transform: translateX(-50%); width: min(360px, calc(100vw - 32px));

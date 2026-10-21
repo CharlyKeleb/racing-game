@@ -8,6 +8,8 @@ export type RaceState = 'idle' | 'intro' | 'countdown' | 'racing' | 'finished'
 export interface RaceEvents {
   onStateChange(state: RaceState): void
   onLap(lap: number, timeMs: number, best: boolean): void
+  /** A checkpoint other than the line, with the lap time when it was crossed. */
+  onCheckpoint?(index: number, lapMs: number): void
 }
 
 export const COUNTDOWN_SEC = 3
@@ -23,7 +25,11 @@ export function startLightsLit(countdown: number): number {
   return Math.max(0, Math.min(START_LIGHTS, Math.floor((elapsed - FIRST_LIGHT_SEC) / LIGHT_INTERVAL_SEC) + 1))
 }
 
-/** Race rules: countdown → N laps → finished. Knows nothing about rendering. */
+/**
+ * Race rules: countdown → N laps → finished. Knows nothing about rendering.
+ * Time Trial runs with `totalLaps = Infinity` (laps until the player leaves);
+ * Free Roam skips the countdown and only tracks checkpoints, for resets.
+ */
 export class RaceManager {
   state: RaceState = 'idle'
   /** 1-based current lap while racing. */
@@ -32,6 +38,8 @@ export class RaceManager {
   introRemaining = 0
   introDuration = 0
   totalLaps: number
+  /** Free Roam: driving with no timer, laps or finish. */
+  freeRoam = false
   readonly timer = new LapTimer()
   private readonly checkpoints: CheckpointManager
   private readonly events: RaceEvents
@@ -53,6 +61,7 @@ export class RaceManager {
   }
 
   start(totalLaps: number, introSeconds = 0): void {
+    this.freeRoam = false
     this.totalLaps = totalLaps
     this.timer.reset()
     this.checkpoints.reset()
@@ -60,6 +69,18 @@ export class RaceManager {
     this.countdown = COUNTDOWN_SEC
     this.introRemaining = this.introDuration = Math.max(0,introSeconds)
     this.setState(this.introRemaining > 0 ? 'intro' : 'countdown')
+  }
+
+  /** Straight to driving: no intro, countdown, lap target or finish. */
+  startFreeRoam(): void {
+    this.freeRoam = true
+    this.totalLaps = Infinity
+    this.timer.reset()
+    this.checkpoints.reset()
+    this.lap = 0
+    this.countdown = 0
+    this.introRemaining = this.introDuration = 0
+    this.setState('racing')
   }
 
   skipIntro(): void {
@@ -87,7 +108,10 @@ export class RaceManager {
     if (this.state !== 'racing') return
 
     this.timer.tick(dt)
-    if (this.checkpoints.update(carPosition) === 'lap') {
+    const passed = this.checkpoints.update(carPosition)
+    if (this.freeRoam) return
+    if (passed === 'checkpoint') this.events.onCheckpoint?.(this.checkpoints.last, this.timer.currentLapMs)
+    if (passed === 'lap') {
       const best = this.timer.completeLap()
       this.events.onLap(this.lap, this.timer.lastLapMs!, best)
       if (this.lap >= this.totalLaps) {
