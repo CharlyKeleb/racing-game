@@ -288,8 +288,36 @@ kbd { font-family: inherit; font-size: 11px; padding: 1px 6px; border: 1px solid
 .swatch--custom input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; border: 0; padding: 0; }
 
 /* ── Pause / results ────────────────────────────────────────────────── */
-.pause { display: flex; gap: 16px; align-items: stretch; flex-wrap: wrap; justify-content: center; }
-.pause__main { width: 300px; }
+/* The pause screen never outgrows the viewport: only the settings content scrolls. */
+.pause { display: flex; gap: 16px; align-items: flex-start; justify-content: center; max-height: calc(100dvh - 2 * var(--gutter)); min-height: 0; }
+.pause__main { width: 300px; flex-shrink: 0; }
+.pause .settings { display: flex; flex-direction: column; min-height: 0; max-height: calc(100dvh - 2 * var(--gutter)); }
+.pause .settings__header, .pause .settings__footer { flex-shrink: 0; }
+.pause .settings__body { flex: 1 1 auto; min-height: 0; grid-template-rows: minmax(0, 1fr); }
+.pause .settings__content { max-height: none; min-height: 0; overflow-y: auto; }
+/* Too narrow for side by side: stack, with the pause actions as one compact row above the sheet. */
+@media (max-width: 1140px) {
+  .pause { flex-direction: column; align-items: stretch; width: min(760px, calc(100vw - 2 * var(--gutter))); }
+  .pause__main { width: auto; display: grid; grid-auto-flow: column; grid-template-columns: auto; grid-auto-columns: minmax(0, 1fr); align-items: center; gap: 10px; padding: 14px 18px; }
+  .pause__main .ui-panel__title { font-size: 24px; margin-right: 6px; }
+  .pause__main .ui-btn { min-width: 0; }
+  .pause__main .ui-btn--lg { height: 48px; font-size: 20px; padding: 0 16px; }
+  .pause .settings { flex: 1 1 auto; width: 100%; max-height: none; }
+}
+@media (max-width: 600px) {
+  .pause__main { grid-auto-flow: row; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pause__main .ui-panel__title, .pause__main > .ui-btn:first-of-type { grid-column: 1 / -1; }
+  .pause .settings__body { grid-template-rows: auto minmax(0, 1fr); }
+}
+/* Short windows: a tighter sheet header and footer leave the room to the settings. */
+@media (max-height: 760px) {
+  .pause .settings__header { padding: 12px 20px; }
+  .pause .settings__header h2 { font-size: 24px; margin-top: 4px; }
+  .pause .settings__footer { padding: 10px 20px; }
+  .pause .settings__nav { padding: 10px; gap: 4px; }
+  .pause .settings__nav button { padding: 9px 10px; }
+  .pause .settings__content { padding: 18px 20px; }
+}
 .pause__main .ui-btn, .results-panel .ui-btn { width: 100%; }
 .results-panel { width: min(380px, calc(100vw - 32px)); }
 .results { display: grid; grid-template-columns: auto 1fr; gap: 10px 20px; margin: 0 0 6px; align-items: baseline; }
