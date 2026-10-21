@@ -1,41 +1,29 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { DriftChallenge } from '../src/racing/DriftChallenge'
-import { Game } from '../src/engine/Game'
-import { ProximityRadar } from '../src/racing/ProximityRadar'
 import { gameStore } from '../src/stores/gameStore'
+import { makeTestGame, stub } from './helpers/testGame'
 
 const savedSettings = gameStore.getState().settings
 
 // Exercise command orchestration without constructing WebGL, audio or physics.
+// Only what the tests check or branch on is spelled out; makeTestGame stubs the rest.
 function loadingGame(loadVisuals: () => Promise<void>) {
   gameStore.setState({ settings: { ...savedSettings, opponents: 0 } })
-  return Object.assign(Object.create(Game.prototype), {
+  return makeTestGame({
     track: { loadVisuals, line: [{x:0,y:0,z:0},{x:0,y:0,z:100},{x:100,y:0,z:100},{x:100,y:0,z:0}], spawn: { heading: 0, position: { x: 0, y:0.6, z: 0 } }, isRoadCollider: () => true },
     physics: { groundHeight: () => 0 },
-    vehicle: { respawn: vi.fn(), controller: { setDriftMode: vi.fn() } },
-    camera: { snap: vi.fn() },
-    progress: { reset: vi.fn(), update: vi.fn() },
-    driftChallenge: new DriftChallenge(),
     opponents: [],
     opponentFlames: new Map(),
-    playerPose: {},
-    playerEntry: {},
     opponentToken: 0,
-    carId: "bmw",
-    publishTelemetry: vi.fn(),
+    carId: 'bmw',
     prepareRaceIntro: vi.fn(),
     trackVisuals: null,
     trackVisualsDone: false,
     trackProgress: 0,
     trackLoadToken: 0,
     raceQueued: false,
+    raceTransition: false,
     raceLoadingTick: null,
-    disposed: false,
-    awareness:new ProximityRadar(),awarenessFrame:0,
-    audio: { unlock: vi.fn(), playStart: vi.fn(), clearOpponents: vi.fn(), setOpponentCars: vi.fn(), clearSpotter:vi.fn() },
-    resetCar: vi.fn(),
-    effects: { clear: vi.fn() },
-    sparks: { clear: vi.fn() },
+    safetyWalls: stub(),
     race: { start: vi.fn() },
   })
 }
@@ -121,7 +109,7 @@ describe('streamed track disposal during boot', () => {
 describe('race cinematic handoff', () => {
   it('holds the previous frame and scene during race loading', () => {
     gameStore.setState({phase:'loading'})
-    const game = Object.assign(Object.create(Game.prototype), {
+    const game = makeTestGame({
       raceTransition:true,
       vehicle:{render:vi.fn()},
       renderer:{render:vi.fn()},
@@ -136,14 +124,12 @@ describe('race cinematic handoff', () => {
   it('paints the first cinematic shot while the loading overlay is still present', () => {
     gameStore.setState({phase:'loading'})
     const order: string[] = []
-    const game = Object.assign(Object.create(Game.prototype), {
+    const game = makeTestGame({
       finish:{reset:vi.fn()},
       loop:{timeScale:.28},
       audio:{setFinishMix:vi.fn()},
       updateShowroom:()=>order.push('scene'),
       vehicle:{render:()=>order.push('player'),position:{},model:{root:{}},config:{engine:{idleRpm:900}}},
-      playerRevs:{reset:()=>{}},
-      launch:{setConfig:()=>{},reset:()=>{}},
       opponents:[{vehicle:{render:()=>order.push('rival'),model:{root:{}}}}],
       environment:{follow:()=>{}},
       physics:{world:{}},
@@ -155,5 +141,18 @@ describe('race cinematic handoff', () => {
     expect(game.loop.timeScale).toBe(1)
     expect(game.finish.reset).toHaveBeenCalledOnce()
     expect(game.audio.setFinishMix).toHaveBeenCalledWith(false)
+  })
+})
+
+
+describe('test game helper (#49)', () => {
+  it('stubs fields a test did not provide, so new Game fields do not break orchestration tests', async () => {
+    const game = makeTestGame({ disposed: false })
+    expect(() => game.someFieldAddedLater.reset(1).deeper.call()).not.toThrow()
+    expect(+game.anotherNumber + 1).toBe(1)
+    expect(`${game.aLabel}`).toBe('')
+    await expect(Promise.resolve(game.asyncThing())).resolves.toBeTruthy()
+    expect(game.stubbed.has('someFieldAddedLater')).toBe(true)
+    expect(game.disposed).toBe(false)
   })
 })
