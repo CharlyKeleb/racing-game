@@ -9,3 +9,6 @@
 # that built it couldn't reach GitHub's LFS endpoint. Move it into LFS later
 # with `git lfs migrate import --include="public/models/tracks/singapore/**"`.
 public/models/tracks/singapore/** -filter -diff -merge binary
+
+# In-race playlist (~22 MB of MP3s); the menu tracks predate this and stay plain blobs.
+public/audio/music/race/*.mp3 filter=lfs diff=lfs merge=lfs -text

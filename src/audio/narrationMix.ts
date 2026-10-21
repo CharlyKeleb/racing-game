@@ -2,7 +2,13 @@ import { createStore } from 'zustand/vanilla'
 
 /** Narrator media bypasses the game mixer, so ducking the game never ducks speech. */
 export const narrationMix = createStore<{ voices: number }>(() => ({ voices: 0 }))
-export const NARRATION_GAME_LEVEL = .08
+/**
+ * Under a line: engine, rivals, ambience and music drop ~10 dB, crashes ~4 dB.
+ * Start lights, callout chimes and the finish sting aren't ducked: the line is
+ * about them, so they must land together.
+ */
+export const NARRATION_BED_LEVEL = .32
+export const NARRATION_HIT_LEVEL = .6
 
 /** A release belongs to one playback; overlapping previews cannot unduck each other. */
 export function beginNarration(): () => void {

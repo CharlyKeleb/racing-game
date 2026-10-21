@@ -3,10 +3,25 @@ import { CommentaryTiming } from '../audio/CommentaryTiming'
 import { CommentaryDirector } from '../audio/CommentaryDirector'
 import { attachNarrationDucking } from '../audio/narrationMix'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { hasCommentaryExchange, availableNarrationVariants, narrationText, NARRATOR_NAMES, NARRATOR_PORTRAITS, narrationClip, revealedCharacters, type NarrationId, type NarratorVoice } from '../audio/narration'
+import { hasCommentaryExchange, availableNarrationVariants, narrationText, NARRATOR_NAMES, NARRATOR_PORTRAITS, narrationClip, revealedCharacters, type NarrationId, type Narrator, type NarratorVoice } from '../audio/narration'
 import { gameStore } from '../stores/gameStore'
 import { telemetryStore } from '../stores/telemetryStore'
 import { useGame } from './hooks'
+
+/** The start clip opens on ~0.2 s of breath: begin it that far before lights out so "Go!" lands on the gantry. */
+const START_LEAD_S = .2
+/** Lines that answer a race event: fetched during the intro so the first one isn't late on a network round trip. */
+const EVENT_LINES: readonly NarrationId[] = ['start', 'overtake', 'lead', 'lostLead', 'finalLap', 'finish', 'raceComplete']
+const warmed = new Set<string>()
+function warmClips(narrator: Narrator) {
+  const voices: NarratorVoice[] = narrator === 'duo' ? ['alex', 'camille'] : narrator === 'off' ? [] : [narrator]
+  for (const voice of voices) for (const id of EVENT_LINES) for (const variant of [...availableNarrationVariants(voice, id), -1]) {
+    const url = narrationClip(voice, id, variant)
+    if (!url || warmed.has(url)) continue
+    warmed.add(url)
+    void fetch(url).catch(() => warmed.delete(url))
+  }
+}
 
 export function Narration() {
   const phase = useGame(s => s.phase)
@@ -22,6 +37,7 @@ export function Narration() {
   const previous = useRef(phase)
   const lastCallout = useRef<object | null>(null)
   const tipped = useRef(false)
+  const startSaid = useRef(false)
   const finishAnnounced = useRef(false)
   const photoFinish = useRef(false)
   const audioRef = useRef<HTMLAudioElement | null>(null)
@@ -95,9 +111,10 @@ export function Narration() {
         }
         return
       }
-      if (phase === 'intro' && before !== phase) { tipped.current = false; lastCallout.current = null; timing.current.reset(); midRace.current.reset(); director.current.startRace(); say('welcome', true) }
-      if (phase === 'countdown' && before !== phase && before !== 'paused') { tipped.current = false; lastCallout.current = null; midRace.current.reset(); director.current.startRace(); say('countdown', true) }
-      if (phase === 'racing' && before !== phase && before !== 'paused') say(mode === 'quick' ? 'start' : mode, true)
+      if (phase === 'intro' && before !== phase) { tipped.current = false; startSaid.current = false; lastCallout.current = null; timing.current.reset(); midRace.current.reset(); director.current.startRace(); warmClips(narrator); say('welcome', true) }
+      if (phase === 'countdown' && before !== phase && before !== 'paused') { tipped.current = false; startSaid.current = false; lastCallout.current = null; midRace.current.reset(); director.current.startRace(); warmClips(narrator); say('countdown', true) }
+      const startDue = phase === 'countdown' ? sample.countdown > 0 && sample.countdown <= START_LEAD_S : phase === 'racing' && before !== phase && before !== 'paused'
+      if (startDue && !startSaid.current) { startSaid.current = true; say(mode === 'quick' ? 'start' : mode, true) }
       if (callout && callout !== lastCallout.current && phase === 'racing') {
         lastCallout.current = callout
         tipped.current = true // Don't interrupt race commentary with the beginner tip.
