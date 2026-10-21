@@ -161,6 +161,12 @@ export interface VehicleConfig {
   /** Share of downforce on the front axle (aero balance), 0..1. */
   downforceFrontShare: number
   nitro: NitroConfig
+  /**
+   * Brake-disc glow (#92): the wheel material that is the disc, and a glow
+   * strength scale. Without a material (or on an LOD that dropped it) a ring is
+   * drawn behind the spokes instead.
+   */
+  brakeDisc?: { material?: string; intensity?: number }
   /** Skill launch at lights-out (see racing/LaunchControl.ts). */
   launch: LaunchConfig
   /** Drift entries and how loose the rear goes (see Drift.ts). */

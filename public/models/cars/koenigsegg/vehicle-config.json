@@ -5,6 +5,7 @@
   "chassisHalfExtents": [0.95, 0.38, 2.15],
   "chassisCenter": [0, 0.6, 0.1],
   "centerOfMass": [0, 0.32, -0.25],
+  "brakeDisc": { "material": "KOP_DiskBrake_Shd" },
   "wheels": [
     { "id": "FL", "position": [0.887, 0.636, 1.356], "radius": 0.315, "width": 0.278, "steered": true, "driven": false, "handbrake": false },
     { "id": "FR", "position": [-0.887, 0.636, 1.356], "radius": 0.315, "width": 0.278, "steered": true, "driven": false, "handbrake": false },
