@@ -15,6 +15,7 @@ import { RainImpacts } from '../effects/RainImpacts'
 import { WetRoads } from '../effects/WetRoads'
 import { motionExposure } from '../effects/MotionBlur'
 import { WhipStreaks } from '../effects/WhipStreaks'
+import { NitroRush } from '../effects/NitroRush'
 import { DrivingLine } from '../effects/DrivingLine'
 import { BrakingGuide } from '../racing/BrakingGuide'
 import { performanceCapture } from './PerformanceCapture'
@@ -179,6 +180,8 @@ const DRIVE_IN_DIST = 12
 export class Game {
   private readonly introCamera: RaceIntroCamera
   private readonly whipStreaks = new WhipStreaks()
+  /** Nitro speed streaks bursting out of the frame (behind the Speed Lines setting). */
+  private readonly nitroRush = new NitroRush()
   private readonly renderer: Renderer
   private readonly assets = new AssetManager()
   private readonly input = new InputManager()
@@ -345,6 +348,7 @@ export class Game {
     this.introCamera = new RaceIntroCamera(this.renderer.camera)
     NitroFlames.camera = this.renderer.camera
     this.renderer.scene.add(this.whipStreaks.mesh)
+    this.renderer.scene.add(this.nitroRush.mesh)
     this.finishCamera = new RaceFinishCamera(this.renderer.camera)
     this.loop = new GameLoop({
       fixedUpdate: (dt) => this.fixedUpdate(dt),
@@ -1703,6 +1707,9 @@ export class Game {
     // Without post FX (Low) the whip has no motion blur: streak overlay instead (#46).
     const streaks = phase === 'intro' && !this.renderer.postfxActive && blurAmount > 0 ? this.introCamera.whip * Math.min(1, blurAmount / 0.5) : 0
     this.whipStreaks.update(camera, streaks, this.introCamera.whipDirection, frameDt)
+    const nitro = this.vehicle.controller.nitro
+    const rushing = phase === 'racing' && !this.camera.lookBack
+    this.nitroRush.update(camera, rushing ? nitro.intensity : 0, nitro.perfect, gameStore.getState().settings.speedLines, phase === 'paused' ? 0 : frameDt)
     const staging = phase === 'intro' || phase === 'countdown'
     if (staging) this.updateStaging(phase, dt)
     else if (phase === 'racing' && this.lightsShown > 0) {
@@ -1883,7 +1890,11 @@ export class Game {
   private exhaustPops(): void {
     const ctrl = this.vehicle.controller
     if (ctrl.backfire.popped) this.audio.backfire(-1, ctrl.backfire.popped, ctrl.backfire.strength)
-    if (ctrl.nitro.ignited) this.camera.jolt(0.55)
+    if (ctrl.nitro.ignited) {
+      this.camera.jolt(0.55)
+      this.camera.ignite()
+      this.nitroRush.ignite()
+    }
     for (let i = 0; i < this.opponents.length; i++) {
       const b = this.opponents[i].vehicle.controller.backfire
       if (b.popped) this.audio.backfire(i, b.popped, b.strength)
@@ -2353,6 +2364,7 @@ export class Game {
     this.audio.onRaceMusicTrack = null
     this.spoiler?.dispose()
     this.whipStreaks.dispose()
+    this.nitroRush.dispose()
     this.livery?.dispose()
     this.effects?.dispose()
     this.sparks?.dispose()

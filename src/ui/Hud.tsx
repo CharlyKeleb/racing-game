@@ -25,7 +25,6 @@ export function Hud() {
   const fieldSize = useTelemetry(s => s.standings.length)
   const drift = useGame(s => s.settings.mode === 'drift')
   const phase = useGame((s) => s.phase)
-  const speedLines = useGame((s) => s.settings.speedLines)
   const awarenessVisible=useGame(s=>s.settings.proximityRadar||s.settings.spotterVisual)
   useLayoutEffect(() => {
     const element = root.current!
@@ -43,7 +42,6 @@ export function Hud() {
   }, [drift, fieldSize, phase, awarenessVisible])
   return (
     <div ref={root} className={`hud${t.nitroActive ? ' hud--nitro' : ''}${t.nitroPerfect ? ' hud--nitro-perfect' : ''}`}>
-      {speedLines && <div className="hud-speedlines" aria-hidden="true" />}
       <HudRaceInfo />
       <HudLeaderboard />
       <div className="hud-bl">

@@ -175,6 +175,42 @@ describe('handling', () => {
     expect(slip()).toBeLessThan(10)
   })
 
+  it('a held drift rounds a corner tighter than grip, and exits without flicking back', () => {
+    /** Heading change of the velocity over 1.5 s of full right lock, after a handbrake flick for the drift. */
+    const turn = (drift: boolean) => {
+      const { ctrl, step, body } = spawnCar(PORSCHE_911)
+      while (ctrl.forwardSpeed < 100 / 3.6) step(drive(0))
+      for (let i = 0; i < 15; i++) step({ throttle: 1, brake: 0, steer: 1, handbrake: drift, nitro: false })
+      const travel = () => Math.atan2(body.linvel().x, body.linvel().z)
+      const start = travel()
+      for (let i = 0; i < 90; i++) step({ throttle: 1, brake: 0, steer: 1, handbrake: false, nitro: false })
+      let turned = start - travel()
+      if (turned < 0) turned += Math.PI * 2
+      return { turned, ctrl, step, body }
+    }
+    const grip = turn(false)
+    const drift = turn(true)
+    expect(drift.ctrl.drift.active).toBe(true)
+    expect(drift.turned).toBeGreaterThan(grip.turned * 1.1)
+    // Let go: the body swings back to the line without overshooting the other way.
+    const signed = () => {
+      const v = drift.body.linvel()
+      const q = drift.body.rotation()
+      const fx = 2 * (q.x * q.z + q.w * q.y)
+      const fz = 1 - 2 * (q.x * q.x + q.y * q.y)
+      return (Math.atan2(v.x * fz - v.z * fx, v.x * fx + v.z * fz) * 180) / Math.PI
+    }
+    const side = Math.sign(signed())
+    let overshoot = 0
+    for (let i = 0; i < 120; i++) {
+      drift.step(drive(0))
+      overshoot = Math.max(overshoot, -side * signed())
+    }
+    expect(drift.ctrl.drift.amount).toBe(0)
+    expect(overshoot).toBeLessThan(3)
+    expect(slipAngle(drift.body)).toBeLessThan(3)
+  })
+
   it('a gravel trap brings the car to a stop far sooner than tarmac', () => {
     const coastDistance = (surface: Surface) => {
       const { ctrl, step } = spawnCar(DEFAULT_VEHICLE_CONFIG)

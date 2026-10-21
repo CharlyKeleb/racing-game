@@ -109,6 +109,8 @@ export class ChaseCamera {
   private holdBlend = 0
   /** Extra degrees of FOV at full nitro. */
   nitroFovKick = 9
+  /** Extra degrees of FOV at the instant the nitro lights, gone over ~0.5 s (the NFS punch). */
+  ignitionFovPunch = 8
   /** Extra chase distance at full nitro, meters (the car surges away from the lens). */
   nitroPullBack = 0.7
   /** Camera shake amplitude at top speed and at full nitro, meters. */
@@ -134,7 +136,14 @@ export class ChaseCamera {
     }
   }
 
+  /** The nitro just lit: punch the lens wide for a moment. */
+  ignite(): void {
+    this.punch = 1
+  }
+
   private time = 0
+  /** Ignition punch, 1 as the nitro lights, decaying. */
+  private punch = 0
   /** Nitro intensity, smoothed separately so the FOV kicks fast and relaxes slowly. */
   private kick = 0
   private appliedKick = 0
@@ -162,6 +171,7 @@ export class ChaseCamera {
     this.time += dt
     boost = Math.min(boost, 1.3)
     this.kick += (boost - this.kick) * damp(boost > this.kick ? 10 : 2.5, dt)
+    this.punch *= Math.exp(-6 * dt)
     _fwd.set(0, 0, 1).applyQuaternion(target.quaternion)
 
     // Shake: a few incommensurate sines, so it never visibly loops.
@@ -270,7 +280,7 @@ export class ChaseCamera {
     const fovFx = this.fovEffects && !this.reduced?.matches
     const fov = inCockpit ? cockpitProfile(this.cockpitCar).fov + this.cockpitAdjustment.fov : this.baseFov + gridFraming * 4 + (fovFx ? this.maxFovBoost * speedT : 0)
     const speedFov = THREE.MathUtils.lerp(this.camera.fov - this.appliedKick, fov, damp(4, dt))
-    this.appliedKick = fovFx ? (inCockpit ? movement ? 2 : 0 : this.nitroFovKick) * this.kick : 0
+    this.appliedKick = fovFx ? (inCockpit ? movement ? 2 : 0 : this.nitroFovKick * this.kick + this.ignitionFovPunch * this.punch * this.punch) : 0
     const next = speedFov + this.appliedKick
     if (Math.abs(this.camera.fov - next) > 0.0001) {
       this.camera.fov = next

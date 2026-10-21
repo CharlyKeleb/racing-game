@@ -90,10 +90,20 @@ export class VehicleController {
   readonly backfire = new Backfire()
   private eventDrift: DriftConfig | null = null
   setDriftMode(enabled: boolean): void {
-    this.eventDrift = enabled ? {...this.cfg.drift, minSpeed:9, entryLock:.4, baseAngle:.46, holdAngle:.78, minAngle:.18, exitTime:.55, counterExitTime:.9, scrub:.025, pathG:.5} : null
+    this.eventDrift = enabled ? {...this.cfg.drift, minSpeed:9, entryLock:.4, baseAngle:.46, holdAngle:.72, minAngle:.18, exitTime:.55, counterExitTime:.9, scrub:.02, angleScrub:.45, turnInto:1.3} : null
   }
   private readonly driftGuide: DriftGuide = { angle: 0, pathRate: 0 }
   steerAngle = 0
+  /**
+   * Front wheel angle to draw, radians. Equals `steerAngle` on grip; in a drift
+   * the wheels swing toward the direction of travel (the countersteer every
+   * drifter holds), whatever the keys are doing.
+   */
+  wheelAngle = 0
+  /** Full-lock grip turn rate at the current speed, rad/s: what a drift's arc is measured against. */
+  private gripTurnRate = 0
+  /** Throttle given to the drift guidance this tick. */
+  private driftThrottle = 0
   /** Signed forward speed of the chassis, m/s. */
   forwardSpeed = 0
   /** Brake pedal actually braking (not driving in reverse), 0..1. Brake lights. */
@@ -187,7 +197,9 @@ export class VehicleController {
     // In a drift the driver needs real opposite lock, so the high-speed limit opens up.
     const gripFactor = 1 / (1 + speed / cfg.steerFalloffSpeed)
     const speedFactor = gripFactor + (Math.max(gripFactor, 0.55) - gripFactor) * this.drift.amount
-    const available = steeringLimit(this.steeringConfig, speed, input.handbrake ? 1 : this.drift.amount, surfaceProps(this.surfaceAt(t.x,t.z)).grip)
+    const roadGrip = surfaceProps(this.surfaceAt(t.x, t.z)).grip
+    const available = steeringLimit(this.steeringConfig, speed, input.handbrake ? 1 : this.drift.amount, roadGrip)
+    this.gripTurnRate = (speed * Math.tan(steeringLimit(this.steeringConfig, speed, 0, roadGrip))) / this.wheelbase
     const targetSteer = -input.steer * available
     if (input.steerSource === 'keyboard') {
       this.steerAngle = keyboardSteeringAngle(this.steerAngle, targetSteer, available, dt, cfg.keyboardSteering)
@@ -290,6 +302,7 @@ export class VehicleController {
       _impulse.copy(_up).multiplyScalar(-this.drift.entry * driftCfg.kick * this.yawInertia)
       body.applyTorqueImpulse(_impulse, true)
     }
+    this.driftThrottle = driveThrottle
     const rearGrip = this.drift.rearGripScale(driveThrottle, driftCfg)
     const combinedRear = this.drift.amount > 0.3
 
@@ -522,39 +535,56 @@ export class VehicleController {
 
   /**
    * Arcade drift (NFS / Asphalt): while a drift is on, carve the direction of
-   * travel along the drift's arc, keeping the speed (less a little scrub), and
-   * swing the body to the drift angle. Both are blended in by `drift.amount`,
-   * so entries and exits ease rather than snap. Steering sets the angle and
-   * the arc (see Drift.guide).
+   * travel along the drift's arc and swing the body to the drift angle, both
+   * blended in by `drift.amount` so entries and exits ease rather than snap.
+   * The arc is a share of the car's own grip turn (Drift.guide), so a drift
+   * goes round the corner; the angle costs speed (Drift.scrubRate). The swing
+   * toward the target angle is capped, so the tail comes out smoothly instead
+   * of whipping round.
    */
   private applyDriftGuidance(steer: number, groundedCount: number, dt: number): void {
     const amount = this.drift.amount
-    if (amount < 0.01 || groundedCount < 2) return
+    if (amount < 0.01 || groundedCount < 2) {
+      this.wheelAngle = this.steerAngle
+      return
+    }
     const cfgD = this.eventDrift ?? this.cfg.drift
     const body = this.body
     const lv = body.linvel()
     _vh.set(lv.x, lv.y, lv.z)
     _vh.addScaledVector(_up, -_vh.dot(_up))
     const speed = _vh.length()
-    if (speed < 4) return
-    const guide = this.drift.guide(steer, speed, cfgD, this.driftGuide)
+    if (speed < 4) {
+      this.wheelAngle = this.steerAngle
+      return
+    }
 
-    // Carve: turn the travel direction at the arc's rate, keeping its speed.
-    _carve.copy(_vh).applyAxisAngle(_up, guide.pathRate * dt).multiplyScalar(Math.exp(-cfgD.scrub * dt))
+    // Body slip β (signed, travel direction → nose).
+    _fh.copy(_fwd).addScaledVector(_up, -_fwd.dot(_up)).normalize()
+    _carve.copy(_vh).divideScalar(speed)
+    const beta = Math.atan2(_cross.crossVectors(_carve, _fh).dot(_up), _carve.dot(_fh))
+    const guide = this.drift.guide(steer, this.driftThrottle, this.gripTurnRate, beta, cfgD, this.driftGuide)
+
+    // Carve: turn the travel direction at the arc's rate; the angle scrubs speed.
+    const scrub = this.drift.active ? this.drift.scrubRate(beta, this.driftThrottle, cfgD) : cfgD.scrub
+    _carve.copy(_vh).applyAxisAngle(_up, guide.pathRate * dt).multiplyScalar(Math.exp(-scrub * dt))
     _impulse.subVectors(_carve, _vh).multiplyScalar(this.cfg.massKg * amount)
     body.applyImpulse(_impulse, true)
 
-    // Angle: body slip β (signed, travel direction → nose) toward the target,
-    // on top of turning with the arc.
-    _fh.copy(_fwd).addScaledVector(_up, -_fwd.dot(_up)).normalize()
-    _vh.divideScalar(speed)
-    const beta = Math.atan2(_cross.crossVectors(_vh, _fh).dot(_up), _vh.dot(_fh))
+    // Angle: on top of turning with the arc, swing toward the target (capped).
     const av = body.angvel()
     const yawRate = av.x * _up.x + av.y * _up.y + av.z * _up.z
-    const wanted = guide.pathRate + cfgD.angleGain * (guide.angle - beta)
+    const swing = Math.max(-cfgD.maxSwing, Math.min(cfgD.maxSwing, cfgD.angleGain * (guide.angle - beta)))
+    const wanted = guide.pathRate + swing
     const k = 1 - Math.exp(-cfgD.yawResponse * dt)
     _impulse.copy(_up).multiplyScalar((wanted - yawRate) * k * amount * this.yawInertia)
     body.applyTorqueImpulse(_impulse, true)
+
+    // Drawn front wheels: point down the line of travel (countersteer), with a
+    // little of the driver's steering on top, clamped to the lock.
+    const lock = this.cfg.maxSteerAngle
+    const counter = Math.max(-lock, Math.min(lock, -beta * 0.85 + this.steerAngle * 0.25))
+    this.wheelAngle = this.steerAngle + (counter - this.steerAngle) * amount
   }
 
   /** Throttle pedal after ramping, 0..1: what the engine actually gets (audio reads it). */
@@ -564,7 +594,8 @@ export class VehicleController {
 
   reset(): void {
     this.forwardSpeed = 0
-    this.steerAngle = 0
+    this.steerAngle = this.wheelAngle = 0
+    this.gripTurnRate = this.driftThrottle = 0
     this.drafting = 0
     this.launchPush = 0
     this.throttle = 0

@@ -3,7 +3,7 @@ import { BANG, NONE, type PopKind } from '../vehicles/Backfire'
 import type { VehicleConfig } from '../vehicles/VehicleConfig'
 
 /** Nitro flame length at full boost, m (a perfect boost runs a little longer). */
-const FLAME_LENGTH = 0.8
+const FLAME_LENGTH = 1.05
 const OVAL = 0.62
 /** Fireball diameter at full bloom, m: a crackle, and a bang. */
 const CRACKLE_SIZE = 0.34
@@ -83,11 +83,11 @@ function fireColor(t: number, out: THREE.Color): THREE.Color {
 }
 
 /**
- * Nitro flame colour along the plume, like real exhaust fire: blue-white at
- * the nozzle, white-yellow in the body, orange at the edges, dark red as it
- * dies. Under 1 on green/blue so it stays fire-coloured untone-mapped.
+ * Nitro flame colour along the plume, nitrous-blue like NFS: white-hot at the
+ * nozzle, electric blue in the body, violet at the edges, dying out dark
+ * purple. Red stays under 1 so the blue doesn't wash out to white untone-mapped.
  */
-const JET_STOPS = [new THREE.Color(0.8, 0.9, 1.7), new THREE.Color(1.9, 1.5, 0.75), new THREE.Color(1.8, 0.9, 0.22), new THREE.Color(1.2, 0.36, 0.05), new THREE.Color(0.35, 0.06, 0.01)]
+const JET_STOPS = [new THREE.Color(0.9, 1.3, 2.4), new THREE.Color(0.35, 0.85, 2.3), new THREE.Color(0.55, 0.35, 1.9), new THREE.Color(0.45, 0.12, 0.9), new THREE.Color(0.12, 0.02, 0.25)]
 function jetColor(t: number, out: THREE.Color): THREE.Color {
   const x = Math.min(0.999, Math.max(0, t)) * (JET_STOPS.length - 1)
   const i = Math.floor(x)

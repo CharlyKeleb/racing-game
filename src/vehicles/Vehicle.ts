@@ -200,7 +200,7 @@ export class Vehicle {
     this.currPos.set(t.x, t.y, t.z)
     this.currQuat.set(r.x, r.y, r.z, r.w)
     this.prevSteer = this.currSteer
-    this.currSteer = this.controller.steerAngle
+    this.currSteer = this.controller.wheelAngle
     const wheels = this.controller.wheels
     for (let i = 0; i < wheels.length; i++) {
       this.prevOffset[i] = this.currOffset[i]
