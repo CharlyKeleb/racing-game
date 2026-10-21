@@ -47,6 +47,18 @@ describe('burnout', () => {
     expect(lift.intensity).toBeLessThan(launch.intensity)
   })
 
+  it('backfires irregularly while it is really going, and stops when you lift', () => {
+    const b = new Burnout()
+    const pops: number[] = []
+    for (let t = 0; t < 3; t += DT) { b.update(DT, held); if (b.pop > 0.55) pops.push(t) }
+    const starts = pops.filter((t, i) => i === 0 || t - pops[i - 1] > DT * 1.5)
+    expect(starts.length).toBeGreaterThan(4)
+    const gaps = starts.slice(1).map((t, i) => t - starts[i])
+    expect(Math.max(...gaps) - Math.min(...gaps)).toBeGreaterThan(0.1) // not a metronome
+    run(b, { throttle: 0, brake: 0 }, 1)
+    expect(b.pop).toBe(0)
+  })
+
   it('reset clears it', () => {
     const b = new Burnout()
     run(b, {}, 0.5)
@@ -103,6 +115,23 @@ describe('burnout in the car', () => {
     expect(ctrl.drivetrain.gear).toBe(1)
     expect(ctrl.burnout.holding).toBe(true)
     expect(ctrl.forwardSpeed).toBeGreaterThan(-0.5)
+  })
+
+  it('steering in a burnout swings the tail round on the spot, pivoting on the front wheels', () => {
+    const { ctrl, step, body } = spawn(DEFAULT_VEHICLE_CONFIG)
+    step(pedals({}), 1)
+    const yaw = () => { const q = body.rotation(); return Math.atan2(2 * (q.w * q.y + q.x * q.z), 1 - 2 * (q.y * q.y + q.x * q.x)) }
+    const start = yaw()
+    step(pedals({ throttle: 1, brake: 1 }), 0.5)
+    // NFS pace: a slow, steady swing, about a right angle in three seconds.
+    step(pedals({ throttle: 1, brake: 1, steer: 1 }), 2.5)
+    const turned = Math.abs(yaw() - start) * 180 / Math.PI
+    expect(turned).toBeGreaterThan(55)
+    expect(turned).toBeLessThan(120)
+    expect(ctrl.burnout.holding).toBe(true)
+    // The front axle barely moves while the tail swings: it pivots, it doesn't drive off.
+    const p = body.translation()
+    expect(Math.hypot(p.x, p.z)).toBeLessThan(2.5)
   })
 
   it('launches when the brake comes off, smoke trailing as it pulls away', () => {

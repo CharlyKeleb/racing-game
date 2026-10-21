@@ -65,6 +65,9 @@ export class NitroFlames {
   private readonly texture: THREE.CanvasTexture
   private readonly plume: THREE.CanvasTexture
   private time = 0
+  private readonly cold: THREE.Color[]
+  private readonly hot: THREE.Color[]
+  private warmth = 0
 
   constructor(cfg: VehicleConfig) {
     // Cone tip points -Z (backwards), base at the pipe.
@@ -97,6 +100,9 @@ export class NitroFlames {
       toneMapped: false,
     })
     this.materials = [outer, core, glowMat]
+    // Nitro burns blue; a burnout backfire is an orange fireball. `warmth` blends between the two.
+    this.cold = [outer.color.clone(), core.color.clone(), glowMat.color.clone()]
+    this.hot = [new THREE.Color(0xff5a12).multiplyScalar(2.4), new THREE.Color(0xffd080).multiplyScalar(3.2), new THREE.Color(0xffa040).multiplyScalar(2.5)]
 
     for (const [x, y, z] of cfg.exhausts ?? defaultExhausts(cfg)) {
       const flame = new THREE.Group()
@@ -117,11 +123,18 @@ export class NitroFlames {
 
   /**
    * @param intensity boost amount, 0..1 (above 1 during a perfect boost).
+   * @param warmth 0 = nitro blue, 1 = orange exhaust backfire.
    */
-  update(intensity: number, dt: number): void {
+  update(intensity: number, dt: number, warmth = 0): void {
     this.time += dt
     this.group.visible = intensity > 0.02
     if (!this.group.visible) return
+    if (warmth !== this.warmth) {
+      this.warmth = warmth
+      for (let i = 0; i < this.materials.length; i++) {
+        ;(this.materials[i] as THREE.MeshBasicMaterial | THREE.SpriteMaterial).color.lerpColors(this.cold[i], this.hot[i], warmth)
+      }
+    }
     for (let i = 0; i < this.flames.length; i++) {
       const t = this.time * 41 + i * 1.7
       const flicker = 0.82 + 0.1 * Math.sin(t) + 0.08 * Math.sin(t * 2.7 + 1)

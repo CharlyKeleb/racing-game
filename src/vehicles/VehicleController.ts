@@ -35,6 +35,10 @@ export interface WheelState {
 const BURNOUT_SLIDE = 16
 const BURNOUT_SPIN = 70
 const BURNOUT_RPM = 0.8
+/** Steering in a held burnout pivots the car around its braked front wheels (like NFS): yaw rate at full lock, rad/s. */
+const BURNOUT_YAW_RATE = 1
+/** Lateral grip the spinning tyres keep in a burnout: little, so the tail swings round. */
+const BURNOUT_LATERAL_GRIP = 0.2
 
 // Scratch objects — the controller runs at 60 Hz, so avoid per-tick allocation.
 const _q = new THREE.Quaternion()
@@ -352,10 +356,12 @@ export class VehicleController {
           dt,
           surfaceGrip: ground.grip,
           surfaceDrag: ground.drag,
-          arcadeGripScale: 1 + (cfg.arcade.lateralGripMultiplier - 1) * arcadeBlend * ground.grip,
-          postPeakGrip: cfg.arcade.postPeakGrip * arcadeBlend * ground.grip,
+          // Spinning in a burnout, these tyres get no arcade grip assist: the tail must be free to swing.
+          arcadeGripScale: 1 + (cfg.arcade.lateralGripMultiplier - 1) * arcadeBlend * ground.grip * (this.burnoutWheel[i] ? 1 - burn : 1),
+          postPeakGrip: cfg.arcade.postPeakGrip * arcadeBlend * ground.grip * (this.burnoutWheel[i] ? 1 - burn : 1),
           // In a drift the guidance carves the path, so the tires' sideways grip steps back.
-          lateralGripScale: (this.isRear[i] ? rearGrip : 1) * (1 - driftCfg.lateralRelief * this.drift.amount),
+          lateralGripScale: (this.isRear[i] ? rearGrip : 1) * (1 - driftCfg.lateralRelief * this.drift.amount) *
+            (this.burnoutWheel[i] ? 1 - (1 - BURNOUT_LATERAL_GRIP) * burn : 1),
           combined: this.isRear[i] && combinedRear,
         },
         cfg.tires,
@@ -385,6 +391,14 @@ export class VehicleController {
       this.applyStabilityAssist(input.handbrake, speed, lv, dt)
     }
     this.applyDriftGuidance(input.steer, groundedCount, dt)
+    // Rotating burnout: steer to swing the tail round on the spot, pivoting on the held front wheels.
+    if (this.burnout.holding && groundedCount > 2 && Math.abs(input.steer) > 0.05) {
+      const av = body.angvel()
+      const yawRate = av.x * _up.x + av.y * _up.y + av.z * _up.z
+      const target = -input.steer * BURNOUT_YAW_RATE * burn
+      _impulse.copy(_up).multiplyScalar((target - yawRate) * (1 - Math.exp(-14 * dt)) * this.yawInertia)
+      body.applyTorqueImpulse(_impulse, true)
+    }
 
     // Nitro is thrust at the center of mass, not tire force: the rears are
     // already near their grip limit under power, so routing it through the

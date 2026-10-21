@@ -1435,7 +1435,8 @@ export class Game {
         drop: body.y - centre.y,
         upY: 1 - 2 * (rotation.x * rotation.x + rotation.z * rotation.z),
         speed: Math.abs(this.vehicle.controller.forwardSpeed),
-        pedal: Math.max(input.throttle, input.brake),
+        // A held burnout is pedals-down and not moving on purpose: not "stuck".
+        pedal: this.vehicle.controller.burnout.holding ? 0 : Math.max(input.throttle, input.brake),
         offLine: gameStore.getState().settings.mode === 'drift' ? 0 : Math.hypot(body.x - centre.x, body.z - centre.z),
       })
       if (reason) this.resetToCheckpoint()

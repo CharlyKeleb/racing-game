@@ -105,7 +105,7 @@ export function Settings({ onClose }: { onClose?: () => void }) {
           <div><dt>Camera / reset / pause</dt><dd><kbd>C</kbd> <kbd>R</kbd> <kbd>Esc</kbd></dd></div>
           <div><dt>Look back (hold)</dt><dd><kbd>B</kbd> / gamepad R3</dd></div>
         </dl>}
-        {section === 'controls' && <p className="settings__help">Drift: tap brake or handbrake while turning. Tap nitro again on the cue for a perfect boost. On the grid, hold handbrake or brake, keep the revs in the green band and let go when the lights go out for a launch. Burnout: stopped, hold brake and floor the throttle; let go of the brake to launch out of it. Gamepads are supported.</p>}
+        {section === 'controls' && <p className="settings__help">Drift: tap brake or handbrake while turning. Tap nitro again on the cue for a perfect boost. On the grid, hold handbrake or brake, keep the revs in the green band and let go when the lights go out for a launch. Burnout: stopped, hold brake and floor the throttle (steer to swing the tail round); let go of the brake to launch out of it. Gamepads are supported.</p>}
       </div>
     </div>
     <footer className="settings__footer"><span>Changes save automatically</span>{onClose && <Button variant="primary" onClick={onClose}>Done</Button>}</footer>

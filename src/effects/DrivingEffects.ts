@@ -8,6 +8,7 @@ import { SurfaceSpray } from './SurfaceSpray'
 import { TireSmoke } from './TireSmoke'
 
 const _vel = new THREE.Vector3()
+const _fwd = new THREE.Vector3()
 
 /**
  * Driving feedback for the player car: skid marks, tire smoke and sand / dust
@@ -40,9 +41,12 @@ export class DrivingEffects {
     const v = vehicle.body.linvel()
     _vel.set(v.x, v.y, v.z)
     this.skidMarks.update(ctrl.wheels, dt)
-    this.smoke.update(ctrl.wheels, _vel, dt)
+    _fwd.set(0, 0, 1).applyQuaternion(vehicle.quaternion)
+    this.smoke.update(ctrl.wheels, _vel, dt, ctrl.burnout.intensity, _fwd)
     this.spray.update(ctrl.wheels, _vel, dt)
-    this.flames.update(ctrl.nitro.intensity, dt)
+    // Burnout backfires flash the same exhaust flames as nitro, briefly and orange.
+    const backfire = ctrl.burnout.pop * 0.55
+    this.flames.update(Math.max(ctrl.nitro.intensity, backfire), dt, backfire > ctrl.nitro.intensity ? 1 : 0)
   }
 
   renderMarks(renderer: AnyRenderer, position: THREE.Vector3): void {
