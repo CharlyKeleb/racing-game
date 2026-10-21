@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { Backfire, BANG, CRACKLE, NONE, type BackfireInput } from '../src/vehicles/Backfire'
 import { Nitro } from '../src/vehicles/Nitro'
 import { DEFAULT_VEHICLE_CONFIG } from '../src/vehicles/VehicleConfig'
-import type { BackfireBankIndex } from '../src/audio/BackfireSound'
+import { BackfireSound, type BackfireBankIndex } from '../src/audio/BackfireSound'
 
 const DT = 1 / 60
 const base: BackfireInput = { throttle: 0, revs: 0.3, gear: 3, burnout: 0, nitroLit: false }
@@ -114,5 +114,14 @@ describe('backfire sound bank', () => {
         expect(peak / 32768, `${kind} ${v.source}`).toBeGreaterThan(0.2)
       }
     }
+  })
+})
+
+describe('backfire loudness', () => {
+  it('bangs are loud (the "POOO" should punch), crackles a step below, and harder pops louder', () => {
+    expect(BackfireSound.level(BANG, 1)).toBeGreaterThanOrEqual(2)
+    expect(BackfireSound.level(CRACKLE, 1)).toBeGreaterThanOrEqual(1)
+    expect(BackfireSound.level(BANG, 1)).toBeGreaterThan(BackfireSound.level(CRACKLE, 1) * 1.5)
+    expect(BackfireSound.level(BANG, 0.5)).toBeLessThan(BackfireSound.level(BANG, 1))
   })
 })

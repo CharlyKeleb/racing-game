@@ -9,7 +9,7 @@ import { OpponentAudio, type RivalSoundState } from './OpponentAudio'
 import { TyreBrakeSound } from './TyreBrakeSound'
 import { ImpactSound, loadImpactRecordings } from './ImpactSound'
 import { BackfireSound, loadBackfireRecordings } from './BackfireSound'
-import type { PopKind } from '../vehicles/Backfire'
+import { BANG, type PopKind } from '../vehicles/Backfire'
 import type { ImpactKind } from './ImpactModel'
 import { DEFAULT_NOISE_PROFILE, tyreBrakeLevels, type CarNoiseProfile, type TyreBrakeInput } from './TyreBrakeModel'
 import { GarageAmbience } from './GarageAmbience'
@@ -561,7 +561,24 @@ export class AudioManager {
   /** An exhaust pop: `car` -1 is the player, otherwise the rival's index (heard where it is). */
   backfire(car: number, kind: PopKind, strength: number): void {
     if (this.paused || kind === 0 || this.scene !== 'race') return
-    ;(car < 0 ? this.backfires : this.rivals[car]?.backfires)?.pop(kind, strength)
+    const played = (car < 0 ? this.backfires : this.rivals[car]?.backfires)?.pop(kind, strength)
+    // Your own bang: the engine dips for a moment so the "POOO" punches through
+    // rather than being squashed into it by the limiter.
+    if (played && car < 0 && kind === BANG) this.duckEngine(0.45 * strength, 0.06)
+  }
+
+  /** Drop the player's engine and tyres by `depth` (0..1), hold briefly, then recover. */
+  private duckEngine(depth: number, hold: number): void {
+    const ctx = this.ctx
+    if (!ctx || !this.duck) return
+    const t = ctx.currentTime
+    const g = this.duck.gain
+    // Never lift an existing deeper duck (a crash) early.
+    const target = Math.min(g.value, 1 - depth)
+    g.cancelScheduledValues(t)
+    g.setValueAtTime(g.value, t)
+    g.linearRampToValueAtTime(target, t + 0.01)
+    g.setTargetAtTime(1, t + hold, 0.12)
   }
 
   /** A hit on a car: `car` -1 is the player, otherwise the rival's index (heard where it is). */

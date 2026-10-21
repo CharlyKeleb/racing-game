@@ -49,10 +49,11 @@ export async function loadBackfireRecordings(ctx: BaseAudioContext, base = '/aud
   }
 }
 
-/** Mix level of a crackle and of a bang at full strength. */
-const CRACKLE_GAIN = 0.75
-const BANG_GAIN = 1.1
-const THUMP_GAIN = 0.8
+/** Mix level of a crackle and of a bang at full strength: loud, a supercar's pops are. */
+const CRACKLE_GAIN = 1.2
+const BANG_GAIN = 2.2
+/** The sub thump under a bang, relative to it: the chest-thump of the "POOO". */
+const THUMP_GAIN = 1.1
 const MAX_VOICES = 8
 
 /**
@@ -72,15 +73,20 @@ export class BackfireSound {
     this.destination = destination
   }
 
+  /** Level a pop of this kind and strength plays at (before distance), for tests and the engine duck. */
+  static level(kind: PopKind, strength: number): number {
+    const s = Math.max(0, Math.min(1, strength))
+    return (kind === BANG ? BANG_GAIN : CRACKLE_GAIN) * (0.55 + 0.45 * s)
+  }
+
   /** @returns whether it played (false before the recordings load, or with too many voices going). */
   pop(kind: PopKind, strength: number): boolean {
     const bank = banks.get(this.ctx)
     if (!bank || kind === 0 || this.voices.size >= MAX_VOICES) return false
     const list = kind === BANG ? bank.bang : bank.crackle
     if (!list.length) return false
-    const s = Math.max(0, Math.min(1, strength))
     const at = this.ctx.currentTime
-    const level = (kind === BANG ? BANG_GAIN : CRACKLE_GAIN) * (0.55 + 0.45 * s)
+    const level = BackfireSound.level(kind, strength)
     // Bangs a touch deeper, crackles scattered either side.
     const rate = kind === BANG ? 0.86 + Math.random() * 0.14 : 0.9 + Math.random() * 0.22
     this.play(list[this.variant++ % list.length], rate, level, at)
