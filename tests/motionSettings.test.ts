@@ -23,3 +23,30 @@ describe('motion settings (#18)', () => {
     expect(fov).toBeCloseTo(base, 1)
   })
 })
+
+describe('burnout camera hold', () => {
+  /** Chase camera direction (camera → car), as a heading in degrees. */
+  function cameraHeading(hold: number): number {
+    const lens = new THREE.PerspectiveCamera()
+    const rig = new ChaseCamera(lens)
+    const car = new THREE.Object3D()
+    for (let i = 0; i < 120; i++) rig.update(car, 0, 1 / 60)
+    rig.burnoutHold = hold
+    // The car swings 90° on the spot over two seconds, as in a rotating burnout.
+    for (let i = 0; i < 120; i++) {
+      car.rotation.y = (-Math.PI / 2 * (i + 1)) / 120
+      car.updateMatrixWorld()
+      rig.update(car, 0, 1 / 60)
+    }
+    const d = car.position.clone().sub(lens.position)
+    return Math.atan2(d.x, d.z) * 180 / Math.PI
+  }
+
+  it('holds its direction while the car rotates in a burnout, so its side comes into view', () => {
+    expect(Math.abs(cameraHeading(1))).toBeLessThan(15)
+  })
+
+  it('without a burnout it stays behind the car as usual', () => {
+    expect(Math.abs(cameraHeading(0) + 90)).toBeLessThan(15)
+  })
+})

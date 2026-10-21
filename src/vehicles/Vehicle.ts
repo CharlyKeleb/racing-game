@@ -10,6 +10,8 @@ import type { VehicleConfig } from './VehicleConfig'
 
 /** Fixed tick length the vehicle is stepped at (matches GameLoop.FIXED_DT). */
 const TICK = 1 / 60
+/** Burnout tail squat, degrees of pitch at full spin. */
+const BURNOUT_SQUAT = 1.4
 /**
  * Visual weight transfer, on top of what the physics body does. Degrees of body
  * pitch / roll per m/s² of acceleration, their limits, and the spring the body
@@ -100,6 +102,7 @@ export class Vehicle {
   /** Headlight lens materials (owned copies), lit at night. */
   private readonly headlights: THREE.MeshStandardMaterial[] = []
   private brakeGlow = 0
+  private shakeTime = 0
   /** Cosmetic disc heat per axle and its glow (#92). */
   readonly brakeHeat = new BrakeHeat()
   private readonly discGlow: BrakeDiscGlow
@@ -251,7 +254,9 @@ export class Vehicle {
     if (dt > 0) {
       const h = Math.min(dt, 1 / 20)
       // Braking dives the nose (+X rotation tips +Z down); speeding up squats it.
-      const pitchTarget = THREE.MathUtils.clamp(-this.motion.accelLong * PITCH_PER_ACCEL, -MAX_SQUAT, MAX_DIVE) * DEG
+      // A burnout squats the tail onto the spinning tyres.
+      const burn = this.controller.burnout.intensity
+      const pitchTarget = (THREE.MathUtils.clamp(-this.motion.accelLong * PITCH_PER_ACCEL, -MAX_SQUAT, MAX_DIVE) - burn * BURNOUT_SQUAT) * DEG
       // Cornering rolls the body to the outside: turning left lifts the left (+X) side.
       const rollTarget = THREE.MathUtils.clamp(this.motion.accelLat * ROLL_PER_ACCEL, -MAX_ROLL, MAX_ROLL) * DEG
       const pitch = this.pitch.step(pitchTarget, h)
@@ -265,6 +270,12 @@ export class Vehicle {
       _pivot.set(0, this.pivotHeight, 0)
       body.position.copy(_pivot).sub(_pivot.applyEuler(_euler))
       body.position.y += heave
+      // …and shakes it, the body trembling on the revving engine.
+      if (burn > 0) {
+        this.shakeTime += h
+        body.position.y += burn * 0.004 * Math.sin(this.shakeTime * 57)
+        body.rotation.z += burn * 0.0025 * Math.sin(this.shakeTime * 43 + 1.3)
+      }
 
       // Kept near 1: ACES tone mapping washes brighter emissive out toward white.
       const running = this.lightsOn ? 0.45 : 0.15

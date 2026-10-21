@@ -95,10 +95,12 @@ const clamp01 = (v: number) => Math.max(0, Math.min(1, v))
 
 export function tyreBrakeLevels(s: TyreBrakeInput, p: CarNoiseProfile): TyreBrakeLevels {
   const moving = clamp01((s.speed - 1.5) / 4)
+  // Tyres squeal when their tread slides over the road, even with the car standing still (a burnout).
+  const treadMoving = clamp01((Math.max(s.speed, s.slide) - 1.5) / 4)
   // At the limit (cornering hard or trail braking), then sliding.
   const onset = clamp01((s.slip - SQUEAL_ONSET) / (1 - SQUEAL_ONSET))
   const sliding = clamp01(s.slide / FULL_SLIDE)
-  let grip = Math.max(onset * 0.55, sliding, s.drifting ? 0.7 : 0) * s.paved * moving
+  let grip = Math.max(onset * 0.55 * moving, sliding * treadMoving, s.drifting ? 0.7 * moving : 0) * s.paved
 
   const atLimitBraking = s.brake > LIMIT_BRAKE && s.slip > 0.9 && s.speed > 5
   // No ABS: hard braking at the limit locks the wheels and the tyres howl.
@@ -109,7 +111,7 @@ export function tyreBrakeLevels(s: TyreBrakeInput, p: CarNoiseProfile): TyreBrak
 
   const squeal = grip * p.tyres.tonal
   // Slicks scrub where road tyres sing; all tyres scrub some when sliding.
-  const scrub = clamp01(grip * (1 - p.tyres.tonal * 0.6) + sliding * 0.25 * s.paved * moving)
+  const scrub = clamp01(grip * (1 - p.tyres.tonal * 0.6) + sliding * 0.25 * s.paved * treadMoving)
   const squealPitch = 1 + 0.12 * sliding + 0.18 * lockup
 
   const brake = s.brake * moving

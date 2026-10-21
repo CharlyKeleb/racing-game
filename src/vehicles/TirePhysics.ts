@@ -97,7 +97,8 @@ export function computeTireForces(input: TireInput, cfg: TireConfig): TireOutput
     }
     lateral = -force * lateralMax
   } else {
-    lateral = (-vLat * massShare) / dt
+    // Still limited by grip: a tyre spinning in a burnout can't hold the tail in place.
+    lateral = Math.max(-lateralMax, Math.min(lateralMax, (-vLat * massShare) / dt))
   }
   // Never apply more than it takes to cancel sideways motion this tick —
   // prevents overshoot oscillation at low speed / small slip angles.
