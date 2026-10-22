@@ -205,6 +205,12 @@ The Station District (`scripts/track/city.config.mjs`) uses all of these:
 its source is a ×32 miniature with anonymous materials, and its back alley
 needed flattening and a cleared channel before a car could get through.
 
+Canyon Dam (`scripts/track/canyon.config.mjs`, a GT Racing 2 rip) shows a
+game-ripped circuit whose branches are closed by props, not by geometry: a
+digger and cones block the asphalt branch into town, so the lap runs over the
+dirt section beside it. Check junctions on the top-down render for such
+blockers and pin the line past them with `lineVia`.
+
 Collision is checked by `tests/trackEdges.test.ts`, which throws a car off
 the road 60 times per track. The runtime safety walls (`world/SafetyWalls.ts`)
 probe the floor with `PhysicsWorld.floorHeight`, which looks under roofs

@@ -14,6 +14,7 @@ const details: Record<string, { location: string; character: string; description
   singapore: { location: 'Singapore', character: 'Street circuit / Walls close', description: 'Thread the walls round Marina Bay: tight 90° corners, two hairpins at the junction and no run-off to save you.' },
   u2city: { location: 'Bayview', character: 'City streets / Blind junctions', description: 'Race the downtown grid: a fast boulevard, a five-way junction and tight right-angle streets under the freeway.' },
   city: { location: 'Downtown', character: 'Tram avenue / Back alley', description: 'Blast up the tram avenue past the station sheds, swing across the top street and thread the narrow back alley between the towers.' },
+  canyon: { location: 'Desert canyon', character: 'Dam crest / Cliff hairpins', description: 'Fly over the canyon bridge, drop down to the dam and race along its crest, then climb the hairpins through the cliff tunnels back to town.' },
   'test-circuit': { location: 'Papaya proving grounds', character: 'Flat / Technical', description: 'A compact circuit for learning your car. Link the corners, refine your line and build confidence.' },
 }
 

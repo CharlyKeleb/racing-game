@@ -14,7 +14,7 @@ import { planSafetyWalls } from '../src/world/SafetyWalls'
  * road and verge were simplified apart, which wheels dropped into and cars
  * sank through.
  */
-it.each(['singapore', 'nurburgring', 'u2city', 'city'])('%s: a car run off the road never falls through the floor', async (id) => {
+it.each(['singapore', 'nurburgring', 'u2city', 'city', 'canyon'])('%s: a car run off the road never falls through the floor', async (id) => {
   const { readFile } = await import('node:fs/promises')
   const { GLTFLoader } = await import('three/examples/jsm/loaders/GLTFLoader.js')
   const { MeshoptDecoder } = await import('three/examples/jsm/libs/meshopt_decoder.module.js')
