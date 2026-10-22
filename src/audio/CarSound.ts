@@ -1,4 +1,5 @@
 import { CarSoundModel, type CarSoundInput } from './CarSoundModel'
+import { DEFAULT_VOICE, type EngineVoice } from './EngineVoice'
 
 export interface CarSoundState extends CarSoundInput {
   /** Nitro intensity, 0..~1.6. */
@@ -17,10 +18,14 @@ const MAKEUP = 1.7
  * offline for checks). The engine source (the recorded-engine worklet, or a
  * synth fallback) feeds two paths that mix on a compressed bus:
  *
- *   engine ─┬─ intake: the clean recording, low-pass opening with throttle (leads the mix)
- *           └─ exhaust: drive → gentle soft clip → boom (110 Hz) + rasp (2.4 kHz) EQ
- *   + sub rumble (flat-six half order), faint turbo whistle and whoosh,
+ *   engine → lope ─┬─ intake: the clean recording, low-pass opening with throttle (leads the mix)
+ *                  └─ exhaust: drive → gentle soft clip → boom + rasp EQ → air shelf
+ *   + sub rumble (the half order), crank whine, turbo whistle and whoosh,
  *     overrun crackles, blow-off, shift "bwap", nitro whoosh and rush
+ *
+ * The car's EngineVoice sets the exhaust's resonances, drive and top end, the
+ * crossplane lope, whine, turbos and pops, so cars that share a recording
+ * still sound like themselves.
  *   → glue compressor → make-up gain → limiter → out
  *
  * The recording stays in front ("pure"): the synthetic layers only colour it.
@@ -38,8 +43,16 @@ export class CarSound {
 
   private readonly intakeFilter: BiquadFilterNode
   private readonly intakeGain: GainNode
+  private readonly lope: GainNode
+  private readonly lopeLfo: OscillatorNode
+  private readonly lopeDepth: GainNode
   private readonly drive: GainNode
+  private readonly shaper: WaveShaperNode
+  private readonly boom: BiquadFilterNode
   private readonly raspEq: BiquadFilterNode
+  private readonly air: BiquadFilterNode
+  private readonly whine: OscillatorNode
+  private readonly whineGain: GainNode
   private readonly exhaustGain: GainNode
   private readonly sub: OscillatorNode
   private readonly subGain: GainNode
@@ -50,6 +63,7 @@ export class CarSound {
   private readonly sources: AudioScheduledSourceNode[] = []
 
   private firingPerRev = 3
+  private voice: EngineVoice = DEFAULT_VOICE
   private nextPopAt = 0
   /** Engine held silent until this time (ignition cranking). */
   private startAt = 0
@@ -76,23 +90,39 @@ export class CarSound {
 
     this.engineIn = gain(ctx, 0)
 
+    // Crossplane lope: the whole engine pulsed unevenly at the half order
+    // (depth 0 for every engine that fires evenly).
+    this.lope = gain(ctx, 1)
+    this.lopeLfo = ctx.createOscillator()
+    this.lopeLfo.type = 'sine'
+    this.lopeDepth = gain(ctx, 0)
+    this.lopeLfo.connect(this.lopeDepth).connect(this.lope.gain)
+    this.engineIn.connect(this.lope)
+
     // Intake / mechanical: the clean recording, brighter on throttle.
     this.intakeFilter = ctx.createBiquadFilter()
     this.intakeFilter.type = 'lowpass'
     this.intakeFilter.Q.value = 0.7
     this.intakeGain = gain(ctx, 0.6)
-    this.engineIn.connect(this.intakeFilter).connect(this.intakeGain).connect(this.bus)
+    this.lope.connect(this.intakeFilter).connect(this.intakeGain).connect(this.bus)
 
     // Exhaust: driven into a soft clip for rasp, with the pipes' resonances.
     this.drive = gain(ctx, 1)
-    const shaper = ctx.createWaveShaper()
-    shaper.curve = softClip(1.6) // warm, not fuzzy: the recording's own grit does the rest
-    shaper.oversample = '2x'
-    const boom = biquad(ctx, 'peaking', 110, 1, 7)
+    this.shaper = ctx.createWaveShaper()
+    this.shaper.curve = softClip(1.6) // warm, not fuzzy: the recording's own grit does the rest
+    this.shaper.oversample = '2x'
+    this.boom = biquad(ctx, 'peaking', 110, 1, 7)
     this.raspEq = biquad(ctx, 'peaking', 2400, 1.2, 0)
+    this.air = biquad(ctx, 'highshelf', 4000, 0.7, 0)
     const tame = biquad(ctx, 'lowpass', 7000, 0.7, 0)
     this.exhaustGain = gain(ctx, 0)
-    this.engineIn.connect(this.drive).connect(shaper).connect(boom).connect(this.raspEq).connect(tame).connect(this.exhaustGain).connect(this.bus)
+    this.lope.connect(this.drive).connect(this.shaper).connect(this.boom).connect(this.raspEq).connect(this.air).connect(tame).connect(this.exhaustGain).connect(this.bus)
+
+    // Crank whine: a supercharger's belt-driven scream or straight-cut gears.
+    this.whine = ctx.createOscillator()
+    this.whine.type = 'triangle'
+    this.whineGain = gain(ctx, 0)
+    this.whine.connect(biquad(ctx, 'highpass', 300, 0.7, 0)).connect(this.whineGain).connect(this.bus)
 
     // Sub rumble: a flat-six's strong half order (1.5 per rev), felt more than heard.
     this.sub = ctx.createOscillator()
@@ -114,7 +144,19 @@ export class CarSound {
 
     this.sub.start()
     this.whistle.start()
-    this.sources.push(this.sub, this.whistle)
+    this.lopeLfo.start()
+    this.whine.start()
+    this.sources.push(this.sub, this.whistle, this.lopeLfo, this.whine)
+  }
+
+  /** The car's engine voice (see EngineVoice): its exhaust, character and pops. */
+  setVoice(voice: EngineVoice): void {
+    this.voice = voice
+    this.boom.frequency.value = voice.boomHz
+    this.boom.gain.value = voice.boomDb
+    this.raspEq.frequency.value = voice.raspHz
+    this.air.gain.value = voice.airDb
+    this.shaper.curve = softClip(1.6 * Math.sqrt(voice.drive))
   }
 
   /** Firing pulses per crank revolution (flat-six 3, V8 4), for the sub rumble's pitch. */
@@ -138,9 +180,10 @@ export class CarSound {
   }
 
   /** Plays a recorded one-shot through the bus. */
-  playClip(buffer: AudioBuffer, level: number, when = this.ctx.currentTime): void {
+  playClip(buffer: AudioBuffer, level: number, when = this.ctx.currentTime, rate = 1): void {
     const src = this.ctx.createBufferSource()
     src.buffer = buffer
+    src.playbackRate.value = rate
     src.connect(gain(this.ctx, level)).connect(this.bus)
     src.start(when)
   }
@@ -155,6 +198,7 @@ export class CarSound {
     const rpmT = Math.min(Math.max(m.rpm, 0) / RPM_SCALE, 1)
     const on = m.load
     const running = t >= this.startAt ? 1 : 0
+    const v = this.voice
 
     // Engine level: louder with rpm and load; dips for the upshift cut, swells on a blip.
     // Wide range from idle to redline: the rise of the revs is the drama.
@@ -162,24 +206,30 @@ export class CarSound {
     set(this.engineIn.gain, level, t, running ? 0.015 : 0.01)
     set(this.intakeFilter.frequency, 2500 + on * 7000 + rpmT * 4000, t, 0.02)
     set(this.intakeGain.gain, 0.7 + 0.35 * on, t, 0.025)
-    set(this.drive.gain, 0.45 + 1.1 * on * (0.4 + 0.6 * rpmT), t, 0.02)
-    set(this.raspEq.gain, on * (1.5 + 3 * rpmT), t, 0.025)
+    set(this.drive.gain, (0.45 + 1.1 * on * (0.4 + 0.6 * rpmT)) * v.drive, t, 0.02)
+    set(this.raspEq.gain, on * (1.5 + 3 * rpmT) * (v.raspDb / 4.5), t, 0.025)
     set(this.exhaustGain.gain, 0.1 + 0.22 * on + 0.08 * rpmT, t, 0.025)
 
     const halfOrder = (Math.max(m.rpm, 600) / 60) * (this.firingPerRev / 2) // the engine's half order
     set(this.sub.frequency, halfOrder, t, 0.03)
-    set(this.subGain.gain, running * (0.05 + 0.1 * on) * (1 - 0.5 * rpmT), t, 0.08)
+    set(this.subGain.gain, running * (0.05 + 0.1 * on) * (1 - 0.5 * rpmT) * v.sub, t, 0.08)
+    // The lope is loudest at idle and part throttle, where a crossplane V8 burbles; it smooths out up top.
+    set(this.lopeLfo.frequency, halfOrder, t, 0.03)
+    set(this.lopeDepth.gain, 0.5 * v.burble * (1 - 0.6 * rpmT), t, 0.08)
+    set(this.lope.gain, 1 - 0.5 * v.burble * (1 - 0.6 * rpmT), t, 0.08)
+    set(this.whine.frequency, (Math.max(m.rpm, 600) / 60) * v.whine.ratio, t, 0.02)
+    set(this.whineGain.gain, running * v.whine.gain * (0.25 + 0.75 * on) * (0.3 + 0.7 * rpmT), t, 0.04)
 
     set(this.whistle.frequency, 2600 + 4200 * m.spool, t, 0.08)
-    set(this.whistleGain.gain, 0.01 * m.spool * m.spool, t, 0.06)
-    set(this.whooshGain.gain, 0.03 * m.spool, t, 0.06)
+    set(this.whistleGain.gain, 0.01 * m.spool * m.spool * v.turbo, t, 0.06)
+    set(this.whooshGain.gain, 0.03 * m.spool * v.turbo, t, 0.06)
 
     set(this.nitroRushGain.gain, 0.07 * Math.min(s.nitro, 1.6), t, 0.08)
 
-    if (m.blowOff > 0) this.blowOffAt(t, m.blowOff)
+    if (m.blowOff > 0 && v.turbo > 0) this.blowOffAt(t, m.blowOff * Math.min(v.turbo, 1.6))
     if (m.shiftUp) this.upshiftAt(t, rpmT)
     if (m.shiftDown) this.downshiftAt(t, rpmT)
-    if (m.liftOff && this.liftOffClip) this.playClip(this.liftOffClip, 0.3 + 0.3 * rpmT)
+    if (m.liftOff && this.liftOffClip) this.playClip(this.liftOffClip, 0.3 + 0.3 * rpmT, t, v.pitch)
     if (m.nitroStart) this.nitroWhooshAt(t)
     if (m.perfectStart) this.perfectBoomAt(t)
     this.scheduleCrackles(t, m.crackle)
@@ -203,13 +253,15 @@ export class CarSound {
 
   private popAt(when: number, level: number, big: boolean): void {
     const ctx = this.ctx
+    const p = this.voice.pops
     const src = ctx.createBufferSource()
     src.buffer = this.noise
-    const bp = biquad(ctx, 'bandpass', big ? 500 + Math.random() * 400 : 1100 + Math.random() * 1600, big ? 1.2 : 2.5, 0)
+    // The car's pops: a deeper, longer thud for a big-bore V8, a sharp crack for a race six.
+    const bp = biquad(ctx, 'bandpass', (big ? 500 + Math.random() * 400 : 1100 + Math.random() * 1600) * p.pitch, big ? 1.2 : 2.5, 0)
     const env = gain(ctx, 0)
-    const len = big ? 0.06 : 0.018 + Math.random() * 0.02
+    const len = (big ? 0.06 : 0.018 + Math.random() * 0.02) / Math.sqrt(p.pitch)
     env.gain.setValueAtTime(0, when)
-    env.gain.linearRampToValueAtTime(level * (big ? 0.9 : 0.6), when + 0.002)
+    env.gain.linearRampToValueAtTime(level * (big ? 0.9 * p.bang : 0.6 * p.crackle), when + 0.002)
     env.gain.exponentialRampToValueAtTime(0.0001, when + len)
     src.connect(bp).connect(env).connect(this.bus)
     src.start(when, Math.random() * 1.5, len + 0.01)

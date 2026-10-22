@@ -20,7 +20,7 @@ export interface EngineBankMessage {
 class EngineProcessor extends AudioWorkletProcessor {
   static get parameterDescriptors() {
     return [
-      { name: 'rpm', defaultValue: 900, minValue: 0, maxValue: 12000, automationRate: 'k-rate' },
+      { name: 'rpm', defaultValue: 900, minValue: 0, maxValue: 20000, automationRate: 'k-rate' },
       { name: 'level', defaultValue: 1, minValue: 0, maxValue: 2, automationRate: 'k-rate' },
     ]
   }

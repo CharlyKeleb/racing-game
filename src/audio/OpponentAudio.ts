@@ -3,6 +3,7 @@ import { TyreBrakeSound } from './TyreBrakeSound'
 import { ImpactSound } from './ImpactSound'
 import { BackfireSound } from './BackfireSound'
 import type { CarNoiseProfile, TyreBrakeLevels } from './TyreBrakeModel'
+import { DEFAULT_VOICE, type EngineVoice } from './EngineVoice'
 
 /** Speed of sound, m/s, for the doppler shift. */
 const SOUND_SPEED = 343
@@ -40,12 +41,19 @@ export interface RivalSoundState {
  * recording loads), its tyres and brakes, and the wind it pushes past you,
  * all placed in 3D around the camera. Distance dulls it the way air does
  * (the highs go first) and the closing speed bends its pitch, so a car
- * coming up behind rises and drops away as it passes.
+ * coming up behind rises and drops away as it passes. It's voiced as its own
+ * car (EngineVoice): pitch, exhaust resonances, lope and pops, so a rival AMG
+ * doesn't sound like a rival Koenigsegg.
  */
 export class OpponentAudio {
   private readonly ctx: AudioContext
   private readonly firing: number
+  private readonly voice: EngineVoice
   private readonly panner: PannerNode
+  /** Crossplane lope (see CarSound): the engine pulsed at the half order. */
+  private readonly lope: GainNode
+  private readonly lopeLfo: OscillatorNode
+  private readonly lopeDepth: GainNode
   private readonly air: BiquadFilterNode
   private readonly engineGain: GainNode
   private readonly synth: OscillatorNode
@@ -62,9 +70,10 @@ export class OpponentAudio {
   private doppler = 1
   private lastTime = 0
 
-  constructor(ctx: AudioContext, destination: AudioNode, firing: number, noise: CarNoiseProfile) {
+  constructor(ctx: AudioContext, destination: AudioNode, firing: number, noise: CarNoiseProfile, voice: EngineVoice = DEFAULT_VOICE) {
     this.ctx = ctx
     this.firing = firing
+    this.voice = voice
     this.panner = new PannerNode(ctx, {
       panningModel: 'equalpower',
       distanceModel: 'inverse',
@@ -74,18 +83,29 @@ export class OpponentAudio {
     })
     this.panner.connect(destination)
 
-    // Engine: recording (or synth) → air absorption → level → 3D.
+    // Engine: recording (or synth) → its exhaust (lope, resonances, top end)
+    // → air absorption → level → 3D.
     this.air = ctx.createBiquadFilter()
     this.air.type = 'lowpass'
     this.air.frequency.value = 8000
     this.engineGain = ctx.createGain()
     this.engineGain.gain.value = 0
+    this.lope = ctx.createGain()
+    this.lopeLfo = ctx.createOscillator()
+    this.lopeDepth = ctx.createGain()
+    this.lopeDepth.gain.value = 0
+    this.lopeLfo.connect(this.lopeDepth).connect(this.lope.gain)
+    this.lopeLfo.start()
+    const boom = new BiquadFilterNode(ctx, { type: 'peaking', frequency: voice.boomHz, Q: 1, gain: voice.boomDb * 0.7 })
+    const rasp = new BiquadFilterNode(ctx, { type: 'peaking', frequency: voice.raspHz, Q: 1.2, gain: voice.raspDb * 0.6 })
+    const top = new BiquadFilterNode(ctx, { type: 'highshelf', frequency: 4000, gain: voice.airDb })
+    this.lope.connect(boom).connect(rasp).connect(top).connect(this.air)
     this.air.connect(this.engineGain).connect(this.panner)
     this.fallback = ctx.createGain()
     this.fallback.gain.value = 0.12
     this.synth = ctx.createOscillator()
     this.synth.type = 'sawtooth'
-    this.synth.connect(this.fallback).connect(this.air)
+    this.synth.connect(this.fallback).connect(this.lope)
     this.synth.start()
 
     // Tyres and brakes, through their own (gentler) air filter.
@@ -97,6 +117,7 @@ export class OpponentAudio {
 
     this.impacts = new ImpactSound(ctx, this.panner)
     this.backfires = new BackfireSound(ctx, this.panner)
+    this.backfires.setVoice(voice.pops)
 
     // Wind rush as it passes.
     const buf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate)
@@ -120,7 +141,7 @@ export class OpponentAudio {
     this.sampled?.port.close()
     this.sampled = new AudioWorkletNode(this.ctx, 'granular-engine', { numberOfInputs: 0, outputChannelCount: [1] })
     this.sampled.port.postMessage(bank)
-    this.sampled.connect(this.air)
+    this.sampled.connect(this.lope)
     this.fallback.gain.value = 0
   }
 
@@ -146,7 +167,11 @@ export class OpponentAudio {
     this.engineGain.gain.setTargetAtTime(on * ENGINE_LEVEL * (0.55 + 0.45 * s.throttle), t, 0.06)
     const rpm = s.rpm * this.doppler
     this.synth.frequency.setTargetAtTime(Math.max(25, (rpm / 60) * this.firing), t, 0.04)
-    this.sampled?.parameters.get('rpm')?.setTargetAtTime(rpm, t, 0.04)
+    this.sampled?.parameters.get('rpm')?.setTargetAtTime(rpm * this.voice.pitch, t, 0.04)
+    const lope = 0.5 * this.voice.burble * (1 - 0.6 * Math.min(s.rpm / 7500, 1))
+    this.lopeLfo.frequency.setTargetAtTime((Math.max(rpm, 600) / 60) * (this.firing / 2), t, 0.04)
+    this.lopeDepth.gain.setTargetAtTime(lope, t, 0.08)
+    this.lope.gain.setTargetAtTime(1 - lope, t, 0.08)
 
     this.tyres.update(s.active ? s.tyres : SILENT, dt, this.doppler)
     // Wind: a rush only when a fast car is right there (it falls off much
@@ -157,6 +182,9 @@ export class OpponentAudio {
 
   dispose(): void {
     this.synth.stop()
+    this.lopeLfo.stop()
+    this.lopeLfo.disconnect()
+    this.lope.disconnect()
     this.wind.stop()
     this.synth.disconnect()
     this.fallback.disconnect()

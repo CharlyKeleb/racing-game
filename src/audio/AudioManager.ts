@@ -18,6 +18,7 @@ import { MenuMusic } from './MenuMusic'
 import { MUSIC_TRACKS, musicTrack, type MusicTrack } from './musicTracks'
 import { RaceMusic } from './RaceMusic'
 import { decodeWav16, type EngineBank } from './GranularEngine'
+import { DEFAULT_VOICE, type EngineVoice } from './EngineVoice'
 import type { EngineBankMessage } from './engineWorklet'
 import engineWorkletUrl from './engineWorklet.ts?worker&url'
 
@@ -88,6 +89,8 @@ export class AudioManager {
   /** Crashes and backfires: ducked lightly under the commentary, still felt. */
   private hitBus!: GainNode
   private noiseProfile: CarNoiseProfile = DEFAULT_NOISE_PROFILE
+  /** How the player's car sounds over its recording (see EngineVoice). */
+  private voice: EngineVoice = DEFAULT_VOICE
 
   // Synth stand-in until the recordings load.
   private synthSaw!: OscillatorNode
@@ -139,12 +142,16 @@ export class AudioManager {
 
   /**
    * The car's audio folder, e.g. '/audio/porsche911/' (undefined = synth only),
-   * and its firing pulses per revolution. Switching cars after unlock swaps
-   * the engine: the synth covers the gap while the new recordings load.
+   * its firing pulses per revolution and its voice (how it sounds over that
+   * recording). Switching cars after unlock swaps the engine: the synth covers
+   * the gap while the new recordings load.
    */
-  setCarAudio(url: string | undefined, firingPerRev = 3, noise: CarNoiseProfile = DEFAULT_NOISE_PROFILE): void {
+  setCarAudio(url: string | undefined, firingPerRev = 3, noise: CarNoiseProfile = DEFAULT_NOISE_PROFILE, voice: EngineVoice = DEFAULT_VOICE): void {
     this.noiseProfile = noise
     this.tyres?.setProfile(noise)
+    this.voice = voice
+    this.sound?.setVoice(voice)
+    this.backfires?.setVoice(voice.pops)
     const next = url ?? null
     const changed = next !== this.carAudioUrl
     this.carAudioUrl = next
@@ -208,6 +215,7 @@ export class AudioManager {
     this.impacts = new ImpactSound(ctx, this.hitBus)
     void loadImpactRecordings(ctx)
     this.backfires = new BackfireSound(ctx, this.hitBus)
+    this.backfires.setVoice(this.voice.pops)
     void loadBackfireRecordings(ctx)
     this.driving = new DrivingSound(ctx, this.carBus)
     this.ambience = new GarageAmbience(ctx, this.bed)
@@ -219,6 +227,7 @@ export class AudioManager {
     this.raceMusic.setEnabled(this.raceMusicEnabled, this.raceMusicVolume)
     this.raceMusic.setActive(this.raceMusicActive)
     this.sound.setFiringPerRev(this.firingPerRev)
+    this.sound.setVoice(this.voice)
 
     this.synthGain = ctx.createGain()
     this.synthGain.gain.value = 0.35
@@ -291,7 +300,7 @@ export class AudioManager {
     this.sound?.reset()
     void (this.loading ?? Promise.resolve()).then(() => {
       if (!this.ignition || !this.sound) return
-      this.sound.playClip(this.ignition, 0.9)
+      this.sound.playClip(this.ignition, 0.9, ctx.currentTime, this.voice.pitch)
       this.sound.holdEngineUntil(ctx.currentTime + IGNITION_SETTLE)
     })
   }
@@ -538,7 +547,7 @@ export class AudioManager {
     if (tyres) this.tyres?.update(tyreBrakeLevels(tyres, this.noiseProfile), dt)
     const rpm = this.sound.engineRpm
     if (this.sampled) {
-      this.sampled.parameters.get('rpm')!.setTargetAtTime(rpm, t, 0.01)
+      this.sampled.parameters.get('rpm')!.setTargetAtTime(rpm * this.voice.pitch, t, 0.01)
     } else {
       // Firing frequency = rpm/60 × pulses per rev (flat-six 3, V8 4).
       const fire = (Math.max(rpm, 600) / 60) * this.firingPerRev
@@ -586,12 +595,12 @@ export class AudioManager {
     this.rivalNoise = []
   }
 
-  setOpponentCars(cars: readonly { audioUrl?: string; firingPerRev: number; noise?: CarNoiseProfile }[]): void {
+  setOpponentCars(cars: readonly { audioUrl?: string; firingPerRev: number; noise?: CarNoiseProfile; voice?: EngineVoice }[]): void {
     this.clearOpponents()
     const ctx = this.ctx
     if (!ctx) return
     for (const car of cars) {
-      const rival = new OpponentAudio(ctx, this.bed, car.firingPerRev, car.noise ?? DEFAULT_NOISE_PROFILE)
+      const rival = new OpponentAudio(ctx, this.bed, car.firingPerRev, car.noise ?? DEFAULT_NOISE_PROFILE, car.voice ?? DEFAULT_VOICE)
       this.rivalNoise.push(car.noise ?? DEFAULT_NOISE_PROFILE)
       this.rivals.push(rival)
       const base = car.audioUrl
