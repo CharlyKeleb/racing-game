@@ -1,7 +1,12 @@
 import { ControllerSettings } from './ControllerSettings'
+import { narrationClip } from '../audio/narration'
+import { NarratorPreview } from './NarratorPreview'
+import { CockpitSettings } from './CockpitSettings'
+import type { TrackLook } from '../world/TrackLook'
 import { Help } from './Help'
 import { useEffect, useRef, useState } from 'react'
 import { GiGears, GiSteeringWheel, GiSpeaker, GiGamepad, GiComputerFan } from 'react-icons/gi'
+import type { RendererKind } from '../engine/backend'
 import type { CameraMode, QualityPreset } from '../stores/gameStore'
 import { TIME_PRESETS, type TimeOfDay } from '../world/timeOfDay'
 import { useGame } from './hooks'
@@ -41,20 +46,70 @@ export function Settings({ onClose }: { onClose?: () => void }) {
       <div className="settings__content" key={section}>
         {section !== 'controller' && <><span className="eyebrow">{active.label}</span><p className="settings__hint">{active.hint}</p></>}
         {section === 'graphics' && <>
+          <Segmented<TrackLook> label="Track appearance" value={settings.trackLook} options={[[ 'default','Track default'],['road-focus','Road focus']]} onPick={trackLook=>update({trackLook})}/>
+          <p className="settings__help">Road focus darkens neutral asphalt and softens terrain colours on every circuit. Markings, signs and lights stay readable.</p>
           <SettingChoices<QualityPreset> preview={quality=><SettingScene quality={quality}/>} label="Visual quality" value={settings.quality} options={[[ 'low','Low'],['medium','Medium'],['high','High']]} onPick={quality=>update({quality})}/>
           <p className="settings__help">Illustrative previews. Low favors speed; High adds richer lighting and detail.</p>
           <SettingChoices<number> preview={v=><SettingScene effects={v===1}/>} label="Post effects" value={settings.postfx?1:0} options={[[1,'On'],[0,'Off']]} onPick={v=>update({postfx:v===1})}/>
+          <Segmented<RendererKind> help label="Renderer" value={settings.renderer} options={[['webgl','WebGL'],['webgpu','WebGPU (beta)']]} onPick={renderer=>{ if (renderer === settings.renderer) return; update({renderer}); window.location.reload() }}/>
+          <p className="settings__help">WebGPU is a trial: GPU particles, falls back to WebGL where it isn't supported. Switching reloads the game.</p>
         </>}
         {section === 'driving' && <>
+          <label className="ui-field settings__volume">
+            <span className="ui-field__label">Motion blur <em>{Math.round(settings.motionBlur * 100)}%</em></span>
+            <input aria-label="Motion blur" className="ui-range" type="range" min={0} max={1} step={.05} value={settings.motionBlur} onChange={e=>update({motionBlur:Number(e.target.value)})}/>
+            <span className="settings__help">Speed-scaled road and wheel blur. Your car body and HUD stay sharp. Set to zero to turn off; requires Post effects.</span>
+          </label>
+          <Segmented<number> help label="Camera movement" value={settings.cameraMotion?1:0} options={[[1,'On'],[0,'Off']]} onPick={v=>update({cameraMotion:v===1})}/>
+          <Segmented<number> help label="Speed FOV" value={settings.fovEffects?1:0} options={[[1,'On'],[0,'Off']]} onPick={v=>update({fovEffects:v===1})}/>
+          <Segmented<number> help label="Speed lines" value={settings.speedLines?1:0} options={[[1,'On'],[0,'Off']]} onPick={v=>update({speedLines:v===1})}/>
+          <Segmented<'auto' | 'manual'> help label="Transmission" value={settings.transmission} options={[['auto','Automatic'],['manual','Manual']]} onPick={transmission=>update({transmission})}/>
+          <Segmented<'off' | 'corners' | 'full'> help label="Braking guide" value={settings.drivingLine} options={[['off','Off'],['corners','Corners'],['full','Full']]} onPick={drivingLine=>update({drivingLine})}/>
+          <Segmented<number> help label="Launch assist" value={settings.launchAssist?1:0} options={[[0,'Off'],[1,'On']]} onPick={v=>update({launchAssist:v===1})}/>
+          <p className="settings__help">Camera movement controls extra head motion, shake and view fades. Reduced-motion preference disables these too.</p>
           <SettingChoices<CameraMode> preview={camera=><SettingScene cockpit={camera==='cockpit'}/>} label="Camera" value={settings.camera} options={[[ 'chase','Chase'],['cockpit','Cockpit']]} onPick={camera=>update({camera})}/>
+          {settings.camera === 'cockpit' && <CockpitSettings/>}
+          <Segmented<number> label="Proximity radar" value={settings.proximityRadar?1:0} options={[[1,'On'],[0,'Off']]} onPick={v=>update({proximityRadar:v===1})}/>
+          <Segmented<number> label="Spotter text" value={settings.spotterVisual?1:0} options={[[1,'On'],[0,'Off']]} onPick={v=>update({spotterVisual:v===1})}/>
+          <Segmented<number> help label="Race callouts" value={settings.callouts?1:0} options={[[1,'On'],[0,'Off']]} onPick={v=>update({callouts:v===1})}/>
+          <p className="settings__help">Nearby rivals relative to your car. Amber marks a closing car; red marks overlap. Spotter text confirms left, right and clear.</p>
           <SettingChoices<TimeOfDay> preview={time=><SettingScene time={time}/>} label="Time of day" value={settings.timeOfDay} options={(Object.keys(TIME_PRESETS) as TimeOfDay[]).map(id=>[id,TIME_PRESETS[id].label])} onPick={timeOfDay=>update({timeOfDay})}/>
           <Segmented<number> help label="Laps" value={settings.laps} options={[[1,'1'],[3,'3'],[5,'5']]} onPick={laps=>update({laps})}/>
         </>}
-        {section === 'audio' && <label className="ui-field settings__volume">
-          <span className="ui-field__label">Master volume <Help label="Master volume">Adjusts all game sound, including the engine, tires, effects and garage ambience. Zero mutes the game.</Help><em>{Math.round(settings.masterVolume*100)}%</em></span>
-          <input aria-label="Master volume" className="ui-range" type="range" min={0} max={1} step={.05} value={settings.masterVolume} onChange={e=>update({masterVolume:Number(e.target.value)})}/>
-          <span className="settings__help">Engine, tires, effects and garage ambience.</span>
-        </label>}
+        {section === 'audio' && <>
+          <Segmented<'off' | 'duo' | 'camille' | 'alex'> label="Commentary" value={settings.narrator} options={[[ 'duo','Alex & Camille'],['alex','Alex only'],['camille','Camille only'],['off','Off']]} onPick={narrator=>update({narrator})}/>
+          <p className="settings__help">Alex & Camille share commentary, with a different voice chosen for each moment. Camille has an English accent; Alex has an American accent. Game audio lowers automatically while the narrator speaks. Text appears even when a recording is unavailable. Race callouts must be enabled.</p>
+          <label className="ui-field settings__volume">
+            <span className="ui-field__label">Narrator voice <em>{Math.round(settings.narratorVolume * 100)}%</em></span>
+            <input aria-label="Narrator voice volume" className="ui-range" type="range" min={0} max={1} step={.05} value={settings.narratorVolume} onChange={e=>update({narratorVolume:Number(e.target.value)})}/>
+          </label>
+          <NarratorPreview key={settings.narrator}/>
+          {settings.narrator !== 'off' && settings.narrator !== 'duo' && !narrationClip(settings.narrator, 'raceComplete') && <p className="settings__help">Normal-finish commentary currently has subtitles only. The finish voice recording is not available yet.</p>}
+          <Segmented<number> label="Spotter sounds" value={settings.spotterAudio?1:0} options={[[1,'On'],[0,'Off']]} onPick={v=>update({spotterAudio:v===1})}/>
+          <p className="settings__help">Directional tones for a car alongside; a rising tone when clear. Independent of the radar and text.</p>
+          <label className="ui-field settings__volume">
+            <span className="ui-field__label">Trackside ambience <em>{Math.round(settings.tracksideVolume * 100)}%</em></span>
+            <input aria-label="Trackside ambience volume" className="ui-range" type="range" min={0} max={1} step={.05} value={settings.tracksideVolume} onChange={e=>update({tracksideVolume:Number(e.target.value)})}/>
+            <span className="settings__help">Flags, wind and pit equipment on supported circuits. Zero mutes trackside ambience.</span>
+          </label>
+          <label className="ui-field settings__volume">
+            <span className="ui-field__label">Master volume <Help label="Master volume">Adjusts all game sound, including the engine, tires, effects, race and menu music, and garage ambience. Zero mutes the game.</Help><em>{Math.round(settings.masterVolume*100)}%</em></span>
+            <input aria-label="Master volume" className="ui-range" type="range" min={0} max={1} step={.05} value={settings.masterVolume} onChange={e=>update({masterVolume:Number(e.target.value)})}/>
+            <span className="settings__help">Engine, tires, effects, race and menu music, and garage ambience.</span>
+          </label>
+          <label className="ui-field settings__volume">
+            <span className="ui-field__label">Callout chime <em>{Math.round(settings.calloutVolume * 100)}%</em></span>
+            <input aria-label="Callout chime volume" className="ui-range" type="range" min={0} max={1} step={.05} value={settings.calloutVolume} onChange={e=>update({calloutVolume:Number(e.target.value)})}/>
+            <span className="settings__help">The short chime with Quick Race callouts. Zero keeps the text only.</span>
+          </label>
+          <Segmented<number> label="Menu music" value={settings.menuMusic?1:0} options={[[1,'On'],[0,'Off']]} onPick={v=>update({menuMusic:v===1})}/>
+          <Segmented<number> label="Race music" value={settings.raceMusic?1:0} options={[[1,'On'],[0,'Off']]} onPick={v=>update({raceMusic:v===1})}/>
+          {settings.raceMusic && <label className="ui-field settings__volume">
+            <span className="ui-field__label">Race music volume <em>{Math.round(settings.raceMusicVolume * 100)}%</em></span>
+            <input aria-label="Race music volume" className="ui-range" type="range" min={0} max={1} step={.05} value={settings.raceMusicVolume} onChange={e=>update({raceMusicVolume:Number(e.target.value)})}/>
+            <span className="settings__help">A shuffled rock, drum &amp; bass and electronic playlist from lights out to the results. It dips under commentary and callout chimes.</span>
+          </label>}
+        </>}
         {section === 'controller' && <ControllerSettings />}
         {section === 'controls' && <dl className="settings__controls">
           <div><dt>Accelerate</dt><dd><kbd>W</kbd> / <kbd>↑</kbd></dd></div>
@@ -62,8 +117,14 @@ export function Settings({ onClose }: { onClose?: () => void }) {
           <div><dt>Steer</dt><dd><kbd>A</kbd> <kbd>D</kbd> / <kbd>←</kbd> <kbd>→</kbd></dd></div>
           <div><dt>Handbrake</dt><dd><kbd>Space</kbd></dd></div>
           <div><dt>Nitro</dt><dd><kbd>Shift</kbd></dd></div>
+          <div><dt>Burnout</dt><dd><kbd>S</kbd> + <kbd>W</kbd> at a standstill</dd></div>
+          <div><dt>Shift up / down (manual)</dt><dd><kbd>E</kbd> <kbd>Q</kbd></dd></div>
+          <div><dt>Restart run / back to start</dt><dd><kbd>T</kbd></dd></div>
+          <div><dt>Launch</dt><dd><kbd>Space</kbd> + <kbd>W</kbd>, let go at lights out</dd></div>
           <div><dt>Camera / reset / pause</dt><dd><kbd>C</kbd> <kbd>R</kbd> <kbd>Esc</kbd></dd></div>
+          <div><dt>Look back (hold)</dt><dd><kbd>B</kbd> / gamepad R3</dd></div>
         </dl>}
+        {section === 'controls' && <p className="settings__help">Drift: tap brake or handbrake while turning. Tap nitro again on the cue for a perfect boost. On the grid, hold handbrake or brake, keep the revs in the green band and let go when the lights go out for a launch. Burnout: stopped, hold brake and floor the throttle (steer to swing the tail round); let go of the brake to launch out of it. Gamepads are supported.</p>}
       </div>
     </div>
     <footer className="settings__footer"><span>Changes save automatically</span>{onClose && <Button variant="primary" onClick={onClose}>Done</Button>}</footer>

@@ -1,6 +1,11 @@
+import { paintFinishUniforms, patchPaintFinish, setPaintFinish } from './PaintFinish'
+import { LicensePlate } from './LicensePlate'
+import { backend } from '../engine/backend'
 import * as THREE from 'three'
-import type { CarBuild, PaintFinish } from './CarBuild'
+import { DEFAULT_BUILD, type CarBuild, type PaintFinish } from './CarBuild'
 import type { CarModel } from './CarModel'
+import { hasLivery, LIVERY_PLACEMENTS } from './LiveryDesign'
+import { LiveryGraphics, LIVERY_VERTEX_DECLARATIONS, LIVERY_FRAGMENT_DECLARATIONS, LIVERY_FRAGMENT } from './LiveryGraphics'
 
 /**
  * Glues CarBuild's visual fields onto a rigged model. Meshes are matched by
@@ -29,7 +34,8 @@ function slotFor(materialName: string, onWheel: boolean): Slot | null {
 }
 
 export class CarLivery {
-  private readonly paint = new THREE.MeshPhysicalMaterial({ name: 'livery_paint' })
+  private readonly paintFinish = paintFinishUniforms()
+  private readonly paint: THREE.MeshPhysicalMaterial
   private readonly rims = new THREE.MeshStandardMaterial({ name: 'livery_rims', metalness: 1, roughness: 0.22 })
   private readonly calipers = new THREE.MeshStandardMaterial({ name: 'livery_calipers', metalness: 0.3, roughness: 0.4 })
   private readonly glass = new THREE.MeshPhysicalMaterial({
@@ -41,7 +47,39 @@ export class CarLivery {
     depthWrite: false,
   })
 
+  private readonly licensePlate: LicensePlate
+  private graphics?: LiveryGraphics
+  private stockMap: THREE.Texture | null = null
+  /** The aliased body's own colour, which tints `stockMap` (a near-black factor over a grey detail map, say). */
+  private readonly stockColor = new THREE.Color(1, 1, 1)
+  private finish?: PaintFinish
+  private readonly originals: { mesh: THREE.Mesh; material: THREE.Material | THREE.Material[]; geometry: THREE.BufferGeometry }[] = []
+
   constructor(model: CarModel) {
+    const placement = LIVERY_PLACEMENTS[model.root.name]
+    if (placement && backend.nodes) {
+      // WebGPU runs no onBeforeCompile: the node twin projects the same graphics.
+      this.graphics = new LiveryGraphics(placement)
+      this.paint = backend.nodes.liveryPaintMaterial(this.graphics.uniforms, this.paintFinish) as unknown as THREE.MeshPhysicalMaterial
+    } else if (placement) {
+      this.paint = new THREE.MeshPhysicalMaterial({ name: 'livery_paint' })
+      this.graphics = new LiveryGraphics(placement)
+      const graphics = this.graphics
+      this.paint.onBeforeCompile = (shader) => {
+        Object.assign(shader.uniforms, graphics.uniforms)
+        shader.vertexShader = LIVERY_VERTEX_DECLARATIONS + shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvLiveryPosition = liveryPosition;\nvLiveryNormal = liveryNormal;')
+        shader.fragmentShader = LIVERY_FRAGMENT_DECLARATIONS + shader.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>\n' + LIVERY_FRAGMENT)
+      }
+      this.paint.customProgramCacheKey = () => 'garage-livery-v1'
+    } else {
+      this.paint = backend.nodes
+        ? backend.nodes.premiumPaintMaterial(this.paintFinish) as unknown as THREE.MeshPhysicalMaterial
+        : new THREE.MeshPhysicalMaterial({ name: 'livery_paint' })
+    }
+    if (!backend.nodes) patchPaintFinish(this.paint, this.paintFinish)
+    model.root.updateMatrixWorld(true)
+    const bodyInverse = model.body.matrixWorld.clone().invert()
+
     const wheelNodes = new Set<THREE.Object3D>(Object.values(model.wheels).map((w) => w.spinner))
     const slots: Record<Slot, THREE.Material> = {
       paint: this.paint,
@@ -53,27 +91,76 @@ export class CarLivery {
       const wheel = onWheel || wheelNodes.has(o)
       const mesh = o as THREE.Mesh
       if (mesh.isMesh) {
+        const originalMaterial = mesh.material
+        // Retain asset identity when paint aliases replace materials (bolt-on parts use it).
+        mesh.userData.garageMaterialNames = (Array.isArray(originalMaterial) ? originalMaterial : [originalMaterial]).map(m=>m.name)
+        let painted = false
         const swap = (m: THREE.Material) => {
-          const slot = slotFor(m.name, wheel)
+          const alias = placement?.paintAliases.includes(m.name) ?? false
+          const slot = alias ? 'paint' : slotFor(m.name, wheel)
+          if (slot === 'paint') {
+            painted = true
+            if (alias && m instanceof THREE.MeshStandardMaterial) {
+              this.stockMap = m.map
+              this.stockColor.copy(m.color)
+            }
+          }
           return slot ? slots[slot] : m
         }
         mesh.material = Array.isArray(mesh.material) ? mesh.material.map(swap) : swap(mesh.material)
+        this.originals.push({ mesh, material: originalMaterial, geometry: mesh.geometry })
+        if (painted && this.graphics) {
+          const geometry = mesh.geometry.clone()
+          const transform = new THREE.Matrix4().multiplyMatrices(bodyInverse, mesh.matrixWorld)
+          const normalTransform = new THREE.Matrix3().getNormalMatrix(transform)
+          const positions = geometry.getAttribute('position')
+          const normals = geometry.getAttribute('normal')
+          const projected = new Float32Array(positions.count * 3)
+          const projectedNormals = new Float32Array(positions.count * 3)
+          const point = new THREE.Vector3()
+          for (let i = 0; i < positions.count; i++) {
+            point.fromBufferAttribute(positions, i).applyMatrix4(transform).toArray(projected, i * 3)
+            if (normals) point.fromBufferAttribute(normals, i).applyNormalMatrix(normalTransform)
+            else point.set(0, 1, 0)
+            point.toArray(projectedNormals, i * 3)
+          }
+          geometry.setAttribute('liveryPosition', new THREE.BufferAttribute(projected, 3))
+          geometry.setAttribute('liveryNormal', new THREE.BufferAttribute(projectedNormals, 3))
+          mesh.geometry = geometry
+        }
       }
       for (const child of o.children) visit(child, wheel)
     }
     visit(model.root, false)
+    this.licensePlate = new LicensePlate(model)
   }
 
   apply(build: CarBuild): void {
-    this.paint.color.set(build.paint)
-    this.paint.setValues(FINISH[build.finish])
-    this.paint.needsUpdate = true
+    const map = this.stockMap && build.paint === DEFAULT_BUILD.paint && !hasLivery(build.livery) ? this.stockMap : null
+    if (this.paint.map !== map) { this.paint.map = map; this.paint.needsUpdate = true }
+    if (map) this.paint.color.copy(this.stockColor)
+    else this.paint.color.set(build.paint)
+    if (this.finish !== build.finish) {
+      this.paint.setValues(FINISH[build.finish])
+      this.paint.needsUpdate = true
+      this.finish = build.finish
+    }
+    setPaintFinish(this.paintFinish, build.finish)
+    this.graphics?.apply(build.livery)
+    this.licensePlate.apply(build.livery)
     this.rims.color.set(build.rims)
     this.calipers.color.set(build.calipers)
     this.glass.opacity = 0.3 + 0.65 * build.tint
   }
 
   dispose(): void {
+    for (const { mesh, material, geometry } of this.originals) {
+      if (mesh.geometry !== geometry) mesh.geometry.dispose()
+      mesh.geometry = geometry
+      mesh.material = material
+    }
+    this.licensePlate.dispose()
+    this.graphics?.dispose()
     this.paint.dispose()
     this.rims.dispose()
     this.calipers.dispose()

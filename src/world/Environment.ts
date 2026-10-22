@@ -2,6 +2,15 @@ import * as THREE from 'three'
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js'
 import { Sky } from 'three/examples/jsm/objects/Sky.js'
 import { TIME_PRESETS, type TimeOfDay, type TimePreset } from './timeOfDay'
+import { backend } from '../engine/backend'
+import type { AnyRenderer } from '../engine/Renderer'
+
+/** The part of PMREMGenerator used here; the WebGL and WebGPU ones share it. */
+interface Pmrem {
+  fromScene(scene: THREE.Scene, sigma?: number, near?: number, far?: number): THREE.RenderTarget
+  fromEquirectangular(texture: THREE.Texture): THREE.RenderTarget
+  dispose(): void
+}
 
 /**
  * Sky dome, key light (sun or moon), hemisphere fill, fog and image-based
@@ -20,33 +29,46 @@ export class Environment {
   /** Shadow-casting key light: the sun by day, the moon at night. */
   readonly sun: THREE.DirectionalLight
   readonly sunDirection = new THREE.Vector3()
-  private readonly sky: Sky
+  /** WebGL `Sky`, or the node `SkyMesh` under WebGPU. */
+  private readonly sky: THREE.Mesh
+  /** The sky's uniforms by their WebGL names (both domes expose the same set). */
+  private readonly skyUniforms: Record<string, { value: any }> // eslint-disable-line @typescript-eslint/no-explicit-any
   private readonly fog = new THREE.Fog(0xbfd4e6, 250, 900)
   private readonly background = new THREE.Color()
   private readonly fill: THREE.HemisphereLight
-  private readonly pmrem: THREE.PMREMGenerator
-  private envTarget: THREE.WebGLRenderTarget | null = null
+  private readonly pmrem: Pmrem
+  private envTarget: THREE.RenderTarget | null = null
   private preset: TimePreset = TIME_PRESETS.noon
   private timeOfDay: TimeOfDay | null = null
   private viewFar = 900
+  /** Overcast and wet (#53): applied on top of the time-of-day preset. */
+  private rain = false
   /** Bumped per preset change so a slow HDRI load can't overwrite a newer choice. */
   private generation = 0
 
-  constructor(renderer: THREE.WebGLRenderer) {
-    this.pmrem = new THREE.PMREMGenerator(renderer)
-
-    this.sky = new Sky()
+  constructor(renderer: AnyRenderer) {
+    if (backend.nodes) {
+      this.pmrem = new backend.nodes.PMREMGenerator(renderer as never) as unknown as Pmrem
+      const dome = backend.nodes.skyDome()
+      this.sky = dome.mesh
+      this.skyUniforms = dome.uniforms
+    } else {
+      this.pmrem = new THREE.PMREMGenerator(renderer as THREE.WebGLRenderer) as unknown as Pmrem
+      const sky = new Sky()
+      const mat = sky.material
+      // Exposure + flat tint (overcast grey, night blue) and the radiance clamp:
+      // the sun disc reaches ~60000, and without the clamp a wide FOV that
+      // catches it floods the screen through bloom (PR #2).
+      mat.uniforms.uSkyExposure = { value: 1 }
+      mat.uniforms.uSkyTint = { value: new THREE.Vector3() }
+      mat.uniforms.uSkyMax = { value: 1.6 }
+      mat.fragmentShader = mat.fragmentShader
+        .replace('void main() {', 'uniform float uSkyExposure;\nuniform vec3 uSkyTint;\nuniform float uSkyMax;\nvoid main() {')
+        .replace('gl_FragColor = vec4( texColor, 1.0 );', 'gl_FragColor = vec4( min( texColor * uSkyExposure + uSkyTint, vec3( uSkyMax ) ), 1.0 );')
+      this.sky = sky
+      this.skyUniforms = mat.uniforms
+    }
     this.sky.scale.setScalar(4000)
-    const mat = this.sky.material
-    // Exposure + flat tint (overcast grey, night blue) and the radiance clamp:
-    // the sun disc reaches ~60000, and without the clamp a wide FOV that
-    // catches it floods the screen through bloom (PR #2).
-    mat.uniforms.uSkyExposure = { value: 1 }
-    mat.uniforms.uSkyTint = { value: new THREE.Vector3() }
-    mat.uniforms.uSkyMax = { value: 1.6 }
-    mat.fragmentShader = mat.fragmentShader
-      .replace('void main() {', 'uniform float uSkyExposure;\nuniform vec3 uSkyTint;\nuniform float uSkyMax;\nvoid main() {')
-      .replace('gl_FragColor = vec4( texColor, 1.0 );', 'gl_FragColor = vec4( min( texColor * uSkyExposure + uSkyTint, vec3( uSkyMax ) ), 1.0 );')
 
     this.fill = new THREE.HemisphereLight(0xcfe3ff, 0x4f6a3a, 0.6)
 
@@ -69,13 +91,24 @@ export class Environment {
   }
 
   /** Switch preset: sky, lights, fog colour, baked environment. Call apply() to push it to the scene. */
+  /** Rain on or off: re-applies the preset with the overcast changes and re-bakes the environment. */
+  setRain(rain: boolean): void {
+    if (rain === this.rain) return
+    this.rain = rain
+    if (this.timeOfDay) {
+      const id = this.timeOfDay
+      this.timeOfDay = null
+      this.setTimeOfDay(id)
+    }
+  }
+
   setTimeOfDay(id: TimeOfDay): void {
     if (id === this.timeOfDay) return
     this.timeOfDay = id
     const p = (this.preset = TIME_PRESETS[id])
     const generation = ++this.generation
 
-    const u = this.sky.material.uniforms
+    const u = this.skyUniforms
     u.turbidity.value = p.sky.turbidity
     u.rayleigh.value = p.sky.rayleigh
     u.mieCoefficient.value = p.sky.mieCoefficient
@@ -84,6 +117,15 @@ export class Environment {
     u.uSkyExposure.value = p.skyExposure
     u.uSkyTint.value.set(...p.skyTint)
     u.uSkyMax.value = p.skyMax
+    // Overcast: a near-solid cloud deck, hazier, flatter and darker, with a grey veil.
+    u.cloudCoverage.value = this.rain ? 0.97 : 0.4
+    u.cloudDensity.value = this.rain ? 0.9 : 0.4
+    if (this.rain) {
+      u.turbidity.value = Math.max(p.sky.turbidity, 10)
+      u.rayleigh.value = p.sky.rayleigh * 0.4
+      u.uSkyExposure.value = p.skyExposure * 0.4
+      u.uSkyTint.value.addScalar(0.06 * p.skyExposure)
+    }
 
     this.sunDirection.copy(direction(p.key.elevation, p.key.azimuth))
     this.sun.color.setHex(p.key.color)
@@ -93,8 +135,17 @@ export class Environment {
     this.fill.groundColor.setHex(p.fill.ground)
     this.fill.intensity = p.fill.intensity
     this.fog.color.setHex(p.fog)
-    this.fog.near = this.viewFar * p.fogStart
-    this.background.setHex(p.fog)
+    if (this.rain) {
+      // Cloud hides the sun: weak, shadowless key light, flat grey fill, grey fog.
+      this.sun.intensity *= 0.3
+      this.sun.castShadow = false
+      this.fill.color.lerp(_rainFill, 0.6)
+      this.fill.intensity *= 1.1
+      const l = 0.2126 * this.fog.color.r + 0.7152 * this.fog.color.g + 0.0722 * this.fog.color.b
+      this.fog.color.lerp(_grey.setRGB(l, l * 1.02, l * 1.06).multiplyScalar(0.85), 0.75)
+    }
+    this.applyFog()
+    this.background.copy(this.fog.color)
 
     this.setEnvTarget(this.bakeSky(p))
     if (p.hdri) {
@@ -110,6 +161,13 @@ export class Environment {
     }
   }
 
+  /** Fog distances from the view distance; rain closes them in to about half. */
+  private applyFog(): void {
+    const far = this.viewFar * (this.rain ? 0.5 : 1)
+    this.fog.far = far
+    this.fog.near = far * (this.rain ? 0.05 : this.preset.fogStart)
+  }
+
   /** Write fog, background and image-based lighting onto the scene. */
   apply(scene: THREE.Scene): void {
     scene.fog = this.fog
@@ -121,8 +179,7 @@ export class Environment {
   /** Tracks hide their streaming edge in fog; the preset decides where the haze starts. */
   setViewDistance(_near: number, far: number): void {
     this.viewFar = far
-    this.fog.near = far * this.preset.fogStart
-    this.fog.far = far
+    this.applyFog()
   }
 
   /** Smaller shadow maps on weaker presets (shadows are off entirely on low). */
@@ -143,7 +200,7 @@ export class Environment {
    * The preset's sky (same shader, same sun) above a flat ground disc in the
    * preset's ground colour, rendered into a prefiltered HDR cube.
    */
-  private bakeSky(p: TimePreset): THREE.WebGLRenderTarget {
+  private bakeSky(p: TimePreset): THREE.RenderTarget {
     const scene = new THREE.Scene()
     const dome = new THREE.Mesh(this.sky.geometry, this.sky.material)
     dome.scale.setScalar(100)
@@ -159,7 +216,7 @@ export class Environment {
     return target
   }
 
-  private setEnvTarget(target: THREE.WebGLRenderTarget): void {
+  private setEnvTarget(target: THREE.RenderTarget): void {
     const scene = this.group.parent as THREE.Scene | null
     const shown = !!scene && !!this.envTarget && scene.environment === this.envTarget.texture
     this.envTarget?.dispose()
@@ -170,13 +227,16 @@ export class Environment {
 
   dispose(): void {
     this.sky.geometry.dispose()
-    this.sky.material.dispose()
+    ;(this.sky.material as THREE.Material).dispose()
     this.sun.shadow.map?.dispose()
     this.envTarget?.dispose()
     this.pmrem.dispose()
     this.group.removeFromParent()
   }
 }
+
+const _rainFill = new THREE.Color(0xb8c2cc)
+const _grey = new THREE.Color()
 
 /** Unit vector toward a point `elevation` degrees above the horizon at compass `azimuth`. */
 function direction(elevation: number, azimuth: number): THREE.Vector3 {

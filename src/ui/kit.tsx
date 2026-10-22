@@ -45,22 +45,6 @@ export function Chevron({ dir, label, disabled, onClick }: { dir: 'left' | 'righ
   )
 }
 
-/** Back chevron + screen title, pinned top-left. */
-export function ScreenHeader({ title, onBack }: { title: string; onBack?: () => void }) {
-  return (
-    <header className="ui-header">
-      {onBack && (
-        <button className="ui-back" onClick={onBack} aria-label="Back">
-          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
-            <path d="M15 4 7 12l8 8" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="square" />
-          </svg>
-        </button>
-      )}
-      <h1 className="ui-header__title">{title}</h1>
-    </header>
-  )
-}
-
 export function ClassBadge({ value, size = 'md' }: { value: CarClass; size?: 'md' | 'lg' }) {
   return (
     <span className={`ui-class ui-class--${value} ui-class--${size}`} aria-label={`Class ${value}`}>

@@ -107,6 +107,16 @@ it('drives a complete checkpoint-validated procedural lap using real vehicle phy
       opponent.capture(1 / 60)
     }
     expect({ state: opponent.race.state, gate: opponent.race.lastCheckpoint, index: opponent.driver.progress.index, pose: opponent.pose, resets }).toMatchObject({ state: 'finished', resets: 0 })
+    const finishTime = opponent.entry.finishMs
+    for (let i = 0; i < 60 * 8; i++) {
+      opponent.readPose()
+      opponent.drive(1 / 60, [opponent.pose], 100, 2)
+      physics.step(1 / 60)
+      opponent.capture(1 / 60)
+    }
+    opponent.readPose()
+    expect(Math.abs(opponent.pose.speed)).toBeLessThan(1)
+    expect(opponent.entry.finishMs).toBe(finishTime)
   } finally { opponent.dispose(); track.dispose(); physics.dispose() }
 }, 30000)
 
@@ -187,7 +197,8 @@ it('updates sub-waypoint overtakes and orders cars behind the start line', () =>
   const a: RaceEntry = { id:0, name:'You', player:true, lap:1, checkpoint:0, index:1, finishMs:null, x:0, z:4.2 }
   const b = { ...a, id:1, player:false, z:4.3 }
   expect(standings.snapshot([a,b])[0].id).toBe(1)
-  a.z = 4.4
+  // Still between waypoints (4 m apart), but clear of the side-by-side hold.
+  a.z = 5.2
   expect(standings.snapshot([a,b])[0].id).toBe(0)
   a.z = -9; b.z = -8
   expect(standings.snapshot([a,b])[0].id).toBe(1)

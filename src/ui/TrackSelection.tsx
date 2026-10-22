@@ -1,3 +1,4 @@
+import { gameMode } from '../racing/gameModes'
 import { driftEvent } from '../racing/driftEvents'
 import { useEffect, useRef, useState } from 'react'
 import { TIME_PRESETS } from '../world/timeOfDay'
@@ -12,6 +13,7 @@ const details: Record<string, { location: string; character: string; description
   nurburgring: { location: 'Germany', character: 'Elevation / Fast sections', description: 'Commit through sweeping bends, manage the elevation changes and find your braking points.' },
   singapore: { location: 'Singapore', character: 'Street circuit / Walls close', description: 'Thread the walls round Marina Bay: tight 90° corners, two hairpins at the junction and no run-off to save you.' },
   u2city: { location: 'Bayview', character: 'City streets / Blind junctions', description: 'Race the downtown grid: a fast boulevard, a five-way junction and tight right-angle streets under the freeway.' },
+  city: { location: 'Downtown', character: 'Tram avenue / Back alley', description: 'Blast up the tram avenue past the station sheds, swing across the top street and thread the narrow back alley between the towers.' },
   'test-circuit': { location: 'Papaya proving grounds', character: 'Flat / Technical', description: 'A compact circuit for learning your car. Link the corners, refine your line and build confidence.' },
 }
 
@@ -43,7 +45,7 @@ export function TrackSelection({ onClose }: { onClose(): void }) {
   const index = TRACKS.indexOf(track)
   return <dialog className="track-select" ref={dialog} onClose={onClose} aria-labelledby="track-select-title">
     <header className="track-select__header">
-      <div><span className="eyebrow">{settings.mode === 'drift' ? 'Drift Challenge' : 'Quick Race'} / Location</span><h1 id="track-select-title">Choose your circuit<span>.</span></h1></div>
+      <div><span className="eyebrow">{gameMode(settings.mode).name} / Location</span><h1 id="track-select-title">Choose your circuit<span>.</span></h1></div>
       <Button size="sm" variant="ghost" onClick={()=>dialog.current?.close()}>Back</Button>
     </header>
     <div className="track-select__body">
@@ -63,6 +65,6 @@ export function TrackSelection({ onClose }: { onClose(): void }) {
         </div>
       </section>
     </div>
-    <footer className="track-select__footer"><div className="track-select__race-context"><span className="eyebrow">Your race</span><span>{settings.mode === 'drift' ? `${driftEvent(settings.driftEvent).laps} scored ${driftEvent(settings.driftEvent).laps===1?'lap':'laps'} / No time limit` : <>{settings.laps} {settings.laps===1?'lap':'laps'} <i>/</i> {(Number(previews[track.id as keyof typeof previews].lengthKm)*settings.laps).toFixed(2)} km</>} <i>/</i> {TIME_PRESETS[settings.timeOfDay].label}</span></div><Button variant="primary" size="lg" onClick={()=>{dialog.current?.close();if(selected!==current)update({track:selected})}}>{selected===current?'Keep this circuit':'Select circuit'} <span aria-hidden="true">→</span></Button></footer>
+    <footer className="track-select__footer"><div className="track-select__race-context"><span className="eyebrow">Your race</span><span>{settings.mode === 'timeTrial' ? <>Unlimited laps <i>/</i> {previews[track.id as keyof typeof previews].lengthKm} km per lap</> : settings.mode === 'freeRoam' ? <>No timer <i>/</i> Free driving</> : settings.mode === 'drift' ? `${driftEvent(settings.driftEvent).laps} scored ${driftEvent(settings.driftEvent).laps===1?'lap':'laps'} / No time limit` : <>{settings.laps} {settings.laps===1?'lap':'laps'} <i>/</i> {(Number(previews[track.id as keyof typeof previews].lengthKm)*settings.laps).toFixed(2)} km</>} <i>/</i> {TIME_PRESETS[settings.timeOfDay].label}</span></div><Button variant="primary" size="lg" onClick={()=>{dialog.current?.close();if(selected!==current)update({track:selected})}}>{selected===current?'Keep this circuit':'Select circuit'} <span aria-hidden="true">→</span></Button></footer>
   </dialog>
 }

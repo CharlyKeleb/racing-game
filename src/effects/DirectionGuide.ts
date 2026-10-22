@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { backend } from '../engine/backend'
 import type { TrackProgress } from '../racing/TrackProgress'
 import { planCornerSigns, roadCentreShift, signedBend, type CornerSign } from './routePlan'
 
@@ -154,7 +155,9 @@ export class DirectionGuide {
         .replace('#include <common>', '#include <common>\nvarying float vFade;')
         .replace('#include <alphamap_fragment>', '#include <alphamap_fragment>\ndiffuseColor.a *= vFade;')
     }
-    this.mesh = new THREE.InstancedMesh(geo, mat, COUNT)
+    // WebGPU runs no onBeforeCompile: the node version scales opacity the same way.
+    const arrowMat: THREE.Material = backend.nodes ? backend.nodes.instanceFadeMaterial(mat) : mat
+    this.mesh = new THREE.InstancedMesh(geo, arrowMat, COUNT)
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
     this.mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(COUNT * 3), 3)
     this.mesh.instanceColor.setUsage(THREE.DynamicDrawUsage)

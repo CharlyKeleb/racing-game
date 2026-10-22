@@ -55,6 +55,8 @@ export interface TireInput {
    * cornering priority (traction control off for this tire): power then pushes
    * the tire wide — what lets the throttle hold a drift. Default false.
    */
+  arcadeGripScale?: number
+  postPeakGrip?: number
   combined?: boolean
 }
 
@@ -78,16 +80,25 @@ export function computeTireForces(input: TireInput, cfg: TireConfig): TireOutput
   const gripScale = handbrake ? cfg.handbrakeGripScale : 1
   const maxForce = load * cfg.grip * gripScale * (input.surfaceGrip ?? 1)
 
+  if (maxForce <= 0) return { longitudinal: 0, lateral: 0, slip: 0, slide: 0 }
+
   // Lateral: slip-angle model at speed, velocity-cancelling impulse at low speed
   // (otherwise the car jitters sideways when parked).
   let lateral: number
   const speed = Math.abs(vLong)
-  const lateralMax = maxForce * (input.lateralGripScale ?? 1)
+  const lateralBudget = maxForce * Math.max(1, input.arcadeGripScale ?? 1)
+  const lateralMax = lateralBudget * (input.lateralGripScale ?? 1)
   if (speed > LOW_SPEED) {
     const slipAngle = Math.atan2(vLat, speed)
-    lateral = -lateralForceCurve(slipAngle, cfg) * lateralMax
+    let force = lateralForceCurve(slipAngle, cfg)
+    if (Math.abs(slipAngle) > peakSlipAngle(cfg)) {
+      const plateau = Math.max(0, Math.min(1, input.postPeakGrip ?? 0))
+      force += (Math.sign(slipAngle) - force) * plateau
+    }
+    lateral = -force * lateralMax
   } else {
-    lateral = (-vLat * massShare) / dt
+    // Still limited by grip: a tyre spinning in a burnout can't hold the tail in place.
+    lateral = Math.max(-lateralMax, Math.min(lateralMax, (-vLat * massShare) / dt))
   }
   // Never apply more than it takes to cancel sideways motion this tick —
   // prevents overshoot oscillation at low speed / small slip angles.
@@ -102,17 +113,17 @@ export function computeTireForces(input: TireInput, cfg: TireConfig): TireOutput
   const unclamped = longitudinal
 
   // Friction circle: combined force can't exceed max grip.
-  const total = Math.hypot(longitudinal, lateral)
-  let slip = total / maxForce
-  if (total > maxForce) {
+  const total = Math.hypot(longitudinal / maxForce, lateral / lateralBudget)
+  let slip = total
+  if (total > 1) {
     if (cfg.tractionControl && !input.combined) {
       // Arcade: cornering grip wins, drive/brake gets what's left. Stops
       // full-throttle power oversteer; handbrake drifts still work.
-      lateral = Math.max(-maxForce, Math.min(maxForce, lateral))
-      const rest = Math.sqrt(maxForce * maxForce - lateral * lateral)
+      lateral = Math.max(-lateralBudget, Math.min(lateralBudget, lateral))
+      const rest = maxForce * Math.sqrt(Math.max(0, 1 - (lateral / lateralBudget) ** 2))
       longitudinal = Math.max(-rest, Math.min(rest, longitudinal))
     } else {
-      const k = maxForce / total
+      const k = 1 / total
       longitudinal *= k
       lateral *= k
     }

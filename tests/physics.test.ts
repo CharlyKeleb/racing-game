@@ -26,6 +26,17 @@ describe('Drivetrain', () => {
     expect(d.update(0, 0.36, 1, -1, 1)).toBeLessThan(0)
   })
 
+  it('fades reverse drive out toward the reverse speed cap (#6)', () => {
+    const d = new Drivetrain(cfg.engine)
+    d.update(0, 0.36, 1, -1, 1 / 60)
+    const standing = d.update(-0.5, 0.36, 1, 0, 1)
+    const half = d.update(-5, 0.36, 1, 0, 1)
+    expect(half).toBeLessThan(0)
+    expect(Math.abs(half)).toBeLessThan(Math.abs(standing) * 0.6)
+    expect(d.update(-10, 0.36, 1, 0, 1)).toBeCloseTo(0)
+    expect(d.update(-14, 0.36, 1, 0, 1)).toBeGreaterThanOrEqual(0)
+  })
+
   it('goes back to first from reverse when asked, even with no drive pedal', () => {
     // In reverse the brake pedal drives, so pressing throttle sends throttle 0 here.
     const d = new Drivetrain(cfg.engine)
@@ -198,5 +209,49 @@ describe('Drivetrain: braking downshifts', () => {
     d.gear = 4
     d.update(speedFor(4, 4500), radius, 1, 0, 1 / 60, 1)
     expect(d.gear).toBe(4)
+  })
+})
+
+describe('Drivetrain: manual gearbox (#14)', () => {
+  it('never shifts on its own, even on the limiter or lugging', () => {
+    const d = new Drivetrain(cfg.engine)
+    d.manual = true
+    // Flat out at a speed that would be far past the upshift point in 1st.
+    for (let i = 0; i < 120; i++) d.update(40, 0.36, 1, 0, 1 / 60)
+    expect(d.gear).toBe(1)
+    expect(d.rpm).toBe(cfg.engine.redlineRpm)
+    // On the limiter there's no drive.
+    expect(d.update(40, 0.36, 1, 0, 1 / 60)).toBe(0)
+    d.shift(4)
+    for (let i = 0; i < 120; i++) d.update(5, 0.36, 0, 0, 1 / 60, 1)
+    expect(d.gear).toBe(4)
+  })
+
+  it('steps one gear per request, waits out the shift time, and stays in range', () => {
+    const d = new Drivetrain(cfg.engine)
+    d.manual = true
+    expect(d.requestShift(-1)).toBe(false)
+    expect(d.requestShift(1)).toBe(true)
+    expect(d.gear).toBe(2)
+    expect(d.requestShift(1)).toBe(false) // mid-shift
+    for (let i = 0; i < 30; i++) d.update(10, 0.36, 0, 0, 1 / 60)
+    for (let g = 3; g <= d.topGear; g++) {
+      expect(d.requestShift(1)).toBe(true)
+      for (let i = 0; i < 30; i++) d.update(10, 0.36, 0, 0, 1 / 60)
+    }
+    expect(d.gear).toBe(d.topGear)
+    expect(d.requestShift(1)).toBe(false)
+    expect(d.requestShift(-1)).toBe(true)
+    expect(d.gear).toBe(d.topGear - 1)
+  })
+
+  it('goes from reverse straight to first on an upshift', () => {
+    const d = new Drivetrain(cfg.engine)
+    d.manual = true
+    d.update(0, 0.36, 1, -1, 1 / 60)
+    expect(d.gear).toBe(-1)
+    expect(d.requestShift(-1)).toBe(false)
+    expect(d.requestShift(1)).toBe(true)
+    expect(d.gear).toBe(1)
   })
 })

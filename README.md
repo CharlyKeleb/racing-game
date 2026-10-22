@@ -24,20 +24,27 @@ npm run dev
 | A D / ← → | Steer |
 | Space | Handbrake |
 | C | Chase / cockpit camera |
+| Hold B | Look back; release to restore your camera |
 | R | Reset car |
 | Esc / P | Pause |
+
+Keyboard steering builds progressively, with a quicker return through centre when
+changing direction. In normal races, a short brake tap while turning no longer
+activates guided drift on keyboard; use Space for a deliberate drift entry.
 
 On phones and tablets, on-screen touch controls appear: drag to steer on the
 left; Gas, Brake, N₂O and Drift are on the right.
 
 Gamepads are supported: RT throttle, LT brake, left stick steer, A handbrake,
-X or RB nitro, Y camera, B reset and Start pause/resume. PlayStation equivalents
-are R2/L2, left stick, Cross, Square or R1, Triangle, Circle and Options.
-Use the D-pad or left stick to move through menus, A/Cross to select, and
-B/Circle to go back. Left/right adjusts a focused volume slider. Connect by
-USB or Bluetooth and press a button while the game is focused; Settings →
-Controller shows connection status and bindings. Requires a controller exposed
-by the browser with the standard Gamepad API mapping.
+X or RB nitro, Y camera, B reset, Back restart, D-pad up/down to shift and
+Start pause/resume. Hold the right stick button (R3) to look back. PlayStation
+equivalents are R2/L2, left stick, Cross, Square or R1, Triangle, Circle, Share
+and Options. Use the D-pad or left stick to move through menus, A/Cross to
+select, and B/Circle to go back. Connect by USB or Bluetooth and press a button
+while the game is focused; Settings → Controller shows connection status, a
+live input test and every binding. Requires a controller exposed by the
+browser with the standard Gamepad API mapping.
+On touch devices, hold **Rear** above the Drift button; releasing restores your view.
 
 Until `public/models/cars/mclaren/mclaren.glb` exists, the game drives a
 placeholder car with the same node names and physics.
@@ -98,3 +105,5 @@ node scripts/track/derive-from-chunks.mjs scripts/track/drift-park.config.mjs
 ```
 
 Set `DRIFT_TRACK_SOURCE` to use a different path to the same GLB.
+
+Normal driving uses arcade cornering assistance by default, including stronger steering at speed and sustained lateral grip. Handbrake drifting fades out this assistance. Per-car `arcade` tuning is merged over `DEFAULT_VEHICLE_CONFIG`; set `arcade.enabled` to `false` for the legacy handling.

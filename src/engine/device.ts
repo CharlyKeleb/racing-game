@@ -23,5 +23,6 @@ export function defaultQuality(): QualityPreset {
   const cores = navigator.hardwareConcurrency ?? 4
   const memory = (navigator as Navigator & { deviceMemory?: number }).deviceMemory ?? 8
   if (isMobile()) return cores >= 8 && memory >= 6 ? 'medium' : 'low'
-  return cores <= 4 || memory <= 4 ? 'medium' : 'high'
+  // CPU count is not a GPU benchmark. Start conservatively; saved choices win.
+  return cores <= 2 || memory <= 2 ? 'low' : 'medium'
 }

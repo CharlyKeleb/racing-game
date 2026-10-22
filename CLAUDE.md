@@ -11,6 +11,8 @@ Browser racing game. Read `docs/ARCHITECTURE.md` before structural changes.
   pure (numbers in, numbers out). They're unit tested and will be shared with a
   multiplayer server.
 - Gameplay runs in `fixedUpdate` (60 Hz fixed). Visuals and camera run in `render(alpha)`.
+- WebGPU (beta setting) runs no `ShaderMaterial` / `onBeforeCompile`: give any new one a node
+  twin in `src/engine/nodes` (see `docs/WEBGPU.md`).
 - No allocation in per-tick hot paths. Reuse scratch vectors as in `VehicleController`.
 - Coordinates are glTF: meters, +Y up, +Z forward, +X left.
 - Car and track assets follow `docs/ASSET_PIPELINE.md`. Tune handling in

@@ -1,6 +1,9 @@
+import { keyboardSteeringAngle } from './KeyboardSteering'
 import RAPIER from '@dimforge/rapier3d-compat'
 import * as THREE from 'three'
 import type { InputState } from '../input/InputManager'
+import { Backfire } from './Backfire'
+import { Burnout, BURNOUT_BRAKE, BURNOUT_THROTTLE } from './Burnout'
 import { Drift, type DriftConfig, type DriftGuide } from './Drift'
 import { Drivetrain, type GearRequest } from './Drivetrain'
 import { Nitro } from './Nitro'
@@ -29,6 +32,15 @@ export interface WheelState {
   surface: Surface
 }
 
+/** Burnout: tread sliding speed at full spin (m/s; smoke is full at 12), extra visual wheel spin (rad/s) and revs (share of redline). */
+const BURNOUT_SLIDE = 16
+const BURNOUT_SPIN = 70
+const BURNOUT_RPM = 0.8
+/** Steering in a held burnout pivots the car around its braked front wheels (like NFS): yaw rate at full lock, rad/s. */
+const BURNOUT_YAW_RATE = 1
+/** Lateral grip the spinning tyres keep in a burnout: little, so the tail swings round. */
+const BURNOUT_LATERAL_GRIP = 0.2
+
 // Scratch objects — the controller runs at 60 Hz, so avoid per-tick allocation.
 const _q = new THREE.Quaternion()
 const _pos = new THREE.Vector3()
@@ -45,6 +57,9 @@ const _vh = new THREE.Vector3()
 const _fh = new THREE.Vector3()
 const _cross = new THREE.Vector3()
 const _carve = new THREE.Vector3()
+const _roadNormal = new THREE.Vector3()
+const _roadForward = new THREE.Vector3()
+const _roadRight = new THREE.Vector3()
 /** Extra yaw the stability assist allows at full brake, as a share of the grip limit. */
 const TRAIL_BRAKE_ROTATION = 0.35
 /** Body slip angle (rad) above which a countersteered slide counts as a drift. */
@@ -65,14 +80,30 @@ export class VehicleController {
   readonly wheels: WheelState[]
   readonly drivetrain: Drivetrain
   drafting = 0
+  /** Launch push along the car this tick, m/s² (LaunchControl.push); the race sets it. */
+  launchPush = 0
   readonly nitro: Nitro
   readonly drift = new Drift()
+  /** Brake + full throttle at a standstill: driven tyres spin and smoke while the car is held. */
+  readonly burnout = new Burnout()
+  /** Exhaust pops and bangs: overrun crackle, hard upshifts, nitro lighting, burnouts. */
+  readonly backfire = new Backfire()
   private eventDrift: DriftConfig | null = null
   setDriftMode(enabled: boolean): void {
-    this.eventDrift = enabled ? {...this.cfg.drift, minSpeed:9, entryLock:.4, baseAngle:.46, holdAngle:.78, minAngle:.18, exitTime:.55, counterExitTime:.9, scrub:.025, pathG:.5} : null
+    this.eventDrift = enabled ? {...this.cfg.drift, minSpeed:9, entryLock:.4, baseAngle:.46, holdAngle:.72, minAngle:.18, exitTime:.55, counterExitTime:.9, scrub:.02, angleScrub:.45, turnInto:1.3} : null
   }
   private readonly driftGuide: DriftGuide = { angle: 0, pathRate: 0 }
   steerAngle = 0
+  /**
+   * Front wheel angle to draw, radians. Equals `steerAngle` on grip; in a drift
+   * the wheels swing toward the direction of travel (the countersteer every
+   * drifter holds), whatever the keys are doing.
+   */
+  wheelAngle = 0
+  /** Full-lock grip turn rate at the current speed, rad/s: what a drift's arc is measured against. */
+  private gripTurnRate = 0
+  /** Throttle given to the drift guidance this tick. */
+  private driftThrottle = 0
   /** Signed forward speed of the chassis, m/s. */
   forwardSpeed = 0
   /** Brake pedal actually braking (not driving in reverse), 0..1. Brake lights. */
@@ -84,6 +115,8 @@ export class VehicleController {
   private brake = 0
   /** Rear wheels (behind the axle midpoint): the ones that let go in a drift. */
   private readonly isRear: boolean[]
+  /** Wheels that spin in a burnout: the driven axle (the rears on an AWD car; the fronts hold). */
+  private readonly burnoutWheel: boolean[]
   /** Fraction of the drivetrain's force each wheel gets (0 for undriven wheels). */
   private readonly driveShare: number[]
   private readonly drivenRadius: number
@@ -111,6 +144,7 @@ export class VehicleController {
     this.steeringConfig = {
       wheelbase: this.wheelbase, maxSteerAngle: cfg.maxSteerAngle, steerFalloffSpeed: cfg.steerFalloffSpeed,
       grip: cfg.tires.grip, peakSlip: peakSlipAngle(cfg.tires),
+      arcade: cfg.arcade,
       downforcePerKg: cfg.downforceCoefficient / cfg.massKg, steerPeakSlipScale: cfg.steerPeakSlipScale,
     }
     this.frontAxleZ = Math.max(...zs)
@@ -127,6 +161,7 @@ export class VehicleController {
     )
     this.drivenRadius = cfg.wheels.find((w) => w.driven)?.radius ?? 0.35
     this.isRear = cfg.wheels.map((w) => !isFront(w))
+    this.burnoutWheel = cfg.wheels.map((w) => w.driven && (rearDriven > 0 ? !isFront(w) : isFront(w)))
     this.wheels = cfg.wheels.map((w) => ({
       cfg: w,
       suspension: new Suspension(cfg.suspension),
@@ -162,11 +197,17 @@ export class VehicleController {
     // In a drift the driver needs real opposite lock, so the high-speed limit opens up.
     const gripFactor = 1 / (1 + speed / cfg.steerFalloffSpeed)
     const speedFactor = gripFactor + (Math.max(gripFactor, 0.55) - gripFactor) * this.drift.amount
-    const available = steeringLimit(this.steeringConfig, speed, input.handbrake ? 1 : this.drift.amount, surfaceProps(this.surfaceAt(t.x,t.z)).grip)
+    const roadGrip = surfaceProps(this.surfaceAt(t.x, t.z)).grip
+    const available = steeringLimit(this.steeringConfig, speed, input.handbrake ? 1 : this.drift.amount, roadGrip)
+    this.gripTurnRate = (speed * Math.tan(steeringLimit(this.steeringConfig, speed, 0, roadGrip))) / this.wheelbase
     const targetSteer = -input.steer * available
-    const centering = Math.abs(targetSteer) < Math.abs(this.steerAngle) || targetSteer * this.steerAngle < 0
-    const maxDelta = cfg.steerSpeed * speedFactor * (centering ? cfg.steerReturnScale : 1) * dt
-    this.steerAngle += Math.max(-maxDelta, Math.min(maxDelta, targetSteer - this.steerAngle))
+    if (input.steerSource === 'keyboard') {
+      this.steerAngle = keyboardSteeringAngle(this.steerAngle, targetSteer, available, dt, cfg.keyboardSteering)
+    } else {
+      const centering = Math.abs(targetSteer) < Math.abs(this.steerAngle) || targetSteer * this.steerAngle < 0
+      const maxDelta = cfg.steerSpeed * speedFactor * (centering ? cfg.steerReturnScale : 1) * dt
+      this.steerAngle += Math.max(-maxDelta, Math.min(maxDelta, targetSteer - this.steerAngle))
+    }
 
     // Pedals ramp instead of stepping; brakes bite twice as fast as the throttle.
     this.throttle = approach(this.throttle, input.throttle, cfg.pedalRate * dt)
@@ -177,9 +218,14 @@ export class VehicleController {
     const reversing = this.drivetrain.gear < 0
     // Total speed, not forward speed: forward speed crosses 0 mid-spin.
     const stopped = _vel.length() < 1
+    // Both pedals at a standstill is a burnout, which wants 1st (brake-then-throttle
+    // used to drop into reverse first and back away instead).
+    const burnoutPedals = input.throttle >= BURNOUT_THROTTLE && input.brake >= BURNOUT_BRAKE
     const gearRequest: GearRequest = !stopped
       ? 0
-      : input.brake > 0.1 && input.throttle < 0.1
+      : burnoutPedals
+        ? 1
+        : input.brake > 0.1 && input.throttle < 0.1
         ? -1
         : input.throttle > 0.1 && input.brake < 0.1
           ? 1
@@ -209,8 +255,27 @@ export class VehicleController {
       dt,
     )
 
+    this.burnout.update(dt, {
+      throttle: input.throttle,
+      brake: input.brake,
+      handbrake: input.handbrake,
+      speed,
+      forward: this.drivetrain.gear > 0 || (stopped && burnoutPedals),
+      grounded: groundedCount > 0,
+    })
+
     const gearBefore = this.drivetrain.gear
     const driveForce = this.drivetrain.update(this.forwardSpeed, this.drivenRadius, driveThrottle, gearRequest, dt, brakeInput)
+    const burn = this.burnout.intensity
+    // The engine screams against the spinning tyres (the drivetrain alone would sit at its clutch-slip revs).
+    if (burn > 0) this.drivetrain.rpm = Math.max(this.drivetrain.rpm, cfg.engine.idleRpm + (cfg.engine.redlineRpm * BURNOUT_RPM - cfg.engine.idleRpm) * burn * input.throttle)
+    this.backfire.update(dt, {
+      throttle: reversing ? 0 : input.throttle,
+      revs: this.drivetrain.rpm / cfg.engine.redlineRpm,
+      gear: this.drivetrain.gear,
+      burnout: burn,
+      nitroLit: this.nitro.ignited,
+    })
     const downshift = this.drivetrain.gear > 0 && this.drivetrain.gear < gearBefore
 
     // Drift: entries (fast turn-in, brake-tap, downshift, handbrake) and exits.
@@ -226,6 +291,8 @@ export class VehicleController {
         handbrake: input.handbrake,
         slipAngle: Math.atan2(sideways, Math.max(speed, 0.1)),
         downshift,
+        // Normal keyboard cornering must not switch to scripted drift on brake release.
+        allowBrakeTap: input.steerSource !== 'keyboard' || this.eventDrift !== null,
       },
       driftCfg,
       dt,
@@ -235,11 +302,16 @@ export class VehicleController {
       _impulse.copy(_up).multiplyScalar(-this.drift.entry * driftCfg.kick * this.yawInertia)
       body.applyTorqueImpulse(_impulse, true)
     }
+    this.driftThrottle = driveThrottle
     const rearGrip = this.drift.rearGripScale(driveThrottle, driftCfg)
     const combinedRear = this.drift.amount > 0.3
 
     const massShare = cfg.massKg / this.wheels.length
 
+    let supportCount = 0
+    let supportGrip = 0
+    _roadNormal.set(0, 0, 0)
+    const arcadeBlend = cfg.arcade.enabled && !input.handbrake ? 1 - this.drift.amount : 0
     for (let i = 0; i < this.wheels.length; i++) {
       const w = this.wheels[i]
       const wc = w.cfg
@@ -248,7 +320,8 @@ export class VehicleController {
       _ray.origin = { x: _mount.x, y: _mount.y, z: _mount.z }
       _ray.dir = { x: -_up.x, y: -_up.y, z: -_up.z }
       const maxDist = cfg.suspension.restLength + wc.radius
-      const hit = this.world.castRay(_ray, maxDist, true, undefined, undefined, undefined, body)
+      const contact = this.world.castRayAndGetNormal(_ray, maxDist, true, undefined, undefined, undefined, body)
+      const hit = contact && contact.normal.x * _up.x + contact.normal.y * _up.y + contact.normal.z * _up.z > .35 ? contact : null
 
       const load = w.suspension.update(hit ? hit.timeOfImpact : null, wc.radius, dt)
       w.grounded = !!hit
@@ -262,6 +335,13 @@ export class VehicleController {
       w.contactPoint.copy(_mount).addScaledVector(_up, -hit.timeOfImpact)
       w.surface = this.surfaceAt(w.contactPoint.x, w.contactPoint.z)
       const ground = surfaceProps(w.surface)
+      if (load > 0) {
+        supportCount++
+        supportGrip += ground.grip
+        _roadNormal.x += hit.normal.x
+        _roadNormal.y += hit.normal.y
+        _roadNormal.z += hit.normal.z
+      }
 
       // Suspension pushes the chassis along its up axis.
       _impulse.copy(_up).multiplyScalar(load * dt)
@@ -279,7 +359,8 @@ export class VehicleController {
       const vLong = _vel.dot(_wFwd)
       const vLat = _vel.dot(_wRight)
 
-      let longitudinal = driveForce * this.driveShare[i]
+      // Held in a burnout, the drive goes into spinning the tyres, not moving the car.
+      let longitudinal = this.burnout.holding ? 0 : driveForce * this.driveShare[i]
       const brake = (cfg.brakeForce / this.wheels.length) * brakeInput + (wc.handbrake && input.handbrake ? cfg.handbrakeForce / 2 : 0)
       if (brake > 0) {
         // Clamp so brakes stop the wheel instead of reversing it.
@@ -298,14 +379,23 @@ export class VehicleController {
           dt,
           surfaceGrip: ground.grip,
           surfaceDrag: ground.drag,
+          // Spinning in a burnout, these tyres get no arcade grip assist: the tail must be free to swing.
+          arcadeGripScale: 1 + (cfg.arcade.lateralGripMultiplier - 1) * arcadeBlend * ground.grip * (this.burnoutWheel[i] ? 1 - burn : 1),
+          postPeakGrip: cfg.arcade.postPeakGrip * arcadeBlend * ground.grip * (this.burnoutWheel[i] ? 1 - burn : 1),
           // In a drift the guidance carves the path, so the tires' sideways grip steps back.
-          lateralGripScale: (this.isRear[i] ? rearGrip : 1) * (1 - driftCfg.lateralRelief * this.drift.amount),
+          lateralGripScale: (this.isRear[i] ? rearGrip : 1) * (1 - driftCfg.lateralRelief * this.drift.amount) *
+            (this.burnoutWheel[i] ? 1 - (1 - BURNOUT_LATERAL_GRIP) * burn : 1),
           combined: this.isRear[i] && combinedRear,
         },
         cfg.tires,
       )
       w.slip = tire.slip
       w.slide = tire.slide
+      if (burn > 0 && this.burnoutWheel[i]) {
+        // The tread is spinning over the road: that's what smokes, marks and squeals.
+        w.slip = Math.max(w.slip, burn)
+        w.slide = Math.max(w.slide, burn * BURNOUT_SLIDE)
+      }
 
       // Apply tire forces slightly above the contact patch to tame body roll.
       _point.copy(w.contactPoint).addScaledVector(_up, wc.radius * 0.6)
@@ -315,17 +405,38 @@ export class VehicleController {
         .addScaledVector(_wRight, tire.lateral * dt)
       body.applyImpulseAtPoint(_impulse, _point, true)
 
-      w.spin += (vLong / wc.radius) * dt
+      w.spin += (vLong / wc.radius + (this.burnoutWheel[i] ? burn * BURNOUT_SPIN : 0)) * dt
     }
 
-    this.applyStabilityAssist(input.handbrake, speed, lv, dt)
+    if (cfg.arcade.enabled) {
+      this.applyArcadeHandling(supportCount, supportGrip, arcadeBlend, lv, dt)
+    } else {
+      this.applyStabilityAssist(input.handbrake, speed, lv, dt)
+    }
     this.applyDriftGuidance(input.steer, groundedCount, dt)
+    // Rotating burnout: steer to swing the tail round on the spot, pivoting on the held front wheels.
+    if (this.burnout.holding && groundedCount > 2 && Math.abs(input.steer) > 0.05) {
+      const av = body.angvel()
+      const yawRate = av.x * _up.x + av.y * _up.y + av.z * _up.z
+      const target = -input.steer * BURNOUT_YAW_RATE * burn
+      _impulse.copy(_up).multiplyScalar((target - yawRate) * (1 - Math.exp(-14 * dt)) * this.yawInertia)
+      body.applyTorqueImpulse(_impulse, true)
+    }
 
     // Nitro is thrust at the center of mass, not tire force: the rears are
     // already near their grip limit under power, so routing it through the
     // friction circle would mostly turn into wheelspin. Grounded only.
     if (this.nitro.intensity > 0 && groundedCount > 0) {
-      _impulse.copy(_fwd).multiplyScalar(this.nitro.force * dt)
+      _impulse.copy(_fwd).multiplyScalar((this.nitro.force + this.nitro.surgeForce) * dt)
+      body.applyImpulse(_impulse, true)
+    }
+
+    // Launch: like nitro, a push at the centre of mass, so it isn't lost to
+    // wheelspin. A reward needs the throttle in a forward gear; a bog only
+    // slows a car that's already rolling forward, so it can never pull it back.
+    const launch = this.launchPush
+    if (launch !== 0 && groundedCount > 0 && this.drivetrain.gear > 0 && (launch > 0 ? driveThrottle > 0.1 : this.forwardSpeed > 1)) {
+      _impulse.copy(_fwd).multiplyScalar(launch * cfg.massKg * dt)
       body.applyImpulse(_impulse, true)
     }
 
@@ -344,6 +455,36 @@ export class VehicleController {
       _point.set(0, comY, this.rearAxleZ).applyQuaternion(_q).add(_pos)
       body.applyImpulseAtPoint(_impulse.copy(_up).multiplyScalar(-down * (1 - cfg.downforceFrontShare)), _point, true)
     }
+  }
+
+  /** Grounded arcade yaw and trajectory support, bounded by the authored tune. */
+  private applyArcadeHandling(contacts: number, gripSum: number, blend: number, initial: RAPIER.Vector, dt: number): void {
+    const cfg = this.cfg.arcade
+    if (contacts < 3 || blend <= 0 || this.forwardSpeed < cfg.minSpeed) return
+    _roadNormal.normalize()
+    _roadForward.copy(_fwd).addScaledVector(_roadNormal, -_fwd.dot(_roadNormal)).normalize()
+    _roadRight.crossVectors(_roadForward, _roadNormal).normalize()
+    const grip = Math.max(.1, Math.min(1, gripSum / contacts))
+    const strength = blend * contacts / this.wheels.length
+    const forward = initial.x * _roadForward.x + initial.y * _roadForward.y + initial.z * _roadForward.z
+    const side = initial.x * _roadRight.x + initial.y * _roadRight.y + initial.z * _roadRight.z
+    const maxAcceleration = cfg.maxLateralG * 9.81 * grip
+    const yawLimit = maxAcceleration / Math.max(cfg.minSpeed, Math.abs(forward))
+    const target = Math.max(-yawLimit, Math.min(yawLimit, forward * Math.tan(this.steerAngle) / this.wheelbase))
+    const angular = this.body.angvel()
+    const yaw = angular.x * _roadNormal.x + angular.y * _roadNormal.y + angular.z * _roadNormal.z
+    const correction = (target - yaw) * (1 - Math.exp(-cfg.yawResponse * dt))
+    const maxChange = cfg.maxYawAcceleration * dt
+    _impulse.copy(_roadNormal).multiplyScalar(Math.max(-maxChange, Math.min(maxChange, correction)) * this.yawInertia * strength)
+    this.body.applyTorqueImpulse(_impulse, true)
+
+    // Supply only the lateral acceleration the tires have not already delivered.
+    const desired = Math.max(-maxAcceleration, Math.min(maxAcceleration, -forward * target - side * cfg.sidewaysRecovery)) * dt
+    const current = this.body.linvel()
+    const delivered = (current.x - initial.x) * _roadRight.x + (current.y - initial.y) * _roadRight.y + (current.z - initial.z) * _roadRight.z
+    const budget = cfg.assistMaxG * 9.81 * grip * dt
+    _impulse.copy(_roadRight).multiplyScalar(Math.max(-budget, Math.min(budget, desired - delivered)) * this.cfg.massKg * strength)
+    this.body.applyImpulse(_impulse, true)
   }
 
   /**
@@ -394,39 +535,56 @@ export class VehicleController {
 
   /**
    * Arcade drift (NFS / Asphalt): while a drift is on, carve the direction of
-   * travel along the drift's arc, keeping the speed (less a little scrub), and
-   * swing the body to the drift angle. Both are blended in by `drift.amount`,
-   * so entries and exits ease rather than snap. Steering sets the angle and
-   * the arc (see Drift.guide).
+   * travel along the drift's arc and swing the body to the drift angle, both
+   * blended in by `drift.amount` so entries and exits ease rather than snap.
+   * The arc is a share of the car's own grip turn (Drift.guide), so a drift
+   * goes round the corner; the angle costs speed (Drift.scrubRate). The swing
+   * toward the target angle is capped, so the tail comes out smoothly instead
+   * of whipping round.
    */
   private applyDriftGuidance(steer: number, groundedCount: number, dt: number): void {
     const amount = this.drift.amount
-    if (amount < 0.01 || groundedCount < 2) return
+    if (amount < 0.01 || groundedCount < 2) {
+      this.wheelAngle = this.steerAngle
+      return
+    }
     const cfgD = this.eventDrift ?? this.cfg.drift
     const body = this.body
     const lv = body.linvel()
     _vh.set(lv.x, lv.y, lv.z)
     _vh.addScaledVector(_up, -_vh.dot(_up))
     const speed = _vh.length()
-    if (speed < 4) return
-    const guide = this.drift.guide(steer, speed, cfgD, this.driftGuide)
+    if (speed < 4) {
+      this.wheelAngle = this.steerAngle
+      return
+    }
 
-    // Carve: turn the travel direction at the arc's rate, keeping its speed.
-    _carve.copy(_vh).applyAxisAngle(_up, guide.pathRate * dt).multiplyScalar(Math.exp(-cfgD.scrub * dt))
+    // Body slip β (signed, travel direction → nose).
+    _fh.copy(_fwd).addScaledVector(_up, -_fwd.dot(_up)).normalize()
+    _carve.copy(_vh).divideScalar(speed)
+    const beta = Math.atan2(_cross.crossVectors(_carve, _fh).dot(_up), _carve.dot(_fh))
+    const guide = this.drift.guide(steer, this.driftThrottle, this.gripTurnRate, beta, cfgD, this.driftGuide)
+
+    // Carve: turn the travel direction at the arc's rate; the angle scrubs speed.
+    const scrub = this.drift.active ? this.drift.scrubRate(beta, this.driftThrottle, cfgD) : cfgD.scrub
+    _carve.copy(_vh).applyAxisAngle(_up, guide.pathRate * dt).multiplyScalar(Math.exp(-scrub * dt))
     _impulse.subVectors(_carve, _vh).multiplyScalar(this.cfg.massKg * amount)
     body.applyImpulse(_impulse, true)
 
-    // Angle: body slip β (signed, travel direction → nose) toward the target,
-    // on top of turning with the arc.
-    _fh.copy(_fwd).addScaledVector(_up, -_fwd.dot(_up)).normalize()
-    _vh.divideScalar(speed)
-    const beta = Math.atan2(_cross.crossVectors(_vh, _fh).dot(_up), _vh.dot(_fh))
+    // Angle: on top of turning with the arc, swing toward the target (capped).
     const av = body.angvel()
     const yawRate = av.x * _up.x + av.y * _up.y + av.z * _up.z
-    const wanted = guide.pathRate + cfgD.angleGain * (guide.angle - beta)
+    const swing = Math.max(-cfgD.maxSwing, Math.min(cfgD.maxSwing, cfgD.angleGain * (guide.angle - beta)))
+    const wanted = guide.pathRate + swing
     const k = 1 - Math.exp(-cfgD.yawResponse * dt)
     _impulse.copy(_up).multiplyScalar((wanted - yawRate) * k * amount * this.yawInertia)
     body.applyTorqueImpulse(_impulse, true)
+
+    // Drawn front wheels: point down the line of travel (countersteer), with a
+    // little of the driver's steering on top, clamped to the lock.
+    const lock = this.cfg.maxSteerAngle
+    const counter = Math.max(-lock, Math.min(lock, -beta * 0.85 + this.steerAngle * 0.25))
+    this.wheelAngle = this.steerAngle + (counter - this.steerAngle) * amount
   }
 
   /** Throttle pedal after ramping, 0..1: what the engine actually gets (audio reads it). */
@@ -436,14 +594,18 @@ export class VehicleController {
 
   reset(): void {
     this.forwardSpeed = 0
-    this.steerAngle = 0
+    this.steerAngle = this.wheelAngle = 0
+    this.gripTurnRate = this.driftThrottle = 0
     this.drafting = 0
+    this.launchPush = 0
     this.throttle = 0
     this.brake = 0
     this.braking = 0
     this.drivetrain.reset()
     this.nitro.reset()
     this.drift.reset()
+    this.burnout.reset()
+    this.backfire.reset()
     for (const w of this.wheels) {
       w.suspension.reset()
       w.slip = 0

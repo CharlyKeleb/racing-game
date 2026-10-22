@@ -1,11 +1,21 @@
 import type { Standing } from '../racing/RaceStandings'
 import { createStore } from 'zustand/vanilla'
+import type { Callout } from '../racing/RaceCallouts'
+import type { LaunchGrade } from '../racing/LaunchControl'
+import type { InvalidReason, LapResult } from '../racing/TimeTrial'
 
 /**
  * High-frequency values for the HUD. The engine publishes at a throttled rate
  * (see Game.publishTelemetry) so React never re-renders at physics rate.
  */
 export interface Telemetry {
+  finishProgress: number
+  /** Real seconds into the finish cinematic (FinishSequence's shot timeline). */
+  finishSeconds: number
+  /** The short reduced-motion finish: no shots, no badge animation. */
+  finishReduced: boolean
+  finishPosition: number
+  finishFieldSize: number
   introShot: number
   introProgress: number
   /** Who each rival tag names; placement is per frame in rivalTagStore. */
@@ -63,6 +73,39 @@ export interface Telemetry {
   /** Start gantry: red lights lit now, out of how many. */
   startLights: number
   startLightCount: number
+  /** Grid revs as a share of idle→redline, and the launch target band (#91). */
+  launchRevs: number
+  launchBandLow: number
+  launchBandHigh: number
+  /** Launch held on the grid (handbrake / brake). */
+  launchArmed: boolean
+  launchGrade: LaunchGrade
+  /** The PERFECT / GOOD / … call is showing. */
+  launchFlash: boolean
+  /** Free Roam: no timing, laps or positions. */
+  freeRoam: boolean
+  /** Time Trial (#31). Lap being driven (1-based), laps done and how many were valid. */
+  trialLap: number
+  trialLaps: number
+  trialValidLaps: number
+  trialValid: boolean
+  trialInvalidReason: InvalidReason | null
+  trialSessionBestMs: number | null
+  trialPersonalBestMs: number | null
+  /** Last split: checkpoint index (0 = the line, -1 = none yet), lap time there and delta to the PB. */
+  trialSplitIndex: number
+  trialSplitMs: number
+  trialDeltaMs: number | null
+  /** The split / lap call is on screen. */
+  trialSplitShow: boolean
+  trialLastLap: LapResult | null
+  /** Gate to drive through next (0 = the line) and how many there are. */
+  trialNextGate: number
+  trialGateCount: number
+  /** The player ended the session (results showing). */
+  trialEnded: boolean
+  /** Race callout on screen (#90), or null. */
+  callout: Callout | null
   fps: number
   /** Car position on the XZ plane and yaw (0 = facing +Z), for the minimap. */
   carX: number
@@ -74,9 +117,16 @@ export interface Telemetry {
   distanceLeft: number
   /** Driving against the race direction for a moment. */
   wrongWay: boolean
+  /** Drove on past the next gate without crossing it: the race won't count progress until a reset. */
+  missedCheckpoint: boolean
 }
 
 export const initialTelemetry: Telemetry = {
+  finishProgress: 0,
+  finishSeconds: 0,
+  finishReduced: false,
+  finishPosition: 1,
+  finishFieldSize: 1,
   introShot: 0,
   introProgress: 0,
   rivalLabels: [],
@@ -125,6 +175,29 @@ export const initialTelemetry: Telemetry = {
   countdown: 0,
   startLights: 0,
   startLightCount: 5,
+  launchRevs: 0,
+  launchBandLow: 0.6,
+  launchBandHigh: 0.84,
+  launchArmed: false,
+  launchGrade: 'none',
+  launchFlash: false,
+  freeRoam: false,
+  trialLap: 1,
+  trialLaps: 0,
+  trialValidLaps: 0,
+  trialValid: true,
+  trialInvalidReason: null,
+  trialSessionBestMs: null,
+  trialPersonalBestMs: null,
+  trialSplitIndex: -1,
+  trialSplitMs: 0,
+  trialDeltaMs: null,
+  trialSplitShow: false,
+  trialLastLap: null,
+  trialNextGate: 1,
+  trialGateCount: 0,
+  trialEnded: false,
+  callout: null,
   fps: 0,
   carX: 0,
   carZ: 0,
@@ -132,6 +205,7 @@ export const initialTelemetry: Telemetry = {
   trackIndex: 0,
   distanceLeft: 0,
   wrongWay: false,
+  missedCheckpoint: false,
 }
 
 export const telemetryStore = createStore<Telemetry>()(() => initialTelemetry)

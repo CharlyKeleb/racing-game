@@ -13,6 +13,7 @@ import { RaceManager } from './RaceManager'
 import type { RaceEntry } from './RaceStandings'
 import { RecoveryMonitor } from './RecoveryMonitor'
 
+const FINISHED: InputState = { throttle: 0, brake: .75, steer: 0, handbrake: false, nitro: false }
 const HOLD: InputState = { throttle: 0, brake: 0, steer: 0, handbrake: true, nitro: false }
 const COLORS = [0x27b8eb, 0xffd447, 0xe64f67]
 const NAMES = ['Raven', 'Torque', 'Viper']
@@ -47,7 +48,7 @@ export class Opponent {
     this.vehicle = new Vehicle(config, rigCarModel(scene, config), world, spawn)
     this.vehicle.controller.surfaceAt = (x, z) => track.surfaceAt(x, z)
     const front = config.wheels.find(w => w.id === 'FL')!, rear = config.wheels.find(w => w.id === 'RL')!
-    this.driver = new AiDriver(track.line, { wheelbase: Math.abs(front.position[2] - rear.position[2]), maxSteerAngle: config.maxSteerAngle, steerFalloffSpeed: config.steerFalloffSpeed, grip: config.tires.grip, peakSlip: peakSlipAngle(config.tires), steerPeakSlipScale: config.steerPeakSlipScale, downforcePerKg: config.downforceCoefficient / config.massKg, brakeDecel: config.brakeForce / config.massKg }, 0.94 + id * 0.025, DRIVER_PROFILES[(id - 1) % DRIVER_PROFILES.length], difficulty)
+    this.driver = new AiDriver(track.line, { wheelbase: Math.abs(front.position[2] - rear.position[2]), maxSteerAngle: config.maxSteerAngle, steerFalloffSpeed: config.steerFalloffSpeed, arcade: config.arcade, grip: config.tires.grip, peakSlip: peakSlipAngle(config.tires), steerPeakSlipScale: config.steerPeakSlipScale, downforcePerKg: config.downforceCoefficient / config.massKg, brakeDecel: config.brakeForce / config.massKg }, 0.94 + id * 0.025, DRIVER_PROFILES[(id - 1) % DRIVER_PROFILES.length], difficulty)
     this.pose = { id, x: 0, z: 0, heading: spawn.heading, speed: 0 }
     this.entry = { id, name: NAMES[(id - 1) % NAMES.length], player: false, lap: 0, checkpoint: 0, index: 0, finishMs: null, x: spawn.position.x, z: spawn.position.z }
     this.race = new RaceManager(track.checkpoints, 3, { onStateChange: () => {}, onLap: () => {} })
@@ -60,8 +61,13 @@ export class Opponent {
     this.pose.speed = this.vehicle.controller.forwardSpeed
   }
   drive(dt: number, traffic: readonly TrafficCar[], gap: number, laneLimit: number): void {
-    // Finished cars keep driving a cool-down lap instead of parking on the line.
-    const active = this.race.state === 'racing' || this.race.state === 'finished'
+    // Cross the line, brake to a stop, then hold the car without starting another lap.
+    if (this.race.state === 'finished') {
+      this.vehicle.controller.drafting = 0
+      this.vehicle.fixedUpdate(Math.abs(this.pose.speed) < .8 ? HOLD : FINISHED, dt)
+      return
+    }
+    const active = this.race.state === 'racing'
     const controller = this.vehicle.controller
     this.resources.charge = controller.nitro.charge
     this.resources.boosting = controller.nitro.active

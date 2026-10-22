@@ -137,9 +137,10 @@ describe('handling', () => {
     expect(ctrl.forwardSpeed).toBeGreaterThan(5)
   })
 
-  it('is calmer than with the assist switched off', () => {
-    const assisted = holdTurn(DEFAULT_VEHICLE_CONFIG)
-    const raw = holdTurn({ ...DEFAULT_VEHICLE_CONFIG, yawStability: 0 })
+  it('legacy handling is calmer with yaw trim enabled', () => {
+    const legacy = { ...DEFAULT_VEHICLE_CONFIG, arcade: { ...DEFAULT_VEHICLE_CONFIG.arcade, enabled: false } }
+    const assisted = holdTurn(legacy)
+    const raw = holdTurn({ ...legacy, yawStability: 0 })
     const residual = (r: number[]) => Math.abs(r[30])
     expect(residual(assisted.release)).toBeLessThan(residual(raw.release))
   })
@@ -172,6 +173,42 @@ describe('handling', () => {
     for (let i = 0; i < 90; i++) step(drive(0))
     expect(ctrl.drift.active).toBe(false)
     expect(slip()).toBeLessThan(10)
+  })
+
+  it('a held drift rounds a corner tighter than grip, and exits without flicking back', () => {
+    /** Heading change of the velocity over 1.5 s of full right lock, after a handbrake flick for the drift. */
+    const turn = (drift: boolean) => {
+      const { ctrl, step, body } = spawnCar(PORSCHE_911)
+      while (ctrl.forwardSpeed < 100 / 3.6) step(drive(0))
+      for (let i = 0; i < 15; i++) step({ throttle: 1, brake: 0, steer: 1, handbrake: drift, nitro: false })
+      const travel = () => Math.atan2(body.linvel().x, body.linvel().z)
+      const start = travel()
+      for (let i = 0; i < 90; i++) step({ throttle: 1, brake: 0, steer: 1, handbrake: false, nitro: false })
+      let turned = start - travel()
+      if (turned < 0) turned += Math.PI * 2
+      return { turned, ctrl, step, body }
+    }
+    const grip = turn(false)
+    const drift = turn(true)
+    expect(drift.ctrl.drift.active).toBe(true)
+    expect(drift.turned).toBeGreaterThan(grip.turned * 1.1)
+    // Let go: the body swings back to the line without overshooting the other way.
+    const signed = () => {
+      const v = drift.body.linvel()
+      const q = drift.body.rotation()
+      const fx = 2 * (q.x * q.z + q.w * q.y)
+      const fz = 1 - 2 * (q.x * q.x + q.y * q.y)
+      return (Math.atan2(v.x * fz - v.z * fx, v.x * fx + v.z * fz) * 180) / Math.PI
+    }
+    const side = Math.sign(signed())
+    let overshoot = 0
+    for (let i = 0; i < 120; i++) {
+      drift.step(drive(0))
+      overshoot = Math.max(overshoot, -side * signed())
+    }
+    expect(drift.ctrl.drift.amount).toBe(0)
+    expect(overshoot).toBeLessThan(3)
+    expect(slipAngle(drift.body)).toBeLessThan(3)
   })
 
   it('a gravel trap brings the car to a stop far sooner than tarmac', () => {
@@ -333,10 +370,10 @@ describe('Porsche 911 handling', () => {
 })
 
 
-it('full keyboard lock uses less front-tire slip without losing cornering after a 100 km/h entry',async()=>{
+it('legacy steering limit reduces front-tire slip without losing cornering after a 100 km/h entry',async()=>{
   await RAPIER.init()
   const corner=(scale:number)=>{
-    const {ctrl,step,body,world}=spawnCar({...PORSCHE_911,steerPeakSlipScale:scale})
+    const {ctrl,step,body,world}=spawnCar({...PORSCHE_911,arcade:{...PORSCHE_911.arcade,enabled:false},steerPeakSlipScale:scale})
     try {
       while(ctrl.forwardSpeed<100/3.6)step(pedals({throttle:1}))
       let slip=0,turn=0,angle=0,samples=0

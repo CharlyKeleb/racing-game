@@ -1,6 +1,8 @@
+import type { QualityPreset } from '../stores/gameStore'
+import { EFFECT_BUDGET } from './EffectBudget'
 import { Surface, surfaceProps } from '../vehicles/Surface'
 import type { WheelState } from '../vehicles/VehicleController'
-import { ParticlePool, type ParticleSpawn } from './Particles'
+import { createParticles, particleBudget, type ParticleSpawn } from './Particles'
 
 const MAX_GRAINS = 1500
 const MAX_SHEET = 500
@@ -51,18 +53,40 @@ export class SurfaceSpray {
   // The chase camera sits ~5 m behind the car, right where the spray lands:
   // grains and the sand sheet may come close to the lens; the dust cloud fades
   // a little earlier so ploughing through it never whites out the screen.
-  private readonly grains = new ParticlePool(MAX_GRAINS, 'grain', 2, [0.8, 2])
-  private readonly sheet = new ParticlePool(MAX_SHEET, 'spray', 2, [0.5, 1.6])
-  private readonly dust = new ParticlePool(MAX_DUST, 'puff', 3, [1.5, 4])
+  private readonly grains = createParticles(MAX_GRAINS, 'grain', 2, [0.8, 2])
+  private readonly sheet = createParticles(MAX_SHEET, 'spray', 2, [0.5, 1.6])
+  private readonly dust = createParticles(MAX_DUST, 'puff', 3, [1.5, 4])
+  /**
+   * GPU particles (#51) afford `budget` times more: more grains and sand
+   * sheet, and a dust plume made of many fainter, longer-lived puffs, so it
+   * billows and hangs instead of reading as a few blobs.
+   */
+  private readonly budget = particleBudget()
+  private readonly grainRate = GRAIN_RATE * Math.sqrt(this.budget)
+  private readonly sheetRate = SHEET_RATE * Math.sqrt(this.budget)
+  private readonly dustRate = DUST_RATE * this.budget
+  private readonly sheetAlpha = Math.pow(this.budget, -0.3)
+  private readonly dustAlpha = Math.pow(this.budget, -0.55)
+  private readonly dustLife = this.budget > 1 ? 1.4 : 1
+  private emission = 1
   private readonly grainDebt: number[] = []
   private readonly sheetDebt: number[] = []
   private readonly dustDebt: number[] = []
+
+  setQuality(quality: QualityPreset): void {
+    const budget = EFFECT_BUDGET[quality]
+    this.grains.setLimit(budget.grains)
+    this.sheet.setLimit(budget.sheet)
+    this.dust.setLimit(budget.dust)
+    this.emission = budget.emission
+  }
 
   get meshes() {
     return [this.grains.mesh, this.sheet.mesh, this.dust.mesh]
   }
 
   update(wheels: readonly WheelState[], carVelocity: { x: number; y: number; z: number }, dt: number): void {
+    const emissionDt = Math.min(dt, .05) * this.emission
     const speed = Math.hypot(carVelocity.x, carVelocity.z)
     // Direction of travel on the ground: material is thrown back along it.
     _dir.x = speed > 0.1 ? carVelocity.x / speed : 0
@@ -77,19 +101,19 @@ export class SurfaceSpray {
       }
       const amount = Math.min(1.5, churn / 22)
       const axle = w.cfg.position[2] < 0 ? REAR_SCALE : FRONT_SCALE
-      let g = (this.grainDebt[i] ?? 0) + GRAIN_RATE * loose * amount * axle * dt
+      let g = (this.grainDebt[i] ?? 0) + this.grainRate * loose * amount * axle * emissionDt
       while (g >= 1) {
         this.spawnGrain(w, carVelocity, churn)
         g -= 1
       }
       this.grainDebt[i] = g
-      let sh = (this.sheetDebt[i] ?? 0) + SHEET_RATE * loose * loose * amount * axle * dt
+      let sh = (this.sheetDebt[i] ?? 0) + this.sheetRate * loose * loose * amount * axle * emissionDt
       while (sh >= 1) {
         this.spawnSheet(w, carVelocity, churn, amount)
         sh -= 1
       }
       this.sheetDebt[i] = sh
-      let d = (this.dustDebt[i] ?? 0) + DUST_RATE * (0.3 + 0.7 * loose) * amount * axle * dt
+      let d = (this.dustDebt[i] ?? 0) + this.dustRate * (0.3 + 0.7 * loose) * amount * axle * emissionDt
       while (d >= 1) {
         this.spawnDust(w, carVelocity, loose, amount)
         d -= 1
@@ -141,11 +165,11 @@ export class SurfaceSpray {
     _p.vx = v.x * wake + (Math.random() - 0.5) * 2
     _p.vy = 0.6 + Math.random() * 1.2
     _p.vz = v.z * wake + (Math.random() - 0.5) * 2
-    _p.life = 3 + Math.random() * 2.5
+    _p.life = (3 + Math.random() * 2.5) * this.dustLife
     // Born big and faint so neighbours merge into one plume instead of discs.
     _p.startSize = 1.4 + Math.random() * 0.8
     _p.endSize = (4.5 + Math.random() * 4) * (0.6 + 0.4 * Math.min(1, amount))
-    _p.alpha = (0.045 + 0.1 * loose) * Math.min(1, 0.35 + amount)
+    _p.alpha = (0.045 + 0.1 * loose) * Math.min(1, 0.35 + amount) * this.dustAlpha
     _p.r = c[0] * shade
     _p.g = c[1] * shade
     _p.b = c[2] * shade
@@ -170,7 +194,7 @@ export class SurfaceSpray {
     // Each sprite is a scatter of grains (the 'spray' look) that spreads as it flies.
     _p.startSize = 0.25 + Math.random() * 0.2
     _p.endSize = (0.7 + Math.random() * 0.6) * (0.6 + 0.4 * Math.min(1, amount))
-    _p.alpha = 0.85
+    _p.alpha = 0.85 * this.sheetAlpha
     _p.r = c[0] * shade
     _p.g = c[1] * shade
     _p.b = c[2] * shade

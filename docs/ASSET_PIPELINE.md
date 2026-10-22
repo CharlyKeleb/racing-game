@@ -78,6 +78,12 @@ both the axle centers and the computed mount points.
 *above* the wheels. Keep its bottom above the ground clearance so the box
 doesn't scrape. The wheels carry the car, not the box.
 
+Optional `"brakeDisc": { "material": "<name>" }` names the wheel material that
+is the brake disc, so it can glow when hot (#92, `BrakeDiscGlow`). A wheel
+without that material (no disc in the model, or an LOD that dropped it) gets a
+glowing ring behind the spokes instead. `intensity` scales the glow if a disc
+texture reads too bright or too dim.
+
 ## Preparing a car without Blender
 
 `scripts/cars/prepare-car.mjs` applies the same car contract with
@@ -135,6 +141,23 @@ To build a bank:
    `python3 scripts/audio/make_engine_bank.py scripts/audio/<id>.json <wav dir> public/audio/<id>`.
 
 `tests/engineAudio.test.ts` checks that the bank plays at the requested rpm.
+
+## Impact audio
+
+Car-to-car and wall hits play real recordings from
+`public/audio/impacts/impact-bank.wav` + `.json`: three strength tiers (light,
+medium, heavy), each with a couple of variants. Landings, kerbs and the wall
+scrape stay procedural (`ImpactPCM.ts`). To change the recordings, edit
+`SOURCES` / `BANK` in `scripts/audio/build-impact-bank.mjs` (CC0 or CC BY only,
+and list them in `public/audio/impacts/CREDITS.md`). Then run
+`node scripts/audio/build-impact-bank.mjs <download dir>`. It downloads the
+Freesound previews, cuts each one from its first transient, matches loudness
+per tier and writes the bank.
+
+Exhaust pops work the same way: `public/audio/backfire/backfire-bank.wav` +
+`.json` (short `crackle`s and big `bang`s) is built by
+`node scripts/audio/build-backfire-bank.mjs <download dir>`. Each cut is listed
+by the time of its pop in the source recording.
 
 ## Garage
 

@@ -5,10 +5,15 @@
  * the drift angle and path the controller steers the car along.
  *
  * Arcade drifting, not a tire-physics slide: once in, the car settles at a
- * big, stable body angle and carves a smooth arc while keeping its speed.
- * Steering INTO the drift deepens the angle and tightens the arc; easing off
- * or countersteering opens it out; straightening up (or countersteering for a
- * while) ends it.
+ * big, stable body angle and carves a smooth arc. The arc is measured against
+ * the car's own full-lock grip turn at that speed, so a drift always rounds a
+ * corner: steering INTO it turns tighter than gripping would (the way through
+ * a hairpin at speed), centred is a fast sweeper, countersteer opens the line
+ * out. The cost is speed: the steeper the angle, the more it scrubs, and
+ * lifting scrubs more and lets the angle fall. The throttle holds it out.
+ * Straightening up (or countersteering for a while) ends it; the exit then
+ * unwinds the angle — mostly the body swinging back to the line, partly the
+ * line swinging toward the nose — before grip takes over, so it never flicks.
  *
  * A planted car shouldn't slide just because you turn, so a drift needs an
  * entry: a quick brake TAP while turning (Asphalt's drift), or the handbrake
@@ -59,19 +64,33 @@ export interface DriftConfig {
   baseAngle: number
   holdAngle: number
   minAngle: number
-  /** Sideways acceleration of the drift's arc, in g: centred steering; extra at full lock into it; less at full countersteer. */
-  pathG: number
-  pathGain: number
-  pathCounter: number
+  /** Share of the angle kept with the throttle shut (full throttle keeps all of it). */
+  liftAngle: number
+  /**
+   * Turn rate of the drift's arc as a share of the car's full-lock grip turn
+   * at the same speed: full lock into the drift, centred, full countersteer.
+   */
+  turnInto: number
+  turnNeutral: number
+  turnCounter: number
   /** Countersteering this long (s) ends the drift. */
   counterExitTime: number
-  /** Speed lost per second while drifting (fraction): drifts keep their speed. */
+  /** Speed lost per second while drifting (fraction), plus this much × sin²(body angle), plus this much off the throttle. */
   scrub: number
+  angleScrub: number
+  liftScrub: number
   /** How much of the tires' sideways grip the drift takes over (0..1). */
   lateralRelief: number
   /** How quickly the body swings to the target angle (1/s) and the yaw rate settles (1/s). */
   angleGain: number
   yawResponse: number
+  /** Most the body may swing relative to the arc, rad/s: a smooth entry, not a whip. */
+  maxSwing: number
+  /** Exit: share of the leftover angle taken out by turning the line toward the nose (the rest by the body swinging back). */
+  exitAlign: number
+  /** Exit is done below this body angle (rad), or after this long (s). */
+  exitSettle: number
+  exitMaxSec: number
 }
 
 export const DEFAULT_DRIFT: DriftConfig = {
@@ -85,21 +104,28 @@ export const DEFAULT_DRIFT: DriftConfig = {
   throttleGripLoss: 0.14,
   kick: 0.75,
   attack: 0.12,
-  release: 0.25,
-  exitTime: 0.3,
+  release: 0.18,
+  exitTime: 0.4,
   exitAngle: 0.1,
   tapMaxSec: 0.25,
-  baseAngle: 0.38,
-  holdAngle: 0.62,
+  baseAngle: 0.42,
+  holdAngle: 0.6,
   minAngle: 0.15,
-  pathG: 0.55,
-  pathGain: 0.85,
-  pathCounter: 0.5,
+  liftAngle: 0.7,
+  turnInto: 1.2,
+  turnNeutral: 0.75,
+  turnCounter: 0.3,
   counterExitTime: 0.7,
-  scrub: 0.05,
+  scrub: 0.03,
+  angleScrub: 0.65,
+  liftScrub: 0.12,
   lateralRelief: 0.8,
-  angleGain: 4,
+  angleGain: 3,
   yawResponse: 9,
+  maxSwing: 1.05,
+  exitAlign: 0.3,
+  exitSettle: 0.07,
+  exitMaxSec: 0.8,
 }
 
 /** What the drift wants this tick. Angles and rates are signed about +Y (counter-clockwise from above). */
@@ -122,6 +148,8 @@ export interface DriftInput {
   slipAngle: number
   /** True on the tick the gearbox shifted down. */
   downshift: boolean
+  /** Disable brake-tap drift entry for normal keyboard cornering. Handbrake is unaffected. */
+  allowBrakeTap?: boolean
 }
 
 export class Drift {
@@ -129,6 +157,8 @@ export class Drift {
   amount = 0
   /** True while a drift is under way (entered, not yet ended). */
   active = false
+  /** True after a drift ends while the leftover angle unwinds (guidance still holds the car). */
+  exiting = false
   /** Set for the single tick a drift starts: -1 into a left turn, 1 right, 0 none. */
   entry = 0
   /** Which way the current drift turns: -1 left, 1 right (kept after it ends). */
@@ -148,6 +178,7 @@ export class Drift {
   private downshiftArm = 0
   private wasBraking = false
   private calm = 0
+  private exitTimer = 0
 
   update(i: DriftInput, cfg: DriftConfig, dt: number): void {
     this.entry = 0
@@ -157,11 +188,11 @@ export class Drift {
       this.brakeArm = cfg.armTime
       // A short press made while already turning is a drift tap. A longer one,
       // or braking in a straight line before turning in, is just braking.
-      if (this.brakeHeld <= cfg.tapMaxSec && this.steeredWhileBraking) this.tapArm = cfg.armTime
+      if (i.allowBrakeTap !== false && this.brakeHeld <= cfg.tapMaxSec && this.steeredWhileBraking) this.tapArm = cfg.armTime
     }
     this.brakeHeld = braking ? this.brakeHeld + dt : 0
     this.steeredWhileBraking = braking && (this.steeredWhileBraking || Math.abs(i.steer) >= cfg.entryLock)
-    this.tapArm = Math.max(0, this.tapArm - dt)
+    this.tapArm = i.allowBrakeTap === false ? 0 : Math.max(0, this.tapArm - dt)
     this.wasBraking = braking
     if (i.downshift && i.throttle < 0.3) this.downshiftArm = cfg.armTime
     this.brakeArm = Math.max(0, this.brakeArm - dt)
@@ -178,6 +209,7 @@ export class Drift {
       const flicked = this.tapArm > 0 && lock >= cfg.entryLock && !braking
       if (fast || tapped || kicked || yanked || flicked) {
         this.active = true
+        this.exiting = false
         this.calm = this.counter = 0
         this.score = 0
         this.brakeArm = this.downshiftArm = this.tapArm = 0
@@ -200,6 +232,8 @@ export class Drift {
         (i.brake > 0.8 && i.slipAngle < cfg.exitAngle * 2)
       if (ended) {
         this.active = false
+        this.exiting = true
+        this.exitTimer = 0
         this.lastScore = Math.round(this.score)
         this.sinceEnd = 0
       } else {
@@ -208,30 +242,55 @@ export class Drift {
       }
     }
     if (!this.active) this.sinceEnd += dt
+    if (this.exiting) {
+      this.exitTimer += dt
+      if (i.slipAngle < cfg.exitSettle || this.exitTimer > cfg.exitMaxSec || i.speed < cfg.minSpeed * 0.4) this.exiting = false
+    }
 
-    const target = this.active ? 1 : 0
-    const tau = this.active ? cfg.attack : cfg.release
+    // The exit keeps the guidance on until the angle has unwound; only then does grip take back over.
+    const held = this.active || this.exiting
+    const target = held ? 1 : 0
+    const tau = held ? cfg.attack : cfg.release
     this.amount += (target - this.amount) * (1 - Math.exp(-dt / tau))
     if (!this.active && this.amount < 0.01) this.amount = 0
   }
 
   /**
-   * Target body angle and path turn rate for a drift at `speed` (m/s) with this
-   * steering. `s` is steering relative to the drift: +1 = full lock into it,
-   * -1 = full countersteer. Signed about +Y: a right-hand drift turns clockwise
-   * (negative) and points the nose right of the travel direction (negative).
+   * Target body angle and path turn rate for this tick.
+   *  - `steer` -1..1 as the driver holds it; relative to the drift, +1 is full
+   *    lock into it and -1 full countersteer.
+   *  - `gripRate`: the car's full-lock grip turn rate at this speed, rad/s
+   *    (unsigned). The arc is a share of it, so a drift turns like the car does.
+   *  - `beta`: current body angle, travel direction → nose, signed about +Y.
+   * Signed about +Y: a right-hand drift turns clockwise (negative) and points
+   * the nose right of the travel direction (negative).
    */
-  guide(steer: number, speed: number, cfg: DriftConfig, out: DriftGuide): DriftGuide {
+  guide(steer: number, throttle: number, gripRate: number, beta: number, cfg: DriftConfig, out: DriftGuide): DriftGuide {
+    if (!this.active) {
+      // Exit: unwind the leftover angle. Mostly the body swings back to the line;
+      // a share comes from the line swinging toward the nose (the slingshot out).
+      out.angle = 0
+      out.pathRate = beta * cfg.exitAlign * cfg.angleGain
+      return out
+    }
     const s = Math.max(-1, Math.min(1, steer * this.direction))
     const into = Math.max(0, s)
     const counter = Math.max(0, -s)
-    const angle = cfg.baseAngle + (cfg.holdAngle - cfg.baseAngle) * into - (cfg.baseAngle - cfg.minAngle) * counter
-    const g = cfg.pathG * (1 + cfg.pathGain * into - cfg.pathCounter * counter)
-    const rate = Math.min(2.5, (g * 9.81) / Math.max(speed, 5))
+    const lift = 1 - Math.max(0, Math.min(1, throttle))
+    const angle = (cfg.baseAngle + (cfg.holdAngle - cfg.baseAngle) * into - (cfg.baseAngle - cfg.minAngle) * counter) *
+      (1 - (1 - cfg.liftAngle) * lift)
+    const share = s >= 0 ? cfg.turnNeutral + (cfg.turnInto - cfg.turnNeutral) * into : cfg.turnNeutral - (cfg.turnNeutral - cfg.turnCounter) * counter
+    const rate = Math.min(2.5, Math.max(0, gripRate) * share)
     const sign = -this.direction // right (+1) is clockwise about +Y
     out.angle = sign * angle
     out.pathRate = sign * rate
     return out
+  }
+
+  /** Share of speed scrubbed per second at body angle `beta` (rad) and this throttle. */
+  scrubRate(beta: number, throttle: number, cfg: DriftConfig): number {
+    const side = Math.sin(beta)
+    return cfg.scrub + cfg.angleScrub * side * side + cfg.liftScrub * (1 - Math.max(0, Math.min(1, throttle)))
   }
 
   /** Rear lateral grip multiplier for this tick. */
@@ -242,7 +301,8 @@ export class Drift {
 
   reset(): void {
     this.amount = 0
-    this.active = false
+    this.active = this.exiting = false
+    this.exitTimer = 0
     this.entry = this.direction = 0
     this.score = this.lastScore = 0
     this.sinceEnd = Infinity

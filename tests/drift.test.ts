@@ -149,9 +149,10 @@ describe('Arcade drift (NFS / Asphalt)', () => {
     const d = new Drift()
     tapWhileTurning(d, 1) // a right-hand drift: clockwise about +Y, so negative
     const g = { angle: 0, pathRate: 0 }
-    const into = { ...d.guide(1, 30, DEFAULT_DRIFT, g) }
-    const centred = { ...d.guide(0, 30, DEFAULT_DRIFT, g) }
-    const counter = { ...d.guide(-1, 30, DEFAULT_DRIFT, g) }
+    const grip = 1.2 // the car's full-lock grip turn, rad/s
+    const into = { ...d.guide(1, 1, grip, 0, DEFAULT_DRIFT, g) }
+    const centred = { ...d.guide(0, 1, grip, 0, DEFAULT_DRIFT, g) }
+    const counter = { ...d.guide(-1, 1, grip, 0, DEFAULT_DRIFT, g) }
     expect(into.angle).toBeLessThan(0)
     expect(into.pathRate).toBeLessThan(0)
     expect(Math.abs(into.angle)).toBeCloseTo(DEFAULT_DRIFT.holdAngle)
@@ -159,8 +160,47 @@ describe('Arcade drift (NFS / Asphalt)', () => {
     expect(Math.abs(counter.angle)).toBeCloseTo(DEFAULT_DRIFT.minAngle)
     expect(Math.abs(into.pathRate)).toBeGreaterThan(Math.abs(centred.pathRate))
     expect(Math.abs(centred.pathRate)).toBeGreaterThan(Math.abs(counter.pathRate))
-    // The arc is a sideways acceleration: the same g turns slower at higher speed.
-    expect(Math.abs(d.guide(1, 60, DEFAULT_DRIFT, g).pathRate)).toBeLessThan(Math.abs(into.pathRate))
+  })
+
+  it('a drift held into the corner turns tighter than gripping would', () => {
+    const d = new Drift()
+    tapWhileTurning(d, -1)
+    const g = { angle: 0, pathRate: 0 }
+    expect(Math.abs(d.guide(-1, 1, 1.2, 0, DEFAULT_DRIFT, g).pathRate)).toBeGreaterThan(1.2)
+    // …and follows the car's grip: a slower-turning car (or more speed) drifts a wider arc.
+    expect(Math.abs(d.guide(-1, 1, 0.6, 0, DEFAULT_DRIFT, g).pathRate)).toBeCloseTo(0.6 * DEFAULT_DRIFT.turnInto)
+  })
+
+  it('lifting lets the angle fall; the throttle holds it out', () => {
+    const d = new Drift()
+    tapWhileTurning(d, 1)
+    const g = { angle: 0, pathRate: 0 }
+    const lifted = Math.abs(d.guide(1, 0, 1, 0, DEFAULT_DRIFT, g).angle)
+    expect(lifted).toBeLessThan(Math.abs(d.guide(1, 1, 1, 0, DEFAULT_DRIFT, g).angle))
+  })
+
+  it('a steeper angle, or lifting, scrubs more speed', () => {
+    const d = new Drift()
+    expect(d.scrubRate(0.6, 1, DEFAULT_DRIFT)).toBeGreaterThan(d.scrubRate(0.3, 1, DEFAULT_DRIFT))
+    expect(d.scrubRate(0.4, 0, DEFAULT_DRIFT)).toBeGreaterThan(d.scrubRate(0.4, 1, DEFAULT_DRIFT))
+  })
+
+  it('after it ends, guidance holds on and unwinds the angle before grip takes over', () => {
+    const d = new Drift()
+    tapWhileTurning(d, 1)
+    run(d, { steer: 1, slipAngle: 0.5 }, 1, DEFAULT_DRIFT)
+    run(d, { steer: 0, slipAngle: 0.5 }, DEFAULT_DRIFT.exitTime + 0.05, DEFAULT_DRIFT)
+    expect(d.active).toBe(false)
+    expect(d.exiting).toBe(true)
+    expect(d.amount).toBeGreaterThan(0.95)
+    // Unwinding: the body swings back toward the line (target angle 0), and the
+    // line turns a little toward the nose (same sign as the leftover angle).
+    const g = d.guide(0, 1, 1, -0.4, DEFAULT_DRIFT, { angle: 0, pathRate: 0 })
+    expect(g.angle).toBe(0)
+    expect(g.pathRate).toBeLessThan(0)
+    run(d, { steer: 0, slipAngle: 0.02 }, 0.6, DEFAULT_DRIFT)
+    expect(d.exiting).toBe(false)
+    expect(d.amount).toBeLessThan(0.05)
   })
 
   it('holding countersteer ends the drift after counterExitTime', () => {
@@ -182,7 +222,7 @@ describe('Arcade drift (NFS / Asphalt)', () => {
     expect(live).toBeLessThan(180)
     run(d, { steer: 0 }, 0.5, DEFAULT_DRIFT)
     expect(d.active).toBe(false)
-    expect(d.lastScore).toBe(Math.round(live))
+    expect(Math.abs(d.lastScore - live)).toBeLessThan(2) // a hair more while the wheel came straight
     expect(d.sinceEnd).toBeLessThan(0.5)
   })
 })

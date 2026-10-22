@@ -58,6 +58,18 @@ describe('CheckpointManager', () => {
     expect(drive(m, [0, 105], [0, 95])).toEqual(['checkpoint'])
     expect(drive(m, [-5, 0], [5, 0])).toEqual(['lap'])
   })
+
+  it('counts a gate driven through wide of its radius, as on a run-off', () => {
+    const m = new CheckpointManager(cps)
+    expect(drive(m, [115, -5], [115, 5])).toEqual(['checkpoint'])
+  })
+
+  it('still ignores a gate passed far away or backwards', () => {
+    const m = new CheckpointManager(cps)
+    expect(drive(m, [140, -5], [140, 5])).toEqual([])
+    expect(drive(m, [100, 5], [100, -5])).toEqual([])
+    expect(m.next).toBe(1)
+  })
 })
 
 describe('GameLoop', () => {
@@ -66,7 +78,10 @@ describe('GameLoop', () => {
     const loop = new GameLoop({ fixedUpdate: fixed, render: () => {} })
     expect(loop.advance(FIXED_DT * 3 + 0.001)).toBe(3)
     expect(fixed).toHaveBeenCalledWith(FIXED_DT)
-    // A 5 s hitch is clamped to 0.25 s worth of steps.
-    expect(loop.advance(5)).toBe(15)
+    // A hitch admits at most 0.25 s, serviced over bounded frames.
+    expect(loop.advance(5)).toBe(5)
+    expect(loop.advance(0)).toBe(5)
+    expect(loop.advance(0)).toBe(5)
+    expect(fixed).toHaveBeenCalledTimes(18)
   })
 })

@@ -94,9 +94,24 @@ const wheels = measureWheels()
 const out = { Chassis: [], Headlights: [], Taillights: [], Wheel_FL: [], Wheel_FR: [], Wheel_RL: [], Wheel_RR: [] }
 const caliperMaterials = new Map()
 const lightMaterials = new Map()
+let rimClone = null
+/** cfg.report: material regex → bounds, for placing things like the exhaust tips in vehicle-config.json. */
+const reported = new Map()
 
 for (const { name, mesh } of parts) {
   for (const prim of mesh.listPrimitives()) {
+    // cfg.drop: parts that never render (an invisible duplicate shell, say) go before anything else.
+    if (cfg.drop && matches(cfg.drop, name, prim)) continue
+    if (cfg.report && matches(cfg.report, name, prim)) {
+      const k = prim.getMaterial()?.getName() ?? name
+      const b = reported.get(k) ?? { min: [Infinity, Infinity, Infinity], max: [-Infinity, -Infinity, -Infinity] }
+      const pos = prim.getAttribute('POSITION').getArray()
+      for (let i = 0; i < pos.length; i += 3) for (let a = 0; a < 3; a++) {
+        b.min[a] = Math.min(b.min[a], pos[i + a])
+        b.max[a] = Math.max(b.max[a], pos[i + a])
+      }
+      reported.set(k, b)
+    }
     const isTyreOrRim = matches(cfg.wheelParts.tyre, name, prim) || matches(cfg.wheelParts.rim, name, prim)
     const isBrake = cfg.wheelParts.brake && matches(cfg.wheelParts.brake, name, prim)
     const isLights = cfg.lights && matches(cfg.lights, name, prim)
@@ -141,7 +156,24 @@ function addWheel(id, prim) {
     a[i + 2] -= cz
   }
   pos.setArray(a)
+  // cfg.rimSplit: rim and tyre share one material. Triangles inside `share` of
+  // the radius are the rim and get their own 'rim' material, so the garage's
+  // rim colour doesn't paint the tyres.
+  const split = cfg.rimSplit
+  if (split && split.material.test(prim.getMaterial()?.getName() ?? '')) {
+    for (const [part, tris] of groupTriangles(prim, (c) => (Math.hypot(c[1], c[2]) < split.share * w.radius ? 'rim' : 'tyre'))) {
+      const sub = subset(prim, tris)
+      if (part === 'rim') sub.setMaterial(rimMaterial(prim.getMaterial()))
+      out[`Wheel_${id}`].push(sub)
+    }
+    return
+  }
   out[`Wheel_${id}`].push(prim)
+}
+
+function rimMaterial(base) {
+  rimClone ??= base.clone().setName('rim')
+  return rimClone
 }
 
 function caliperMaterial(base) {
@@ -180,6 +212,24 @@ for (const [nodeName, prims] of Object.entries(out)) {
 }
 for (const { mesh } of parts) if (!mesh.listParents().some((p) => p.propertyType === 'Node')) mesh.dispose()
 
+// cfg.flattenTextures: a base-colour texture this small (px) is just a colour
+// (exporters make 8×8 swatches). Fold its mean into the factor and drop it, so
+// cfg.mergePlain can merge the material with its look-alikes.
+if (cfg.flattenTextures) {
+  for (const mat of root.listMaterials()) {
+    const tex = mat.getBaseColorTexture()
+    const size = tex?.getSize()
+    // See-through materials keep theirs: the swatch's alpha is their transparency.
+    if (!tex || !size || Math.max(...size) > cfg.flattenTextures || mat.getAlphaMode() !== 'OPAQUE') continue
+    const { channels } = await sharp(Buffer.from(tex.getImage())).stats()
+    const f = mat.getBaseColorFactor()
+    // sRGB texel mean → linear factor.
+    const lin = (v) => ((v /= 255) <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)
+    mat.setBaseColorFactor([0, 1, 2].map((i) => f[i] * lin(channels[channels.length < 3 ? 0 : i].mean)).concat(f[3]))
+    mat.setBaseColorTexture(null)
+  }
+}
+
 // ── 4. Optimize ──────────────────────────────────────────────────────────────
 // keepUniqueNames: the caliper / tail-light clones differ from their source only by name.
 await doc.transform(prune(), dedup({ keepUniqueNames: true }), weld())
@@ -210,7 +260,9 @@ function triangleCount() {
 
 // One draw call per material per node: the split above leaves a primitive per
 // brake piece, light half and so on. keepNamed keeps the contract's nodes apart.
-await doc.transform(join({ keepNamed: true }))
+// cfg.mergePlain folds look-alike plain materials together first (as Low always does).
+if (cfg.mergePlain) mergePlainMaterials(doc)
+await doc.transform(prune(), join({ keepNamed: true }))
 
 // ── 5. Write the full and Low-preset models ──────────────────────────────────
 const outDir = resolve(cfg.outDir)
@@ -232,7 +284,11 @@ for (const mesh of low.getRoot().listMeshes()) {
 mergePlainMaterials(low)
 await low.transform(prune(), join({ keepNamed: true }))
 for (const mesh of low.getRoot().listMeshes()) {
-  for (const prim of mesh.listPrimitives()) simplifyPrimitive(prim, { simplifier: MeshoptSimplifier, ratio: cfg.lowRatio, error: cfg.lowError ?? 0.01 })
+  for (const prim of mesh.listPrimitives()) {
+    simplifyPrimitive(prim, { simplifier: MeshoptSimplifier, ratio: cfg.lowRatio, error: cfg.lowError ?? 0.01 })
+    // A tiny part (a two-triangle decal) can simplify away entirely; an empty primitive breaks the meshopt encoder.
+    if (!prim.getIndices()?.getCount()) prim.dispose()
+  }
 }
 await low.transform(
   prune(),
@@ -294,6 +350,7 @@ for (const m of root.listMeshes()) {
     perMaterial.set(k, (perMaterial.get(k) ?? 0) + (p.getIndices()?.getCount() ?? 0) / 3)
   }
 }
+for (const [k, b] of reported) console.log(`${k}: min ${r3(b.min)} max ${r3(b.max)} centre ${r3(b.min.map((v, a) => (v + b.max[a]) / 2))}`)
 console.log('triangles by material:', [...perMaterial].map(([k, v]) => `${k} ${Math.round(v / 1000)}k`).join(', '))
 
 // ── Geometry helpers ─────────────────────────────────────────────────────────

@@ -1,4 +1,7 @@
+import type { ArcadeHandlingConfig } from './ArcadeHandling'
+import type { KeyboardSteeringConfig } from './KeyboardSteering'
 import { DEFAULT_DRIFT, type DriftConfig } from './Drift'
+import { DEFAULT_LAUNCH, type LaunchConfig } from '../racing/LaunchControl'
 
 /**
  * Data contract between the asset pipeline (Blender MCP → vehicle-config.json)
@@ -62,6 +65,8 @@ export interface EngineConfig {
   /** Optional: highest rpm a downshift under braking may land at (default shiftUpRpm − 500). */
   brakeDownshiftRpm?: number
   shiftTimeSec: number
+  /** Reverse tops out here, m/s (default 10 ≈ 36 km/h): drive fades to nothing as the car nears it. */
+  maxReverseSpeed?: number
 }
 
 export interface NitroConfig {
@@ -125,6 +130,9 @@ export interface VehicleConfig {
   maxSteerAngle: number
   /** How fast the wheels turn in, rad/s at standstill; slows with speed like the angle. */
   steerSpeed: number
+  /** Digital-key response times; analog devices keep steerSpeed/steerReturnScale. */
+  arcade: ArcadeHandlingConfig
+  keyboardSteering: KeyboardSteeringConfig
   /** Return-to-center is this much faster than turning in, so the car settles quickly. */
   steerReturnScale: number
   /** Speed (m/s) at which the steer angle and rate are halved. Lower = calmer at speed. */
@@ -153,6 +161,14 @@ export interface VehicleConfig {
   /** Share of downforce on the front axle (aero balance), 0..1. */
   downforceFrontShare: number
   nitro: NitroConfig
+  /**
+   * Brake-disc glow (#92): the wheel material that is the disc, and a glow
+   * strength scale. Without a material (or on an LOD that dropped it) a ring is
+   * drawn behind the spokes instead.
+   */
+  brakeDisc?: { material?: string; intensity?: number }
+  /** Skill launch at lights-out (see racing/LaunchControl.ts). */
+  launch: LaunchConfig
   /** Drift entries and how loose the rear goes (see Drift.ts). */
   drift: DriftConfig
   /**
@@ -212,6 +228,14 @@ export const DEFAULT_VEHICLE_CONFIG: VehicleConfig = {
   handbrakeForce: 9000,
   maxSteerAngle: 0.55,
   steerSpeed: 2.6,
+  arcade: {
+    enabled: true,
+    turnRadius: [[0, 4.5], [30, 6], [60, 10], [100, 22], [160, 40], [220, 70], [320, 125]],
+    lateralGripMultiplier: 2.6, postPeakGrip: .95,
+    maxLateralG: 5.5, assistMaxG: 4,
+    yawResponse: 10, maxYawAcceleration: 8, sidewaysRecovery: 8, minSpeed: 3,
+  },
+  keyboardSteering: { turnInSec: .24, returnSec: .12, countersteerSec: .1 },
   steerReturnScale: 1.8,
   steerFalloffSpeed: 9,
   steerPeakSlipScale: 0.5,
@@ -223,6 +247,7 @@ export const DEFAULT_VEHICLE_CONFIG: VehicleConfig = {
   downforceCoefficient: 1.6,
   downforceFrontShare: 0.42,
   drift: DEFAULT_DRIFT,
+  launch: DEFAULT_LAUNCH,
   nitro: {
     durationSec: 4,
     fillRate: 0.25,
@@ -251,9 +276,12 @@ export function resolveVehicleConfig(partial: Partial<VehicleConfig> | undefined
     ...d,
     ...partial,
     suspension: { ...d.suspension, ...partial.suspension },
+    arcade: { ...d.arcade, ...partial.arcade },
+    keyboardSteering: { ...d.keyboardSteering, ...partial.keyboardSteering },
     tires: { ...d.tires, ...partial.tires },
     engine: { ...d.engine, ...partial.engine },
     nitro: { ...d.nitro, ...partial.nitro },
+    launch: { ...d.launch, ...partial.launch },
     drift: { ...d.drift, ...partial.drift },
     wheels: partial.wheels ?? d.wheels,
   }

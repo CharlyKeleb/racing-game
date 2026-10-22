@@ -1,0 +1,66 @@
+[
+  {
+    "voice": "alex",
+    "clip": "focus",
+    "source": "ElevenLabs_2026-10-21T10_43_59_Alex Carter_gen_sp100_s50_sb75_v4.mp3",
+    "start": 25.56,
+    "end": 26.94,
+    "gainDb": 6
+  },
+  {
+    "voice": "alex",
+    "clip": "rhythm",
+    "source": "ElevenLabs_2026-10-21T10_43_59_Alex Carter_gen_sp100_s50_sb75_v4.mp3",
+    "start": 19.6,
+    "end": 21.78,
+    "gainDb": 6
+  },
+  {
+    "voice": "alex",
+    "clip": "driftFlow",
+    "source": "ElevenLabs_2026-10-21T10_43_59_Alex Carter_gen_sp100_s50_sb75_v4.mp3",
+    "start": 46.67,
+    "end": 49.19,
+    "gainDb": 6
+  },
+  {
+    "voice": "alex",
+    "clip": "driftSetup",
+    "source": "ElevenLabs_2026-10-21T10_43_59_Alex Carter_gen_sp100_s50_sb75_v4.mp3",
+    "start": 43.77,
+    "end": 46.67,
+    "gainDb": 6
+  },
+  {
+    "voice": "camille",
+    "clip": "focus",
+    "source": "ElevenLabs_2026-10-21T11_21_52_Mariva Viva Muse - Warm and Energetic_pvc_sp93_s65_sb100_v4.mp3",
+    "start": 26.45,
+    "end": 27.9242,
+    "gainDb": 2
+  },
+  {
+    "voice": "camille",
+    "clip": "rhythm",
+    "source": "ElevenLabs_2026-10-21T11_21_52_Mariva Viva Muse - Warm and Energetic_pvc_sp93_s65_sb100_v4.mp3",
+    "start": 19.5648,
+    "end": 21.7741,
+    "gainDb": 2
+  },
+  {
+    "voice": "camille",
+    "clip": "driftFlow",
+    "source": "ElevenLabs_2026-10-21T11_21_52_Mariva Viva Muse - Warm and Energetic_pvc_sp93_s65_sb100_v4.mp3",
+    "start": 53.2,
+    "end": 56.487,
+    "gainDb": 2
+  },
+  {
+    "voice": "camille",
+    "clip": "driftSetup",
+    "source": "ElevenLabs_2026-10-21T11_21_52_Mariva Viva Muse - Warm and Energetic_pvc_sp93_s65_sb100_v4.mp3",
+    "start": 49.6642,
+    "end": 53.2,
+    "gainDb": 2
+  }
+]

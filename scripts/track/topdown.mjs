@@ -1,6 +1,7 @@
 // Debug: rasterises selected materials top-down (X right, Z down) with a labelled
 // 100 m grid, so we can pick spawn / checkpoints by eye.
 // usage: node topdown.mjs <in.glb> <out.png> <materialRegex> [minX minZ maxX maxZ] [pxPerMeter]
+// SCALE=<n> scales the source like a track config's `scale`.
 import { NodeIO } from '@gltf-transform/core'
 import { ALL_EXTENSIONS } from '@gltf-transform/extensions'
 import sharp from 'sharp'
@@ -13,10 +14,11 @@ const doc = await io.read(input)
 const tris = [] // [ax,az,bx,bz,cx,cz,colorIdx]
 const mats = []
 const v = [0, 0, 0]
+const scale = Number(process.env.SCALE ?? 1)
 const apply = (m, x, y, z) => {
-  v[0] = m[0] * x + m[4] * y + m[8] * z + m[12]
-  v[1] = m[1] * x + m[5] * y + m[9] * z + m[13]
-  v[2] = m[2] * x + m[6] * y + m[10] * z + m[14]
+  v[0] = (m[0] * x + m[4] * y + m[8] * z + m[12]) * scale
+  v[1] = (m[1] * x + m[5] * y + m[9] * z + m[13]) * scale
+  v[2] = (m[2] * x + m[6] * y + m[10] * z + m[14]) * scale
   return v
 }
 let minX = Infinity, minZ = Infinity, maxX = -Infinity, maxZ = -Infinity

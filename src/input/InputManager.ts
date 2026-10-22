@@ -13,13 +13,17 @@ export interface InputState {
   brake: number
   /** -1 (left) .. 1 (right) */
   steer: number
+  /** Omitted by AI/replays for the existing analog steering response. */
+  steerSource?: 'keyboard' | 'analog'
   handbrake: boolean
   /** Nitro boost held. */
   nitro: boolean
+  /** Temporary rear-facing camera while held; omitted by AI/replays. */
+  lookBack?: boolean
 }
 
 /** Edge-triggered actions, consumed once per press. */
-export type InputAction = 'pause' | 'reset' | 'camera' | 'skip'
+export type InputAction = 'pause' | 'reset' | 'camera' | 'skip' | 'restart' | 'shiftUp' | 'shiftDown'
 
 const KEY_ACTIONS: Record<string, InputAction> = {
   Enter: 'skip',
@@ -27,10 +31,16 @@ const KEY_ACTIONS: Record<string, InputAction> = {
   KeyP: 'pause',
   KeyR: 'reset',
   KeyC: 'camera',
+  /** Time Trial quick restart / Free Roam back to the start. */
+  KeyT: 'restart',
+  /** Manual gearbox (#14). */
+  KeyE: 'shiftUp',
+  KeyQ: 'shiftDown',
 }
 
 export class InputManager {
   readonly state: InputState = { throttle: 0, brake: 0, steer: 0, handbrake: false, nitro: false }
+  private steerSource: 'keyboard' | 'analog' = 'keyboard'
   private readonly keys = new Set<string>()
   private readonly pending = new Set<InputAction>()
   private readonly prevPadButtons: boolean[] = []
@@ -52,9 +62,13 @@ export class InputManager {
     const k = this.keys
     let throttle = k.has('KeyW') || k.has('ArrowUp') ? 1 : 0
     let brake = k.has('KeyS') || k.has('ArrowDown') ? 1 : 0
-    let steer = (k.has('KeyD') || k.has('ArrowRight') ? 1 : 0) - (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0)
+    const right = k.has('KeyD') || k.has('ArrowRight')
+    const left = k.has('KeyA') || k.has('ArrowLeft')
+    let steer = (right ? 1 : 0) - (left ? 1 : 0)
+    if (left || right) this.steerSource = 'keyboard'
     let handbrake = k.has('Space')
     let nitro = k.has('ShiftLeft') || k.has('ShiftRight')
+    let lookBack = k.has('KeyB')
 
     const pad = readGamepad()
     const identity = pad ? `${pad.index}:${pad.id}` : ''
@@ -66,29 +80,42 @@ export class InputManager {
     }
     if (pad) {
       const axis = stick(pad.axes[0])
-      if (axis !== 0) steer = axis
+      if (axis !== 0) {
+        steer = axis
+        this.steerSource = 'analog'
+      }
       throttle = Math.max(throttle, pad.buttons[PAD.RT]?.value ?? 0)
       brake = Math.max(brake, pad.buttons[PAD.LT]?.value ?? 0)
       handbrake ||= !!pad.buttons[PAD.A]?.pressed
       nitro ||= !!pad.buttons[PAD.X]?.pressed || !!pad.buttons[PAD.RB]?.pressed
+      lookBack ||= !!pad.buttons[PAD.R3]?.pressed
       this.edge(pad, PAD.A, 'skip', !menu)
       this.edge(pad, PAD.START, 'pause')
       this.edge(pad, PAD.Y, 'camera', !menu)
       this.edge(pad, PAD.B, 'reset', !menu)
+      this.edge(pad, PAD.BACK, 'restart', !menu)
+      this.edge(pad, PAD.UP, 'shiftUp', !menu)
+      this.edge(pad, PAD.DOWN, 'shiftDown', !menu)
     }
 
     const t = this.touch
     throttle = Math.max(throttle, t.throttle)
     brake = Math.max(brake, t.brake)
-    if (t.steer !== 0) steer = t.steer
+    if (t.steer !== 0) {
+      steer = t.steer
+      this.steerSource = 'analog'
+    }
     handbrake ||= t.handbrake
     nitro ||= t.nitro
+    lookBack ||= !!t.lookBack
 
     this.state.throttle = throttle
     this.state.brake = brake
     this.state.steer = Math.max(-1, Math.min(1, steer))
+    this.state.steerSource = this.steerSource
     this.state.handbrake = handbrake
     this.state.nitro = nitro
+    this.state.lookBack = lookBack
   }
 
   /** Feed from the touch overlay (via Game.setTouchInput). */
@@ -128,8 +155,8 @@ export class InputManager {
     this.focused = false
     this.keys.clear()
     this.pending.clear()
-    Object.assign(this.state, { throttle: 0, brake: 0, steer: 0, handbrake: false, nitro: false })
-    Object.assign(this.touch, { throttle: 0, brake: 0, steer: 0, handbrake: false, nitro: false })
+    Object.assign(this.state, { throttle: 0, brake: 0, steer: 0, handbrake: false, nitro: false, lookBack: false })
+    Object.assign(this.touch, { throttle: 0, brake: 0, steer: 0, handbrake: false, nitro: false, lookBack: false })
   }
 
   private onFocus = (): void => {

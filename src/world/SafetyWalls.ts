@@ -33,6 +33,8 @@ const ABOVE = 4
 const DROP = 2
 /** Neighbouring edges further apart than this aren't joined (the wall would cut across the floor). */
 const MAX_JUMP = 6
+/** Longest wall standing a side street's edge (where it runs on past MAX, or for good). */
+const STEP_MAX = 40
 
 export interface SafetyWallMesh {
   vertices: Float32Array
@@ -88,27 +90,44 @@ export function planSafetyWalls(line: readonly WallPoint[], probe: FloorProbe): 
   const vertices: number[] = []
   const indices: number[] = []
   let segments = 0
+  const wall = (ax: number, ay: number, az: number, bx: number, by: number, bz: number) => {
+    const v = vertices.length / 3
+    vertices.push(ax, ay - BELOW, az, ax, ay + ABOVE, az, bx, by - BELOW, bz, bx, by + ABOVE, bz)
+    // Both windings: a trimesh only collides from the front face side in some cases.
+    indices.push(v, v + 1, v + 2, v + 2, v + 1, v + 3, v, v + 2, v + 1, v + 2, v + 3, v + 1)
+    segments++
+  }
   for (let i = 0; i < n; i++) {
     const j = (i + 1) % n
     for (let side = 0; side < 2; side++) {
       const a = (i * 2 + side) * 4, b = (j * 2 + side) * 4
-      if (Number.isNaN(foot[a]) || Number.isNaN(foot[b])) continue
-      if (Math.abs(foot[a + 3] - foot[b + 3]) > MAX_JUMP) continue
+      if (Number.isNaN(foot[a]) && Number.isNaN(foot[b])) continue
+      // No edge on one side means the floor carries on past MAX (a side street).
+      const da = Number.isNaN(foot[a]) ? MAX : foot[a + 3], db = Number.isNaN(foot[b]) ? MAX : foot[b + 3]
+      if (Math.abs(da - db) > MAX_JUMP) {
+        // A side street or plaza opening off the road: its far edge runs along
+        // the probes, so no probe finds it. Wall the step instead, out along the
+        // nearer point's probe (past its edge, so over no floor) to the farther
+        // edge's distance, at most STEP_MAX past it.
+        const [near, at, far] = da < db ? [a, i, j] : [b, j, i]
+        const d0 = foot[near + 3], d = Math.min(Math.max(da, db), d0 + STEP_MAX), y = foot[near + 1]
+        const ux = (foot[near] - line[at].x) / d0, uz = (foot[near + 2] - line[at].z) / d0
+        // The street's side lies somewhere between the two probes: slide over
+        // from the near one while the wall's middle and far end still stand
+        // over nothing (its near end may cross a flared corner).
+        let s = 0
+        const voidAt = (t: number, dist: number) => probe(line[at].x + (line[far].x - line[at].x) * t + ux * dist, y, line[at].z + (line[far].z - line[at].z) * t + uz * dist) === null
+        while (s < 0.875 && voidAt(s + 0.125, (d0 + d) / 2) && voidAt(s + 0.125, d - 1)) s += 0.125
+        const ox = (line[far].x - line[at].x) * s, oz = (line[far].z - line[at].z) * s
+        wall(line[at].x + ox + ux * d0, y, line[at].z + oz + uz * d0, line[at].x + ox + ux * d, y, line[at].z + oz + uz * d)
+        continue
+      }
       // On the inside of a corner tighter than the edge distance the wall would
       // cross the road: keep its midpoint at least as far from the line as its ends.
       const mx = (foot[a] + foot[b]) / 2, mz = (foot[a + 2] + foot[b + 2]) / 2
       const mid = Math.min(Math.hypot(mx - line[i].x, mz - line[i].z), Math.hypot(mx - line[j].x, mz - line[j].z))
       if (mid < Math.min(foot[a + 3], foot[b + 3]) - 2) continue
-      const v = vertices.length / 3
-      vertices.push(
-        foot[a], foot[a + 1] - BELOW, foot[a + 2],
-        foot[a], foot[a + 1] + ABOVE, foot[a + 2],
-        foot[b], foot[b + 1] - BELOW, foot[b + 2],
-        foot[b], foot[b + 1] + ABOVE, foot[b + 2],
-      )
-      // Both windings: a trimesh only collides from the front face side in some cases.
-      indices.push(v, v + 1, v + 2, v + 2, v + 1, v + 3, v, v + 2, v + 1, v + 2, v + 3, v + 1)
-      segments++
+      wall(foot[a], foot[a + 1], foot[a + 2], foot[b], foot[b + 1], foot[b + 2])
     }
   }
   return { vertices: Float32Array.from(vertices), indices: Uint32Array.from(indices), segments }

@@ -1,3 +1,6 @@
+import { BrakeDiscGlow } from './BrakeDiscGlow'
+import { BrakeHeat, brakeGlow } from './BrakeHeat'
+import { FeedbackSpring } from '../effects/FeedbackSpring'
 import RAPIER from '@dimforge/rapier3d-compat'
 import * as THREE from 'three'
 import type { InputState } from '../input/InputManager'
@@ -7,6 +10,10 @@ import type { VehicleConfig } from './VehicleConfig'
 
 /** Fixed tick length the vehicle is stepped at (matches GameLoop.FIXED_DT). */
 const TICK = 1 / 60
+/** Burnout tail squat, degrees of pitch at full spin. */
+const BURNOUT_SQUAT = 1.4
+/** Nitro squat, degrees of pitch at full boost: the tail sits down as it shoves. */
+const NITRO_SQUAT = 1.1
 /**
  * Visual weight transfer, on top of what the physics body does. Degrees of body
  * pitch / roll per m/s² of acceleration, their limits, and the spring the body
@@ -22,8 +29,8 @@ const ROLL_PER_ACCEL = 0.36
 const MAX_SQUAT = 1.2
 const MAX_DIVE = 2.5
 const MAX_ROLL = 4.5
-const LEAN_FREQ = 9 // rad/s
-const LEAN_DAMPING = 0.5
+const LEAN_FREQ = 11 // rad/s
+const LEAN_DAMPING = 0.7
 /** Acceleration low-pass, 1/s: tick-to-tick contact noise would make the body buzz. */
 const ACCEL_SMOOTHING = 9
 const DEG = Math.PI / 180
@@ -43,6 +50,11 @@ export interface VehicleMotion {
   accelLat: number
   /** World velocity, m/s. */
   velocity: THREE.Vector3
+  /** Signed mean compression speed, m/s, and filtered travel activity, 0..1. */
+  suspensionVelocity: number
+  roadRoughness: number
+  /** Share of the wheels touching any surface. */
+  grounded: number
 }
 
 export interface SpawnPoint {
@@ -60,6 +72,14 @@ export class Vehicle {
   readonly controller: VehicleController
   readonly model: CarModel
   readonly body: RAPIER.RigidBody
+  /** The chassis box: only touches things in a hit (the wheels are raycasts). */
+  readonly chassis: RAPIER.Collider
+  readonly massKg: number
+  /**
+   * Physics ticks left in which hits are ignored: a respawn drops the car onto
+   * the road, and landing (or spawning against something) isn't a crash.
+   */
+  quietTicks = 0
 
   // Physics state at the previous and current tick, for render interpolation.
   private readonly prevPos = new THREE.Vector3()
@@ -71,20 +91,23 @@ export class Vehicle {
   private currSteer = 0
   private readonly prevOffset: number[]
   private readonly currOffset: number[]
-  readonly motion: VehicleMotion = { accelLong: 0, accelLat: 0, velocity: new THREE.Vector3() }
+  readonly motion: VehicleMotion = { accelLong: 0, accelLat: 0, velocity: new THREE.Vector3(), suspensionVelocity: 0, roadRoughness: 0, grounded: 0 }
   private readonly lastVel = new THREE.Vector3()
   // Body lean spring state, radians and rad/s.
   /** Body lean pivot height: the axle line (mean wheel radius). */
   private readonly pivotHeight: number
-  private pitch = 0
-  private pitchVel = 0
-  private roll = 0
-  private rollVel = 0
+  private readonly pitch = new FeedbackSpring(LEAN_FREQ, LEAN_DAMPING)
+  private readonly roll = new FeedbackSpring(LEAN_FREQ, LEAN_DAMPING)
+  private readonly heave = new FeedbackSpring(18, .65)
   /** Tail-light materials (owned copies), lit up under braking. */
   private readonly taillights: THREE.MeshStandardMaterial[] = []
   /** Headlight lens materials (owned copies), lit at night. */
   private readonly headlights: THREE.MeshStandardMaterial[] = []
   private brakeGlow = 0
+  private shakeTime = 0
+  /** Cosmetic disc heat per axle and its glow (#92). */
+  readonly brakeHeat = new BrakeHeat()
+  private readonly discGlow: BrakeDiscGlow
   /** Night driving: headlight lenses glow and the tail lights run brighter. */
   lightsOn = false
 
@@ -110,10 +133,16 @@ export class Vehicle {
     this.body = world.createRigidBody(bodyDesc)
 
     const [cx, cy, cz] = config.chassisCenter
-    world.createCollider(
-      RAPIER.ColliderDesc.cuboid(hx, hy, hz).setTranslation(cx, cy, cz).setDensity(0).setFriction(0.2).setRestitution(0.1),
+    // The wheels are raycasts, so this box only touches things in a real hit
+    // (another car, a wall, the ground when bottoming out): it reports the
+    // contact force for the crash sounds. 1.5 g filters out brushing contacts.
+    this.chassis = world.createCollider(
+      RAPIER.ColliderDesc.cuboid(hx, hy, hz).setTranslation(cx, cy, cz).setDensity(0).setFriction(0.2).setRestitution(0.1)
+        .setActiveEvents(RAPIER.ActiveEvents.CONTACT_FORCE_EVENTS)
+        .setContactForceEventThreshold(m * 9.81 * 1.5),
       this.body,
     )
+    this.massKg = m
 
     this.controller = new VehicleController(config, this.body, world)
     model.root.traverse((o) => {
@@ -139,6 +168,7 @@ export class Vehicle {
       mesh.material = own
       this.taillights.push(own)
     })
+    this.discGlow = new BrakeDiscGlow(model, config)
     this.prevOffset = config.wheels.map(() => config.suspension.restLength)
     this.currOffset = [...this.prevOffset]
     this.respawn(spawn)
@@ -157,6 +187,7 @@ export class Vehicle {
   }
 
   fixedUpdate(input: InputState, dt: number): void {
+    if (this.quietTicks > 0) this.quietTicks--
     this.controller.update(input, dt)
   }
 
@@ -169,7 +200,7 @@ export class Vehicle {
     this.currPos.set(t.x, t.y, t.z)
     this.currQuat.set(r.x, r.y, r.z, r.w)
     this.prevSteer = this.currSteer
-    this.currSteer = this.controller.steerAngle
+    this.currSteer = this.controller.wheelAngle
     const wheels = this.controller.wheels
     for (let i = 0; i < wheels.length; i++) {
       this.prevOffset[i] = this.currOffset[i]
@@ -189,6 +220,15 @@ export class Vehicle {
     m.accelLong += (THREE.MathUtils.clamp(_a.dot(_f), -25, 25) - m.accelLong) * k
     m.accelLat += (THREE.MathUtils.clamp(_a.dot(_l), -25, 25) - m.accelLat) * k
     m.velocity.copy(_v)
+    let compressionSpeed = 0, activity = 0, grounded = 0
+    for (const wheel of wheels) if (wheel.grounded) {
+      const rate = THREE.MathUtils.clamp(wheel.suspension.velocity, -3, 3)
+      compressionSpeed += rate; activity += Math.abs(rate); grounded++
+    }
+    m.grounded = grounded / wheels.length
+    m.suspensionVelocity = this.quietTicks > 0 || !grounded ? 0 : compressionSpeed / grounded
+    const roughness = this.quietTicks > 0 || !grounded ? 0 : Math.min(1, activity / grounded / 1.6)
+    m.roadRoughness += (roughness - m.roadRoughness) * (1 - Math.exp(-14 * TICK))
   }
 
   /**
@@ -201,6 +241,7 @@ export class Vehicle {
     root.quaternion.slerpQuaternions(this.prevQuat, this.currQuat, alpha)
 
     const steer = this.prevSteer + (this.currSteer - this.prevSteer) * alpha
+    this.model.cockpit?.updateSteering(steer, dt)
     const wheels = this.controller.wheels
     for (let i = 0; i < wheels.length; i++) {
       const w = wheels[i]
@@ -215,22 +256,32 @@ export class Vehicle {
     if (dt > 0) {
       const h = Math.min(dt, 1 / 20)
       // Braking dives the nose (+X rotation tips +Z down); speeding up squats it.
-      const pitchTarget = THREE.MathUtils.clamp(-this.motion.accelLong * PITCH_PER_ACCEL, -MAX_SQUAT, MAX_DIVE) * DEG
+      // A burnout squats the tail onto the spinning tyres; nitro sits it down and lifts the nose.
+      const burn = this.controller.burnout.intensity
+      const nitro = this.controller.nitro
+      const pitchTarget = (THREE.MathUtils.clamp(-this.motion.accelLong * PITCH_PER_ACCEL, -MAX_SQUAT, MAX_DIVE) - burn * BURNOUT_SQUAT - Math.min(1.4, nitro.intensity) * NITRO_SQUAT) * DEG
       // Cornering rolls the body to the outside: turning left lifts the left (+X) side.
       const rollTarget = THREE.MathUtils.clamp(this.motion.accelLat * ROLL_PER_ACCEL, -MAX_ROLL, MAX_ROLL) * DEG
-      const w2 = LEAN_FREQ * LEAN_FREQ
-      const c = 2 * LEAN_DAMPING * LEAN_FREQ
-      this.pitchVel += (w2 * (pitchTarget - this.pitch) - c * this.pitchVel) * h
-      this.pitch += this.pitchVel * h
-      this.rollVel += (w2 * (rollTarget - this.roll) - c * this.rollVel) * h
-      this.roll += this.rollVel * h
+      const pitch = this.pitch.step(pitchTarget, h)
+      const roll = this.roll.step(rollTarget, h)
+      const heave = this.heave.step(THREE.MathUtils.clamp(-this.motion.suspensionVelocity * .012, -.035, .025), h)
       // Lean about the axle line, not the ground under the car: pivoting at
       // ground level swung the whole body up and away from its wheels.
       const body = this.model.body
-      _euler.set(this.pitch, 0, this.roll)
+      _euler.set(pitch, 0, roll)
       body.rotation.copy(_euler)
       _pivot.set(0, this.pivotHeight, 0)
       body.position.copy(_pivot).sub(_pivot.applyEuler(_euler))
+      body.position.y += heave
+      // …and shakes it: the body trembles on a revving burnout, and on nitro,
+      // hardest as it lights, then a buzz while it burns.
+      const shake = Math.max(burn, Math.min(1.4, nitro.intensity) * 0.55 + nitro.surge * 1.1)
+      if (shake > 0) {
+        this.shakeTime += h
+        body.position.y += shake * 0.004 * Math.sin(this.shakeTime * 57)
+        body.rotation.z += shake * 0.0025 * Math.sin(this.shakeTime * 43 + 1.3)
+        body.rotation.x += shake * 0.0015 * Math.sin(this.shakeTime * 61 + 0.4)
+      }
 
       // Kept near 1: ACES tone mapping washes brighter emissive out toward white.
       const running = this.lightsOn ? 0.45 : 0.15
@@ -239,16 +290,30 @@ export class Vehicle {
       for (const mat of this.headlights) mat.emissiveIntensity = lens
       this.brakeGlow += (glowTarget - this.brakeGlow) * (1 - Math.exp(-25 * h))
       for (const mat of this.taillights) mat.emissiveIntensity = this.brakeGlow
+      // Disc heat: braking work in, airflow out. Separate from the lamps (brake pedal, not lamp intensity).
+      this.brakeHeat.update(h, this.controller.braking, this.controller.forwardSpeed)
+      this.discGlow.update(brakeGlow(this.brakeHeat.front), brakeGlow(this.brakeHeat.rear))
     }
   }
 
+  /** Only the lamp copies belong to Vehicle; source model resources are shared. */
+  disposeMaterials(): void {
+    for (const material of this.headlights) material.dispose()
+    for (const material of this.taillights) material.dispose()
+    this.discGlow.dispose()
+  }
+
   respawn(spawn: SpawnPoint): void {
+    this.quietTicks = 30
     const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), spawn.heading)
     this.body.setTranslation(spawn.position, true)
     this.body.setRotation(q, true)
     this.body.setLinvel({ x: 0, y: 0, z: 0 }, true)
     this.body.setAngvel({ x: 0, y: 0, z: 0 }, true)
     this.controller.reset()
+    // A respawn (race start, restart, checkpoint reset) puts the car back with cold discs.
+    this.brakeHeat.reset()
+    this.discGlow?.update(0, 0)
     this.currPos.copy(spawn.position)
     this.currQuat.copy(q)
     this.prevPos.copy(spawn.position)
@@ -257,7 +322,8 @@ export class Vehicle {
     this.lastVel.set(0, 0, 0)
     this.motion.accelLong = this.motion.accelLat = 0
     this.motion.velocity.set(0, 0, 0)
-    this.pitch = this.pitchVel = this.roll = this.rollVel = 0
+    this.pitch.reset(); this.roll.reset(); this.heave.reset()
+    this.motion.suspensionVelocity = this.motion.roadRoughness = this.motion.grounded = 0
     this.model.body.rotation.set(0, 0, 0)
     this.model.body.position.set(0, 0, 0)
   }

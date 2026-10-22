@@ -1,0 +1,51 @@
+{
+  "id": "charger",
+  "name": "Dodge Ice Charger",
+  "massKg": 1700,
+  "chassisHalfExtents": [1.0, 0.33, 2.45],
+  "chassisCenter": [0, 0.66, -0.18],
+  "centerOfMass": [0, 0.38, -0.3],
+  "brakeDisc": { "material": "disk_brake" },
+  "wheels": [
+    { "id": "FL", "position": [0.868, 0.7, 1.443], "radius": 0.38, "width": 0.349, "steered": true, "driven": true, "handbrake": false },
+    { "id": "FR", "position": [-0.868, 0.7, 1.443], "radius": 0.38, "width": 0.349, "steered": true, "driven": true, "handbrake": false },
+    { "id": "RL", "position": [0.943, 0.7, -1.443], "radius": 0.38, "width": 0.379, "steered": false, "driven": true, "handbrake": true },
+    { "id": "RR", "position": [-0.943, 0.7, -1.443], "radius": 0.38, "width": 0.379, "steered": false, "driven": true, "handbrake": true }
+  ],
+  "engine": {
+    "idleRpm": 900,
+    "redlineRpm": 6500,
+    "torqueCurve": [
+      [900, 420],
+      [2500, 700],
+      [4000, 880],
+      [5500, 860],
+      [6200, 812],
+      [6500, 750]
+    ],
+    "gearRatios": [-3.3, 4.71, 3.14, 2.11, 1.67, 1.29, 1.0, 0.84, 0.67],
+    "finalDrive": 2.62,
+    "efficiency": 0.85,
+    "shiftUpRpm": 6200,
+    "shiftDownRpm": 3200,
+    "shiftTimeSec": 0.1
+  },
+  "frontDriveShare": 0.3,
+  "exhausts": [[0.32, 0.42, -2.7], [-0.32, 0.42, -2.7]],
+  "tires": {
+    "grip": 1.65,
+    "corneringStiffness": 9.5,
+    "shape": 1.7,
+    "handbrakeGripScale": 0.4,
+    "rollingResistance": 0.014,
+    "tractionControl": true
+  },
+  "brakeForce": 36000,
+  "steerFalloffSpeed": 9,
+  "yawStability": 7,
+  "driftAssist": 0.22,
+  "maxDriftAngle": 0.6,
+  "dragCoefficient": 0.52,
+  "downforceCoefficient": 0.4,
+  "downforceFrontShare": 0.45
+}

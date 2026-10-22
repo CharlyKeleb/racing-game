@@ -38,11 +38,17 @@ log('reading', cfg.source)
 const src = await io.read(cfg.source)
 const layerOf = (mat) => cfg.layers.find(([re]) => re.test(mat))[1]
 
+// cfg.scale: uniform factor for sources modelled at the wrong scale (Sketchfab
+// "City" is a ~15 × 24 unit miniature). Every coordinate in the config is in
+// scaled metres.
+const scale = cfg.scale ?? 1
 /** @type {{mat:string, layer:string, pos:Float32Array, nrm:Float32Array|null, uv:Float32Array|null, idx:Uint32Array}[]} */
 const prims = []
 for (const node of src.getRoot().listNodes()) {
   const mesh = node.getMesh()
   if (!mesh) continue
+  // cfg.dropNodes: node names never shipped (blocker cards the source left across a street).
+  if (cfg.dropNodes?.test(node.getName())) continue
   const m = node.getWorldMatrix()
   for (const prim of mesh.listPrimitives()) {
     if (prim.getMode() !== 4) continue // TRIANGLES only
@@ -57,9 +63,9 @@ for (const node of src.getRoot().listNodes()) {
     const nrm = n ? new Float32Array(count * 3) : null
     for (let i = 0; i < count; i++) {
       const x = p[i * 3], y = p[i * 3 + 1], z = p[i * 3 + 2]
-      pos[i * 3] = m[0] * x + m[4] * y + m[8] * z + m[12]
-      pos[i * 3 + 1] = m[1] * x + m[5] * y + m[9] * z + m[13]
-      pos[i * 3 + 2] = m[2] * x + m[6] * y + m[10] * z + m[14]
+      pos[i * 3] = (m[0] * x + m[4] * y + m[8] * z + m[12]) * scale
+      pos[i * 3 + 1] = (m[1] * x + m[5] * y + m[9] * z + m[13]) * scale
+      pos[i * 3 + 2] = (m[2] * x + m[6] * y + m[10] * z + m[14]) * scale
       if (n) {
         const a = n[i * 3], b = n[i * 3 + 1], c = n[i * 3 + 2]
         const nx = m[0] * a + m[4] * b + m[8] * c, ny = m[1] * a + m[5] * b + m[9] * c, nz = m[2] * a + m[6] * b + m[10] * c
@@ -145,6 +151,164 @@ for (const [gi, g] of gates.entries()) {
   g.y = p[1]
   g.dir = dir
   log(`gate ${gi} → centreline (moved ${moved.toFixed(1)} m)`)
+}
+// cfg.flattenCorridor: { halfWidth, feather, reach }. For sources whose street
+// levels don't line up (Sketchfab "City", scaled ×32, has 0.6 m slabs and a
+// 1.1 m step across its back alley): smooth the centreline's height profile,
+// then pull every vertex within `reach` m above or below it, inside
+// halfWidth (+feather, blended), onto that profile. Low slabs, kerbs and bumps
+// flatten into the road; buildings and overhead structures keep their shape.
+if (cfg.flattenCorridor) {
+  const { halfWidth = 5, feather = 3, reach = 1.6 } = cfg.flattenCorridor
+  const pts = line.points, n = pts.length
+  const median = pts.map((_, i) => {
+    const w = []
+    for (let k = -3; k <= 3; k++) w.push(pts[(i + k + n) % n][1])
+    return w.sort((a, b) => a - b)[3]
+  })
+  const smooth = median.map((_, i) => {
+    let s = 0
+    for (let k = -3; k <= 3; k++) s += median[(i + k + n) % n]
+    return s / 7
+  })
+  const outer = halfWidth + feather
+  const nearLine = (x0, z0, x1, z1) => pts.some((p) => p[0] > x0 - outer - 4 && p[0] < x1 + outer + 4 && p[2] > z0 - outer - 4 && p[2] < z1 + outer + 4)
+  // Big triangles (a slab spanning the street) have no vertex in the corridor
+  // to move: split those near the line until no edge is over 2 m. Shared edges
+  // split at the same midpoints on both sides, so no cracks; the simplifier
+  // merges the flattened result back down.
+  let split = 0
+  const floor = (pr) => ['road', 'ground', 'decal'].includes(pr.layer) || cfg.collide?.some(([re]) => re.test(pr.mat))
+  for (const pr of prims) {
+    if (!floor(pr)) continue
+    const { pos, nrm, uv, idx } = pr
+    const P = [...pos], N = nrm ? [...nrm] : null, U = uv ? [...uv] : null, I = []
+    const mid = (a, b) => {
+      P.push((P[a * 3] + P[b * 3]) / 2, (P[a * 3 + 1] + P[b * 3 + 1]) / 2, (P[a * 3 + 2] + P[b * 3 + 2]) / 2)
+      if (N) N.push((N[a * 3] + N[b * 3]) / 2, (N[a * 3 + 1] + N[b * 3 + 1]) / 2, (N[a * 3 + 2] + N[b * 3 + 2]) / 2)
+      if (U) U.push((U[a * 2] + U[b * 2]) / 2, (U[a * 2 + 1] + U[b * 2 + 1]) / 2)
+      return P.length / 3 - 1
+    }
+    const len = (a, b) => Math.hypot(P[a * 3] - P[b * 3], P[a * 3 + 1] - P[b * 3 + 1], P[a * 3 + 2] - P[b * 3 + 2])
+    const tri = (a, b, c) => {
+      const ab = len(a, b), bc = len(b, c), ca = len(c, a), m = Math.max(ab, bc, ca)
+      if (m <= 2) return I.push(a, b, c)
+      split++
+      if (m === ab) { const d = mid(a, b); tri(a, d, c); tri(d, b, c) }
+      else if (m === bc) { const d = mid(b, c); tri(a, b, d); tri(a, d, c) }
+      else { const d = mid(c, a); tri(a, b, d); tri(d, b, c) }
+    }
+    for (let t = 0; t < idx.length; t += 3) {
+      const a = idx[t], b = idx[t + 1], c = idx[t + 2]
+      const xs = [pos[a * 3], pos[b * 3], pos[c * 3]], zs = [pos[a * 3 + 2], pos[b * 3 + 2], pos[c * 3 + 2]]
+      if (nearLine(Math.min(...xs), Math.min(...zs), Math.max(...xs), Math.max(...zs))) tri(a, b, c)
+      else I.push(a, b, c)
+    }
+    if (P.length === pos.length) continue
+    pr.pos = Float32Array.from(P)
+    if (N) pr.nrm = Float32Array.from(N)
+    if (U) pr.uv = Float32Array.from(U)
+    pr.idx = Uint32Array.from(I)
+  }
+  let moved = 0
+  for (const pr of prims) {
+    const { pos } = pr
+    for (let v = 0; v < pos.length; v += 3) {
+      const x = pos[v], z = pos[v + 2]
+      // Nearest point on the closed polyline: lateral distance and interpolated profile height.
+      let best = Infinity, target = 0
+      for (let i = 0; i < n; i++) {
+        const a = pts[i], b = pts[(i + 1) % n]
+        if (Math.abs(a[0] - x) > outer + 8 || Math.abs(a[2] - z) > outer + 8) continue
+        const dx = b[0] - a[0], dz = b[2] - a[2], len2 = dx * dx + dz * dz || 1
+        const t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (z - a[2]) * dz) / len2))
+        const d = Math.hypot(a[0] + dx * t - x, a[2] + dz * t - z)
+        if (d < best) { best = d; target = smooth[i] + (smooth[(i + 1) % n] - smooth[i]) * t }
+      }
+      if (best >= outer || Math.abs(pos[v + 1] - target) > reach) continue
+      const w = best <= halfWidth ? 1 : 1 - (best - halfWidth) / feather
+      pos[v + 1] += (target - pos[v + 1]) * w
+      moved++
+    }
+  }
+  // Walls squashed flat are zero-area slivers; in a Rapier trimesh their
+  // arbitrary contact normals push a car down through the floor.
+  let slivers = 0
+  for (const pr of prims) {
+    const { pos, idx } = pr
+    const keep = []
+    for (let t = 0; t < idx.length; t += 3) {
+      const a = idx[t] * 3, b = idx[t + 1] * 3, c = idx[t + 2] * 3
+      const ux = pos[b] - pos[a], uy = pos[b + 1] - pos[a + 1], uz = pos[b + 2] - pos[a + 2]
+      const vx = pos[c] - pos[a], vy = pos[c + 1] - pos[a + 1], vz = pos[c + 2] - pos[a + 2]
+      if (Math.hypot(uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx) < 2e-3) slivers++
+      else keep.push(idx[t], idx[t + 1], idx[t + 2])
+    }
+    if (keep.length !== idx.length) pr.idx = Uint32Array.from(keep)
+  }
+  for (const [i, p] of pts.entries()) p[1] = smooth[i]
+  for (const g of gates) {
+    let bi = 0
+    for (let i = 1; i < n; i++) if (Math.hypot(pts[i][0] - g.at[0], pts[i][2] - g.at[1]) < Math.hypot(pts[bi][0] - g.at[0], pts[bi][2] - g.at[1])) bi = i
+    g.y = pts[bi][1]
+    g.lineIndex = bi
+  }
+  log(`flattened ${moved.toLocaleString()} vertices along the centreline (${split.toLocaleString()} triangle splits, ${slivers.toLocaleString()} slivers dropped)`)
+
+  // cfg.clearCorridor: { fromGate, toGate, halfWidth, low, high }. Where the
+  // route squeezes past decks, supports and overhangs (the City's back alley),
+  // drop every triangle reaching into a car-height channel along the line
+  // between those gates: anything from `low` to `high` m above the profile
+  // within halfWidth of it. Floors sit below `low` and stay.
+  if (cfg.clearCorridor) {
+    const { fromGate, toGate, halfWidth: hw = 4, low = 0.3, high = 2.6 } = cfg.clearCorridor
+    const i0 = gates[fromGate].lineIndex, i1 = gates[toGate].lineIndex
+    const span = []
+    for (let i = i0; i !== i1; i = (i + 1) % n) span.push(i)
+    const xs = span.map((i) => pts[i][0]), zs = span.map((i) => pts[i][2])
+    const box = [Math.min(...xs) - hw, Math.min(...zs) - hw, Math.max(...xs) + hw, Math.max(...zs) + hw]
+    /** Profile height if (x, z) is within hw of the span, else null. */
+    const profileAt = (x, z) => {
+      let best = hw, h = null
+      for (const i of span) {
+        const a = pts[i], b = pts[(i + 1) % n]
+        if (Math.abs(a[0] - x) > hw + 8 || Math.abs(a[2] - z) > hw + 8) continue
+        const dx = b[0] - a[0], dz = b[2] - a[2], len2 = dx * dx + dz * dz || 1
+        const t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (z - a[2]) * dz) / len2))
+        const d = Math.hypot(a[0] + dx * t - x, a[2] + dz * t - z)
+        if (d < best) { best = d; h = a[1] + (b[1] - a[1]) * t }
+      }
+      return h
+    }
+    let cleared = 0
+    for (const pr of prims) {
+      const { pos, idx } = pr
+      const keep = []
+      for (let t = 0; t < idx.length; t += 3) {
+        const a = idx[t] * 3, b = idx[t + 1] * 3, c = idx[t + 2] * 3
+        const tx = [pos[a], pos[b], pos[c]], tz = [pos[a + 2], pos[b + 2], pos[c + 2]]
+        let hit = false
+        if (Math.max(...tx) > box[0] && Math.min(...tx) < box[2] && Math.max(...tz) > box[1] && Math.min(...tz) < box[3]) {
+          // Sample the triangle every half metre (big walls cross the channel
+          // between their corners; a tall sliver crosses it between its ends).
+          const ty = [pos[a + 1], pos[b + 1], pos[c + 1]]
+          const len = (i, j) => Math.hypot(tx[j] - tx[i], ty[j] - ty[i], tz[j] - tz[i])
+          const k = Math.min(80, Math.max(1, Math.ceil(2 * Math.max(len(0, 1), len(1, 2), len(2, 0)))))
+          for (let u = 0; u <= k && !hit; u++) for (let v = 0; u + v <= k && !hit; v++) {
+            const wa = 1 - (u + v) / k, wb = u / k, wc = v / k
+            const x = wa * tx[0] + wb * tx[1] + wc * tx[2], z = wa * tz[0] + wb * tz[1] + wc * tz[2]
+            const y = wa * pos[a + 1] + wb * pos[b + 1] + wc * pos[c + 1]
+            const h = profileAt(x, z)
+            if (h !== null && y > h + low && y < h + high) hit = true
+          }
+        }
+        if (hit) cleared++
+        else keep.push(idx[t], idx[t + 1], idx[t + 2])
+      }
+      if (keep.length !== idx.length) pr.idx = Uint32Array.from(keep)
+    }
+    log(`cleared ${cleared.toLocaleString()} triangles from the channel between gates ${fromGate} and ${toGate} (line ${i0}–${i1})`)
+  }
 }
 if (process.env.LINE_ONLY) {
   await fs.writeFile('.cache/line.json', JSON.stringify(line.points.map(([x, , z]) => [x, z])))

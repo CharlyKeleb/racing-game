@@ -1,7 +1,4 @@
-/**
- * Game modes shown on the main menu. Quick Race and Drift Challenge are playable; the
- * others are shown as "Soon" until they're built.
- */
+/** Game modes shown on the main menu. A mode with `available: false` shows as "Soon". */
 export type GameModeId = 'quick' | 'timeTrial' | 'drift' | 'freeRoam'
 
 export interface GameMode {
@@ -15,7 +12,16 @@ export interface GameMode {
 
 export const GAME_MODES: GameMode[] = [
   { id: 'quick', name: 'Quick Race', blurb: 'Race for the podium', available: true },
-  { id: 'timeTrial', name: 'Time Trial', blurb: 'Chase your best lap', available: false },
+  { id: 'timeTrial', name: 'Time Trial', blurb: 'Chase your best lap', available: true },
   { id: 'drift', name: 'Drift Challenge', blurb: 'Link slides. Chase the gold.', available: true },
-  { id: 'freeRoam', name: 'Free Roam', blurb: 'No timer, just drive', available: false },
+  { id: 'freeRoam', name: 'Free Roam', blurb: 'No timer, just drive', available: true },
 ]
+
+export function gameMode(id: GameModeId): GameMode {
+  return GAME_MODES.find((m) => m.id === id) ?? GAME_MODES[0]
+}
+
+/** Solo modes: no AI on the grid. */
+export function isSoloMode(mode: GameModeId): boolean {
+  return mode !== 'quick'
+}
