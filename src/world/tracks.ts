@@ -77,7 +77,14 @@ export const STATION_DISTRICT: StreamedTrackDefinition = {
   manifestUrl: '/models/tracks/city/track.json',
 }
 
-export const TRACKS: TrackDefinition[] = [NURBURGRING, MARINA_BAY, DRIFT_PARK, BAYVIEW, STATION_DISTRICT, TEST_CIRCUIT]
+export const CANYON_DAM: StreamedTrackDefinition = {
+  kind: 'streamed',
+  id: 'canyon',
+  name: 'Canyon Dam',
+  manifestUrl: '/models/tracks/canyon/track.json',
+}
+
+export const TRACKS: TrackDefinition[] = [NURBURGRING, MARINA_BAY, DRIFT_PARK, BAYVIEW, STATION_DISTRICT, CANYON_DAM, TEST_CIRCUIT]
 
 export function getTrack(id: string): TrackDefinition {
   return TRACKS.find((t) => t.id === id) ?? TRACKS[0]
