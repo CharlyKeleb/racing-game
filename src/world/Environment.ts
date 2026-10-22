@@ -38,6 +38,8 @@ export class Environment {
   private readonly fill: THREE.HemisphereLight
   private readonly pmrem: Pmrem
   private envTarget: THREE.RenderTarget | null = null
+  /** Cars' own reflections: the sky over a skyline and asphalt (see bakeCarSky). */
+  private carEnvTarget: THREE.RenderTarget | null = null
   private preset: TimePreset = TIME_PRESETS.noon
   private timeOfDay: TimeOfDay | null = null
   private viewFar = 900
@@ -148,6 +150,8 @@ export class Environment {
     this.background.copy(this.fog.color)
 
     this.setEnvTarget(this.bakeSky(p))
+    this.carEnvTarget?.dispose()
+    this.carEnvTarget = this.bakeCarSky(p)
     if (p.hdri) {
       new HDRLoader()
         .loadAsync(p.hdri)
@@ -216,6 +220,74 @@ export class Environment {
     return target
   }
 
+  /**
+   * What the cars reflect, baked once per preset: the same sky, but over a
+   * dark skyline ring (grandstands, trees, gantries, with a few lit strips) and
+   * asphalt close in. A real horizon line and structure in the paint is what
+   * makes bodywork read as glossy and sharp; the plain sky-over-grass bake
+   * left it looking like plastic. Cars only (see CarReflections); the track
+   * keeps the soft scene environment.
+   */
+  private bakeCarSky(p: TimePreset): THREE.RenderTarget {
+    const scene = new THREE.Scene()
+    const dome = new THREE.Mesh(this.sky.geometry, this.sky.material)
+    dome.scale.setScalar(100)
+    const night = p.key.intensity < 1 || p.envIntensity < 0.4
+    const horizon = new THREE.Color(p.fog)
+    const silhouette = horizon.clone().multiplyScalar(this.rain ? 0.32 : 0.22)
+    const lit = new THREE.Color(night ? 0xdfe8ff : 0xffffff).multiplyScalar(night ? 3 : this.rain ? 0.9 : 1.4)
+    const ground = new THREE.Color(p.envGround).lerp(_asphalt, 0.6).multiplyScalar(night ? 0.4 : 1)
+    const road = _asphalt.clone().multiplyScalar(night ? 0.35 : this.rain ? 0.7 : 1)
+
+    const positions: number[] = []
+    const colors: number[] = []
+    const quad = (a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3, d: THREE.Vector3, color: THREE.Color) => {
+      for (const v of [a, b, c, a, c, d]) { positions.push(v.x, v.y, v.z); colors.push(color.r, color.g, color.b) }
+    }
+    // Ground: asphalt close in, the preset's ground further out.
+    const disc = (radius: number, inner: number, y: number, color: THREE.Color) => {
+      for (let i = 0; i < 32; i++) {
+        const a0 = (i / 32) * Math.PI * 2, a1 = ((i + 1) / 32) * Math.PI * 2
+        quad(
+          new THREE.Vector3(Math.cos(a0) * inner, y, Math.sin(a0) * inner), new THREE.Vector3(Math.cos(a1) * inner, y, Math.sin(a1) * inner),
+          new THREE.Vector3(Math.cos(a1) * radius, y, Math.sin(a1) * radius), new THREE.Vector3(Math.cos(a0) * radius, y, Math.sin(a0) * radius), color)
+      }
+    }
+    disc(30, 0, -1.5, road)
+    disc(400, 30, -1.5, ground)
+    // Skyline: uneven blocks around the horizon (4°–13° high), some with a lit strip.
+    let seed = 7
+    const random = () => (seed = (seed * 16807) % 2147483647) / 2147483647
+    const R = 70, N = 60
+    for (let i = 0; i < N; i++) {
+      const a0 = (i / N) * Math.PI * 2, a1 = ((i + 0.92) / N) * Math.PI * 2
+      const top = 3.5 + random() * 12
+      const p0 = (y: number) => new THREE.Vector3(Math.cos(a0) * R, y, Math.sin(a0) * R)
+      const p1 = (y: number) => new THREE.Vector3(Math.cos(a1) * R, y, Math.sin(a1) * R)
+      quad(p0(-1.5), p1(-1.5), p1(top), p0(top), silhouette)
+      if (random() < 0.45) {
+        const y = top * (0.35 + random() * 0.5)
+        quad(p0(y), p1(y), p1(y + 0.7), p0(y + 0.7), lit)
+      }
+    }
+    const geo = new THREE.BufferGeometry()
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3))
+    const mat = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide, toneMapped: false })
+    scene.add(dome, new THREE.Mesh(geo, mat))
+    const target = this.pmrem.fromScene(scene, 0.012, 0.1, 1000)
+    geo.dispose()
+    mat.dispose()
+    return target
+  }
+
+  /** The cars' reflection map and its strength (a touch over the scene's: more washes paint out to milky). */
+  get carEnvironment(): { map: THREE.Texture | null; intensity: number } {
+    _carEnv.map = this.carEnvTarget?.texture ?? null
+    _carEnv.intensity = Math.min(1.2, this.preset.envIntensity * (this.rain ? 1.05 : 1.15))
+    return _carEnv
+  }
+
   private setEnvTarget(target: THREE.RenderTarget): void {
     const scene = this.group.parent as THREE.Scene | null
     const shown = !!scene && !!this.envTarget && scene.environment === this.envTarget.texture
@@ -230,12 +302,15 @@ export class Environment {
     ;(this.sky.material as THREE.Material).dispose()
     this.sun.shadow.map?.dispose()
     this.envTarget?.dispose()
+    this.carEnvTarget?.dispose()
     this.pmrem.dispose()
     this.group.removeFromParent()
   }
 }
 
 const _rainFill = new THREE.Color(0xb8c2cc)
+const _asphalt = new THREE.Color(0x2b2d31)
+const _carEnv: { map: THREE.Texture | null; intensity: number } = { map: null, intensity: 1 }
 const _grey = new THREE.Color()
 
 /** Unit vector toward a point `elevation` degrees above the horizon at compass `azimuth`. */

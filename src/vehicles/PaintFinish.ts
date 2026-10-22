@@ -11,8 +11,9 @@ export function setPaintFinish(uniforms: PaintFinishUniforms, finish: PaintFinis
   uniforms.uPaintPearl.value = finish === 'pearl' ? 1 : 0
 }
 
-// Object-space grains remain attached to panels. Derivative filtering removes
-// subpixel grains rather than allowing distant surfaces to sparkle noisily.
+// Object-space grains remain attached to panels. Derivative filtering keeps
+// flakes to close-ups (several pixels each, the garage): at chase distance they
+// read as speckled noise on the paint, not sparkle. Same numbers in the TSL twin.
 export function patchPaintFinish(material: THREE.MeshPhysicalMaterial, uniforms: PaintFinishUniforms): void {
   const compile = material.onBeforeCompile
   const key = material.customProgramCacheKey()
@@ -34,7 +35,7 @@ export function patchPaintFinish(material: THREE.MeshPhysicalMaterial, uniforms:
       vec3 grainPosition=vPaintLocal*220.;
       vec3 grainHash=paintHash(floor(grainPosition));
       vec3 grainWidth=fwidth(grainPosition);
-      float grainFilter=1.-smoothstep(.35,1.4,max(grainWidth.x,max(grainWidth.y,grainWidth.z)));
+      float grainFilter=1.-smoothstep(.12,.35,max(grainWidth.x,max(grainWidth.y,grainWidth.z)));
       float grainStrength=smoothstep(.82,.94,grainHash.x)*grainFilter*uPaintFlake;
       roughnessFactor=mix(roughnessFactor,.11,grainStrength);`)
     shader.fragmentShader = shader.fragmentShader.replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
@@ -42,5 +43,5 @@ export function patchPaintFinish(material: THREE.MeshPhysicalMaterial, uniforms:
       grainTilt-=normal*dot(normal,grainTilt);
       normal=normalize(normal+grainTilt*grainStrength*.38);`)
   }
-  material.customProgramCacheKey = () => key + ':premium-paint-v1'
+  material.customProgramCacheKey = () => key + ':premium-paint-v2'
 }

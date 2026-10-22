@@ -1,5 +1,6 @@
 import { BrakeDiscGlow } from './BrakeDiscGlow'
 import { BrakeHeat, brakeGlow } from './BrakeHeat'
+import { createContactShadow, setContactShadowGround } from './ContactShadow'
 import { FeedbackSpring } from '../effects/FeedbackSpring'
 import RAPIER from '@dimforge/rapier3d-compat'
 import * as THREE from 'three'
@@ -108,6 +109,8 @@ export class Vehicle {
   /** Cosmetic disc heat per axle and its glow (#92). */
   readonly brakeHeat = new BrakeHeat()
   private readonly discGlow: BrakeDiscGlow
+  /** Soft dark pad under the car (ContactShadow.ts). */
+  private readonly contactShadow: THREE.Mesh
   /** Night driving: headlight lenses glow and the tail lights run brighter. */
   lightsOn = false
 
@@ -169,6 +172,10 @@ export class Vehicle {
       this.taillights.push(own)
     })
     this.discGlow = new BrakeDiscGlow(model, config)
+    // A rebuilt Vehicle (upgrades) reuses the model: replace its old pad.
+    model.root.getObjectByName('contact-shadow')?.removeFromParent()
+    this.contactShadow = createContactShadow(config)
+    model.root.add(this.contactShadow)
     this.prevOffset = config.wheels.map(() => config.suspension.restLength)
     this.currOffset = [...this.prevOffset]
     this.respawn(spawn)
@@ -293,6 +300,7 @@ export class Vehicle {
       // Disc heat: braking work in, airflow out. Separate from the lamps (brake pedal, not lamp intensity).
       this.brakeHeat.update(h, this.controller.braking, this.controller.forwardSpeed)
       this.discGlow.update(brakeGlow(this.brakeHeat.front), brakeGlow(this.brakeHeat.rear))
+      setContactShadowGround(this.contactShadow, this.motion.grounded)
     }
   }
 
@@ -301,6 +309,9 @@ export class Vehicle {
     for (const material of this.headlights) material.dispose()
     for (const material of this.taillights) material.dispose()
     this.discGlow.dispose()
+    this.contactShadow.removeFromParent()
+    this.contactShadow.geometry.dispose()
+    ;(this.contactShadow.material as THREE.Material).dispose()
   }
 
   respawn(spawn: SpawnPoint): void {

@@ -17,6 +17,7 @@ import { motionExposure } from '../effects/MotionBlur'
 import { WhipStreaks } from '../effects/WhipStreaks'
 import { NitroRush } from '../effects/NitroRush'
 import { boostBlurTarget, stepBoostBlur } from '../effects/BoostBlur'
+import { applyCarReflections } from '../world/CarReflections'
 import { DrivingLine } from '../effects/DrivingLine'
 import { BrakingGuide } from '../racing/BrakingGuide'
 import { performanceCapture } from './PerformanceCapture'
@@ -220,6 +221,8 @@ export class Game {
   private readonly driftChallenge = new DriftChallenge()
   private race!: RaceManager
   private opponents: Opponent[] = []
+  /** Frames until the cars' reflection maps are re-checked (new cars, livery swaps, time of day). */
+  private carReflectionsIn = 0
   private readonly opponentFlames = new Map<number, NitroFlames>()
   private opponentToken = 0
   private roadEdges!: { left: Float32Array; right: Float32Array }
@@ -1725,6 +1728,7 @@ export class Game {
     }
     this.driftZones?.update(this.vehicle.position.x,this.vehicle.position.z,gameStore.getState().settings.mode === 'drift' && ['racing','countdown','intro','paused'].includes(phase),(this.race.lastCheckpoint+1)%this.track.checkpoints.length)
     this.environment.follow(this.vehicle.position)
+    if (--this.carReflectionsIn <= 0) this.syncCarReflections(phase)
     const v = this.vehicle.body.linvel()
     this.track.update(this.vehicle.position, _velocity.set(v.x, v.y, v.z), dt)
     this.renderer.adapt(dt)
@@ -2281,6 +2285,16 @@ export class Game {
     this.showroom.setCarFootprint(this.vehicle.config.wheels)
   }
 
+  /** Cars reflect the skyline bake on track; the showroom's own room in the garage. */
+  private syncCarReflections(phase: GamePhase): void {
+    this.carReflectionsIn = 30
+    if (!this.vehicle || !this.environment) return
+    const env = this.environment.carEnvironment
+    const map = phase === 'menu' || phase === 'garage' ? null : env.map
+    applyCarReflections(this.vehicle.model.root, map, env.intensity)
+    for (const opponent of this.opponents) applyCarReflections(opponent.vehicle.model.root, map, env.intensity)
+  }
+
   private updateShowroom(phase: GamePhase): void {
     if (phase === 'loading' && this.raceTransition) return
     if (!this.showroom) return
@@ -2288,6 +2302,7 @@ export class Game {
     this.showroom.setActive(this.renderer.scene, inShowroom, [this.track.group, this.environment.group, this.effects.group, this.guide.group])
     this.setShowroomPad(inShowroom)
     this.audio.setScene(inShowroom ? 'menu' : 'race')
+    this.syncCarReflections(phase)
     // Re-assert the time of day: it may have changed while the showroom had the scene.
     if (!inShowroom) this.environment.apply(this.renderer.scene)
   }

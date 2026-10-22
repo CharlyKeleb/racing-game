@@ -125,7 +125,7 @@ export function premiumPaintMaterial(finish: PaintFinishUniforms): THREE.MeshPhy
     cell.dot(vec3(127.1, 311.7, 74.7)), cell.dot(vec3(269.5, 183.3, 246.1)), cell.dot(vec3(113.5, 271.9, 124.6)),
   )).mul(43758.5453))
   const width = fwidth(grain)
-  const filter = float(1).sub(smoothstep(.35, 1.4, max(width.x, max(width.y, width.z))))
+  const filter = float(1).sub(smoothstep(.12, .35, max(width.x, max(width.y, width.z))))
   const strength = smoothstep(.82, .94, hash.x).mul(filter).mul(reference('value', 'float', finish.uPaintFlake))
   // Transform the object-space perturbation using the object's normal matrix.
   const tilt = cameraViewMatrix.mul(vec4(modelNormalMatrix.mul(hash.mul(2).sub(1)), 0)).xyz
