@@ -19,11 +19,7 @@ import {
 } from '../vehicles/CarBuild'
 import { useGameInstance } from './GameContext'
 import { useGame } from './hooks'
-import { CarPicker } from './CarPicker'
-import { Button, ClassBadge, Panel, ScreenHeader, Segmented } from './kit'
-import { CarCard } from './MainMenu'
-import { MenuMusicBar } from './MenuMusicBar'
-import { OrbitLayer } from './OrbitLayer'
+import { Button, ClassBadge, Panel, Segmented } from './kit'
 
 type Tab = 'paint' | 'wheels' | 'performance' | 'livery' | 'plates' | 'spoilers' | 'presets'
 const TABS: [Tab, string][] = [
@@ -38,7 +34,12 @@ const TABS: [Tab, string][] = [
 
 const tabIcons = { paint: GiPaintBrush, wheels: GiCarWheel, performance: GiAutoRepair, livery: GiCheckeredFlag, plates: GiIdCard, spoilers: GiAutoRepair, presets: GiSave }
 
-export function Garage() {
+/**
+ * The workshop: category tabs and their options. It lives in the festival
+ * hub's right-hand panel (MainMenu, Garage tab), so the hub's tabs, car card
+ * and race button stay put while the camera moves in on what's being changed.
+ */
+export function GarageWorkshop() {
   const game = useGameInstance()
   const build = useGame((s) => s.build)
   const update = useGame((s) => s.updateBuild)
@@ -55,43 +56,30 @@ export function Garage() {
   useEffect(() => () => game?.setShowroomFocus('car'), [game])
 
   return (
-    <div className="screen screen--garage">
-      <OrbitLayer />
-      <ScreenHeader title="Garage" onBack={() => game?.closeGarage()} />
-
-      <div className="garage-left">
-        <nav className="garage-tabs" role="tablist" aria-label="Customise">
-          {TABS.map(([id, text]) => {
-            const Icon = tabIcons[id]
-            return (
+    <div className="hub-workshop">
+      <nav className="hub-workshop__tabs" role="tablist" aria-label="Customise">
+        {TABS.map(([id, text]) => {
+          const Icon = tabIcons[id]
+          return (
             <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? 'on' : ''} onClick={() => setTab(id)}>
-              <span><Icon aria-hidden="true" focusable="false"/>{text}</span>
+              <Icon aria-hidden="true" focusable="false" />
+              <span>{text}</span>
             </button>
-          )})}
-        </nav>
-        <Panel className="garage-options">
-          {tab === 'paint' && <PaintTab build={build} update={update} />}
-          {tab === 'wheels' && <WheelsTab build={build} update={update} wheel={wheel} onWheel={setWheel} disabled={switching} />}
-          {tab === 'spoilers' && <SpoilersTab build={build} update={update} disabled={switching}/>}
-          {tab === 'performance' && <PerformanceTab build={build} update={update} />}
-          {tab === 'livery' && <LiveryTab build={build} update={update} disabled={switching} />}
-          {tab === 'plates' && <PlatesTab build={build} update={update} disabled={switching} side={plateSide} onSide={setPlateSide} />}
-          {tab === 'presets' && <PresetsTab build={build} disabled={switching} />}
-          {tab !== 'livery' && tab !== 'plates' && tab !== 'spoilers' && tab !== 'presets' && <Button size="sm" variant="ghost" onClick={reset}>
-            Reset to stock
-          </Button>}
-        </Panel>
-        <MenuMusicBar />
-      </div>
-
-      <CarPicker className="garage-carpicker" />
-
-      <div className="garage-right">
-        {tab !== 'wheels' && tab !== 'plates' && tab !== 'spoilers' && <CarCard />}
-        <Button size="lg" variant="primary" className="menu-icon-action" disabled={switching} onClick={() => game?.startRace()}>
-          <GiCheckeredFlag aria-hidden="true"/> Race
-        </Button>
-      </div>
+          )
+        })}
+      </nav>
+      <Panel className="hub-workshop__options">
+        {tab === 'paint' && <PaintTab build={build} update={update} />}
+        {tab === 'wheels' && <WheelsTab build={build} update={update} wheel={wheel} onWheel={setWheel} disabled={switching} />}
+        {tab === 'spoilers' && <SpoilersTab build={build} update={update} disabled={switching}/>}
+        {tab === 'performance' && <PerformanceTab build={build} update={update} />}
+        {tab === 'livery' && <LiveryTab build={build} update={update} disabled={switching} />}
+        {tab === 'plates' && <PlatesTab build={build} update={update} disabled={switching} side={plateSide} onSide={setPlateSide} />}
+        {tab === 'presets' && <PresetsTab build={build} disabled={switching} />}
+        {tab !== 'livery' && tab !== 'plates' && tab !== 'spoilers' && tab !== 'presets' && <Button size="sm" variant="ghost" onClick={reset}>
+          Reset to stock
+        </Button>}
+      </Panel>
     </div>
   )
 }

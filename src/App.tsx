@@ -7,7 +7,6 @@ import { Narration } from './ui/Narration'
 import { MainMenu } from './ui/MainMenu'
 import { isTouchDevice } from './engine/device'
 
-const Garage = lazy(() => import('./ui/Garage').then(module => ({ default: module.Garage })))
 const Hud = lazy(() => import('./ui/Hud').then(module => ({ default: module.Hud })))
 const PauseMenu = lazy(() => import('./ui/PauseMenu').then(module => ({ default: module.PauseMenu })))
 const RaceIntro = lazy(() => import('./ui/RaceIntro').then(module => ({ default: module.RaceIntro })))
@@ -70,10 +69,9 @@ export default function App() {
             </div>
           </div>
         )}
-        {phase === 'menu' && <MainMenu />}
+        {(phase === 'menu' || phase === 'garage') && <MainMenu />}
         <Narration />
         <Suspense fallback={<div className="boot" role="status">Loading…</div>}>
-          {phase === 'garage' && <Garage />}
           {phase === 'intro' && <RaceIntro />}
           {(phase === 'countdown' || phase === 'racing' || phase === 'paused') && <Hud />}
           {(phase === 'countdown' || phase === 'racing') && touch && <TouchControls />}

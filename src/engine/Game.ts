@@ -1640,8 +1640,7 @@ export class Game {
           this.setShowroomPad(true)
         }
         this.idleShowroomCamera(dt)
-        // Slide the car right of the garage's left-hand panel. (On landscape phones the
-        // menu's car card turns compact instead — see index.css — so the car stays centred.)
+        // Slide the car right of the garage's workshop panel (the hub's left rail).
         this.carFraming.shift = phase === 'garage' ? 1.2 : 0
         // Pull in before a wall or pillar would come between camera and car, and
         // widen the lens to match so the car stays the same size on screen.

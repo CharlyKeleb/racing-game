@@ -1,15 +1,15 @@
 import { driftEvent } from '../racing/driftEvents'
-import { GiCheckeredFlag, GiStopwatch, GiRaceCar, GiRoad, GiHomeGarage, GiGears } from 'react-icons/gi'
-import { lazy, Suspense, useEffect, useState } from 'react'
-import { buildStats, carClass, performanceRank } from '../vehicles/CarBuild'
-import { getCar } from '../vehicles/carRegistry'
-import { GAME_MODES, type GameModeId } from '../racing/gameModes'
+import { GiCheckeredFlag, GiStopwatch, GiRaceCar, GiRoad, GiHomeGarage, GiGears, GiSteeringWheel, GiPathDistance } from 'react-icons/gi'
+import { lazy, Suspense, useEffect, useState, type ComponentType } from 'react'
+import { buildStats, carClass, DEFAULT_BUILD, performanceRank } from '../vehicles/CarBuild'
+import { getCar, selectableCars } from '../vehicles/carRegistry'
+import { GAME_MODES, gameMode, type GameModeId } from '../racing/gameModes'
 import { formatTime } from '../racing/LapTimer'
 import { readTrialRecord, trialBuildKey } from '../racing/TimeTrial'
 import { useGameInstance } from './GameContext'
 import { useGame } from './hooks'
 import { CarPicker } from './CarPicker'
-import { Button, ClassBadge, StatBar } from './kit'
+import { ClassBadge, StatBar } from './kit'
 import { OrbitLayer } from './OrbitLayer'
 import { RaceSetup } from './RaceSetup'
 import { TrackSelection } from './TrackSelection'
@@ -20,14 +20,33 @@ import { MenuMusicBar } from './MenuMusicBar'
 import { TIME_PRESETS } from '../world/timeOfDay'
 
 const SettingsDialog = lazy(() => import('./Settings').then(module => ({ default: module.SettingsDialog })))
+const GarageWorkshop = lazy(() => import('./Garage').then(module => ({ default: module.GarageWorkshop })))
+
+/**
+ * The festival hub (Forza Horizon / The Crew Motorfest / NFS): the showroom
+ * car is the hero in the middle; tabs across the top (Q / E, like a pad's
+ * bumpers) switch the right-hand column between the event mosaic, the car
+ * list and the workshop; the car's identity sits bottom-left and key hints
+ * along the bottom. The Garage tab is the garage phase (its camera framing),
+ * shown in place: the hub stays mounted across both phases.
+ */
+type Tab = 'play' | 'cars' | 'garage'
+const TAB_ORDER: Tab[] = ['play', 'cars', 'garage']
 
 export function MainMenu() {
   const game = useGameInstance()
-  const [showSettings, setShowSettings] = useState(false)
-  const [showRaceSetup, setShowRaceSetup] = useState(false)
-  const settings = useGame((s) => s.settings)
-  const build = useGame((s) => s.build)
-  const personalBest = settings.mode === 'timeTrial' ? readTrialRecord(settings.track, settings.car, trialBuildKey(build))?.lapMs ?? null : null
+  const phase = useGame((s) => s.phase)
+  const [picked, setPicked] = useState<Exclude<Tab, 'garage'>>('play')
+  const tab: Tab = phase === 'garage' ? 'garage' : picked
+  const [dialog, setDialog] = useState<'settings' | 'setup' | 'tracks' | null>(null)
+  const switching = useGame((s) => s.carSwitching || s.trackSwitching)
+  const carName = useGame((s) => s.carName)
+  const carId = useGame((s) => s.settings.car)
+  const go = (next: Tab) => {
+    if (next === 'garage') { if (!switching) game?.openGarage(); return }
+    game?.closeGarage()
+    setPicked(next)
+  }
   // Try immediately in case autoplay is allowed; otherwise the first click or
   // key in the menu brings up the garage's room tone and the soundtrack.
   useEffect(() => {
@@ -41,55 +60,186 @@ export function MainMenu() {
       window.removeEventListener('keydown', start)
     }
   }, [game])
-  const switching = useGame((s) => s.carSwitching || s.trackSwitching)
+
+  // Pad-style shortcuts while no dialog is open: Q / E tabs, ← / → cars, G garage, Esc out of it.
+  useEffect(() => {
+    if (dialog) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.repeat || e.altKey || e.ctrlKey || e.metaKey) return
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return
+      if (e.code === 'KeyQ' || e.code === 'KeyE') go(TAB_ORDER[(TAB_ORDER.indexOf(tab) + (e.code === 'KeyE' ? 1 : TAB_ORDER.length - 1)) % TAB_ORDER.length])
+      else if (e.code === 'ArrowLeft' || e.code === 'ArrowRight') game?.cycleCar(e.code === 'ArrowLeft' ? -1 : 1)
+      else if (e.code === 'KeyG') go(tab === 'garage' ? 'play' : 'garage')
+      else if (e.code === 'Escape' && tab === 'garage') go('play')
+      else return
+      e.preventDefault()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
+
+  const tabs: { id: Tab | 'garage' | 'settings'; label: string; Icon: ComponentType<{ 'aria-hidden'?: boolean }> }[] = [
+    { id: 'play', label: 'Play', Icon: GiCheckeredFlag },
+    { id: 'cars', label: 'Cars', Icon: GiSteeringWheel },
+    { id: 'garage', label: 'Garage', Icon: GiHomeGarage },
+    { id: 'settings', label: 'Settings', Icon: GiGears },
+  ]
+  const pick = (id: (typeof tabs)[number]['id']) => {
+    if (id === 'settings') setDialog((d) => (d === 'settings' ? null : 'settings'))
+    else go(id)
+  }
 
   return (
-    <div className="screen screen--menu">
+    <div className={`screen screen--menu hub hub--${tab}`}>
       <OrbitLayer />
-      <header className="menu-top">
-        <div className="logo">
-          RACING<span>/</span>GAME
-        </div>
-        <Button size="sm" className="menu-settings menu-icon-action" aria-label="Settings" onClick={() => setShowSettings((v) => !v)} aria-expanded={showSettings}>
-          <GiGears aria-hidden="true"/> Settings
-        </Button>
+      <div className="hub-banner" aria-hidden="true" key={carId}>{switching ? getCar(carId).name : carName}</div>
+      <header className="hub-top">
+        <div className="logo">RACING<span>/</span>GAME</div>
+        <nav className="hub-tabs" role="tablist" aria-label="Main menu">
+          <kbd className="hub-key" aria-hidden="true">Q</kbd>
+          {tabs.map(({ id, label, Icon }) => (
+            <button key={id} role="tab" aria-selected={id === tab} className={`hub-tab${id === tab ? ' on' : ''}`}
+              disabled={id === 'garage' && switching} aria-expanded={id === 'settings' ? dialog === 'settings' : undefined}
+              onClick={() => pick(id)}>
+              <span><Icon aria-hidden />{label}</span>
+            </button>
+          ))}
+          <kbd className="hub-key" aria-hidden="true">E</kbd>
+        </nav>
       </header>
 
-      <div className="menu-bottom">
-        <div className="menu-car">
-          <CarPicker />
-          <CarCard />
+      {/* In the garage the workshop takes this rail, so nothing covers the car being inspected. */}
+      {tab !== 'garage' && <aside className="hub-car">
+        <CarPicker />
+        <CarCard />
+        <div className="hub-car__tools">
           <RevButton />
           <MenuMusicBar />
         </div>
-        <div className="menu-actions">
-          <ModeSelect />
-          <TrackPicker />
-          <Button size="sm" variant="ghost" className="menu-setup" onClick={() => setShowRaceSetup(true)}>
-            {setupLabel(settings.mode, settings.driftEvent, settings.laps, personalBest)} · {TIME_PRESETS[settings.timeOfDay].label}{settings.weather === 'rain' ? ' · Rain' : ''}
-          </Button>
-          <Button size="md" className="menu-icon-action menu-garage" disabled={switching} onClick={() => game?.openGarage()}>
-            <GiHomeGarage aria-hidden="true"/> Garage
-          </Button>
-          <Button size="lg" variant="primary" className="menu-icon-action menu-race" disabled={switching} onClick={() => game?.startRace()} autoFocus>
-            <GiCheckeredFlag aria-hidden="true"/> {START_LABELS[settings.mode]}
-          </Button>
-        </div>
-      </div>
+      </aside>}
 
-      {showRaceSetup && <RaceSetup onClose={() => setShowRaceSetup(false)} />}
-      {showSettings && <Suspense fallback={<div role="status">Loading settings…</div>}><SettingsDialog onClose={() => setShowSettings(false)} /></Suspense>}
+      <section className={`hub-panel${tab === 'garage' ? ' hub-panel--left' : ''}`} key={tab} aria-label={tab === 'play' ? 'Events' : tab === 'cars' ? 'Cars' : 'Garage'}>
+        {tab === 'play' && <PlayMosaic onSetup={() => setDialog('setup')} onTracks={() => setDialog('tracks')} />}
+        {tab === 'cars' && <CarList />}
+        {tab === 'garage' && <Suspense fallback={<div className="hub-loading" role="status">Opening the garage…</div>}><GarageWorkshop /></Suspense>}
+      </section>
+
+      <footer className="hub-hints" aria-hidden="true">
+        <span><kbd>←</kbd><kbd>→</kbd> Car</span>
+        <span><kbd>Q</kbd><kbd>E</kbd> Tabs</span>
+        {tab === 'garage' ? <span><kbd>Esc</kbd> Back</span> : <span><kbd>G</kbd> Garage</span>}
+        {tab === 'play' && <span><kbd>Enter</kbd> Go</span>}
+        <span><kbd>Drag</kbd> Look around</span>
+      </footer>
+
+      {dialog === 'setup' && <RaceSetup onClose={() => setDialog(null)} />}
+      {dialog === 'tracks' && <TrackSelection onClose={() => setDialog(null)} />}
+      {dialog === 'settings' && <Suspense fallback={<div role="status">Loading settings…</div>}><SettingsDialog onClose={() => setDialog(null)} /></Suspense>}
     </div>
   )
 }
 
 const START_LABELS: Record<GameModeId, string> = { quick: 'Race', timeTrial: 'Start trial', drift: 'Start drifting', freeRoam: 'Drive' }
+const MODE_ICONS = { quick: GiCheckeredFlag, timeTrial: GiStopwatch, drift: GiRaceCar, freeRoam: GiRoad }
 
 function setupLabel(mode: GameModeId, event: Parameters<typeof driftEvent>[0], laps: number, personalBest: number | null): string {
-  if (mode === 'drift') return `Drift setup · ${driftEvent(event).name}`
-  if (mode === 'timeTrial') return `Time trial · PB ${formatTime(personalBest)}`
-  if (mode === 'freeRoam') return 'Free roam setup'
-  return `Race setup · ${laps} ${laps === 1 ? 'lap' : 'laps'}`
+  if (mode === 'drift') return `Drift · ${driftEvent(event).name}`
+  if (mode === 'timeTrial') return `PB ${formatTime(personalBest)}`
+  if (mode === 'freeRoam') return 'No timer'
+  return `${laps} ${laps === 1 ? 'lap' : 'laps'}`
+}
+
+/**
+ * Horizon-style event mosaic: the selected mode is the big hero tile over its
+ * circuit's aerial, with the start button; the other modes are colour-coded
+ * tiles that select it; circuit and setup tiles open their dialogs.
+ */
+function PlayMosaic({ onSetup, onTracks }: { onSetup(): void; onTracks(): void }) {
+  const game = useGameInstance()
+  const settings = useGame((s) => s.settings)
+  const build = useGame((s) => s.build)
+  const update = useGame((s) => s.updateSettings)
+  const trackName = useGame((s) => s.trackName)
+  const trackSwitching = useGame((s) => s.trackSwitching)
+  const switching = useGame((s) => s.carSwitching || s.trackSwitching)
+  const progress = useGame((s) => s.loadProgress)
+  const mode = gameMode(settings.mode)
+  const HeroIcon = MODE_ICONS[mode.id]
+  const preview = trackPreviews[settings.track as keyof typeof trackPreviews]
+  const personalBest = settings.mode === 'timeTrial' ? readTrialRecord(settings.track, settings.car, trialBuildKey(build))?.lapMs ?? null : null
+  const conditions = `${TIME_PRESETS[settings.timeOfDay].label}${settings.weather === 'rain' ? ' · Rain' : ''}`
+  return (
+    <div className="hub-mosaic">
+      <article className={`hub-hero hub-mode--${mode.id}`}>
+        <div className="hub-hero__art" aria-hidden="true"><TrackAerial id={preview ? settings.track : 'nurburgring'} /></div>
+        <div className="hub-hero__body">
+          <span className="hub-eyebrow"><HeroIcon aria-hidden="true" /> {mode.blurb}</span>
+          <h2 className="hub-hero__title">{mode.name}</h2>
+          <p className="hub-hero__meta">
+            <b>{trackName}</b>
+            <span>{trackSwitching ? `Loading · ${Math.round(progress * 100)}%` : `${preview?.lengthKm ?? '—'} km · ${setupLabel(settings.mode, settings.driftEvent, settings.laps, personalBest)} · ${conditions}`}</span>
+          </p>
+          <button className="hub-go" disabled={switching} onClick={() => game?.startRace()} autoFocus>
+            <span><GiCheckeredFlag aria-hidden="true" /> {START_LABELS[settings.mode]}</span>
+            <kbd aria-hidden="true">Enter</kbd>
+          </button>
+        </div>
+      </article>
+
+      <div className="hub-modes" role="radiogroup" aria-label="Game mode">
+        {GAME_MODES.filter((m) => m.id !== mode.id).map((m) => {
+          const Icon = MODE_ICONS[m.id]
+          return (
+            <button key={m.id} role="radio" aria-checked={false} className={`hub-tile hub-mode--${m.id}`} disabled={!m.available || trackSwitching}
+              title={m.available ? m.blurb : `${m.blurb}: coming soon`}
+              onClick={() => { if (m.available) update({ mode: m.id, ...(m.id === 'drift' ? { track: 'drift-park' } : {}) }) }}>
+              <Icon className="hub-tile__icon" aria-hidden="true" />
+              <Icon className="hub-tile__mark" aria-hidden="true" />
+              <span className="hub-tile__name">{m.name}</span>
+              <small>{m.available ? m.blurb : 'Soon'}</small>
+            </button>
+          )
+        })}
+      </div>
+
+      <div className="hub-row">
+        <button className="hub-tile hub-tile--wide" disabled={trackSwitching} onClick={onTracks} aria-label={`Choose circuit: ${trackName}`}>
+          <GiPathDistance className="hub-tile__icon" aria-hidden="true" />
+          <span className="hub-tile__name">Circuit</span>
+          <small>{trackName}</small>
+        </button>
+        <button className="hub-tile hub-tile--wide" onClick={onSetup}>
+          <GiGears className="hub-tile__icon" aria-hidden="true" />
+          <span className="hub-tile__name">Setup</span>
+          <small>{setupLabel(settings.mode, settings.driftEvent, settings.laps, personalBest)} · {conditions}</small>
+        </button>
+      </div>
+    </div>
+  )
+}
+
+/** Autoshow-style list: every car with its class and headline numbers; picking one drives it in. */
+function CarList() {
+  const carId = useGame((s) => s.settings.car)
+  const update = useGame((s) => s.updateSettings)
+  const switching = useGame((s) => s.carSwitching || s.trackSwitching)
+  const builds = useGame((s) => s.builds)
+  return (
+    <div className="hub-cars" role="radiogroup" aria-label="Cars">
+      {selectableCars().map((car) => {
+        const rank = performanceRank(builds[car.id] ?? DEFAULT_BUILD, car.stats)
+        return (
+          <button key={car.id} role="radio" aria-checked={car.id === carId} className={`hub-carrow${car.id === carId ? ' on' : ''}`}
+            disabled={switching} onClick={() => { if (car.id !== carId) update({ car: car.id }) }}>
+            <ClassBadge value={carClass(rank)} />
+            <span className="hub-carrow__name">{car.name}<small>{car.specs.drivetrain} · {car.specs.weightKg.toLocaleString()} kg</small></span>
+            <span className="hub-carrow__num"><b>{car.specs.powerHp}</b> hp</span>
+            <span className="hub-carrow__num"><b>{car.specs.topSpeedKmh}</b> km/h</span>
+          </button>
+        )
+      })}
+    </div>
+  )
 }
 
 /** Name, class, rank and stats of the current build. Shared by menu and garage. */
@@ -144,55 +294,4 @@ function CarSpecsStrip({ carId }: { carId: string }) {
       ))}
     </dl>
   )
-}
-
-/** Mode tiles: the current one lit; any still being built are locked with a "Soon" tag. */
-const modeIcons = { quick: GiCheckeredFlag, timeTrial: GiStopwatch, drift: GiRaceCar, freeRoam: GiRoad }
-
-function ModeSelect() {
-  const mode = useGame(s => s.settings.mode)
-  const update = useGame(s => s.updateSettings)
-  const switching = useGame(s => s.trackSwitching)
-  return (
-    <div className="mode-select">
-      <div className="mode-select__grid" role="radiogroup" aria-label="Game mode">
-        {GAME_MODES.map((m) => {
-          const Icon = modeIcons[m.id]
-          return <button
-            key={m.id}
-            role="radio"
-            aria-checked={m.id === mode}
-            disabled={!m.available || switching}
-            onClick={() => { if (m.available) update({mode: m.id, ...(m.id === 'drift' ? {track: 'drift-park'} : {})}) }}
-            className={m.id === mode ? 'on' : ''}
-            title={m.available ? m.blurb : `${m.blurb}: coming soon`}
-          >
-            <span className="mode-select__content"><Icon className="mode-select__icon" aria-hidden="true" focusable="false"/><span className="mode-select__text">{m.name}{m.id === mode && <small className="mode-select__description">{m.blurb}</small>}</span></span>
-            {!m.available && <i>Soon</i>}
-          </button>
-        })}
-      </div>
-    </div>
-  )
-}
-
-/** Open the circuit browser without starting a track download. */
-function TrackPicker() {
-  const [open, setOpen] = useState(false)
-  const trackName = useGame((s) => s.trackName)
-  const trackId = useGame((s) => s.settings.track)
-  const loading = useGame((s) => s.trackSwitching)
-  const progress = useGame((s) => s.loadProgress)
-  const preview = trackPreviews[trackId as keyof typeof trackPreviews]
-  return <>
-    <button className="menu-track" disabled={loading} aria-busy={loading} onClick={() => setOpen(true)} aria-label={`Choose circuit: ${trackName}`}>
-      <span className="menu-track__map" aria-hidden="true"><TrackAerial id={preview ? trackId : 'nurburgring'} /></span>
-      <span className="menu-track__details">
-        <span className="eyebrow">Selected circuit <span aria-hidden="true">↗</span></span>
-        <span className="menu-track__name">{trackName}</span>
-        <span className="menu-track__meta">{loading ? `Loading circuit · ${Math.round(progress * 100)}%` : <>{preview?.lengthKm ?? '—'} km per lap <i>/</i> Change circuit</>}</span>
-      </span>
-    </button>
-    {open && <TrackSelection onClose={() => setOpen(false)} />}
-  </>
 }
