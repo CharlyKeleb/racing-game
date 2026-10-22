@@ -3,6 +3,7 @@ import { MotionBlurEffect } from './MotionBlur'
 import { BOOST_BLUR_CENTER, BOOST_BLUR_INNER, BOOST_BLUR_OUTER, BOOST_BLUR_SPREAD, boostBlurSamples } from './BoostBlur'
 import { ScaledBloomEffect } from './ScaledBloomEffect'
 import { HAZE_STRENGTH } from './HeatHaze'
+import { VIGNETTE_DARKNESS, VIGNETTE_OFFSET } from './grade'
 import type { QualityPreset } from '../stores/gameStore'
 import * as THREE from 'three'
 import {
@@ -15,6 +16,7 @@ import {
   SMAAEffect,
   ToneMappingEffect,
   ToneMappingMode,
+  VignetteEffect,
 } from 'postprocessing'
 
 /** Offsets the image by the heat-haze buffer's signed rg (#56). */
@@ -78,7 +80,7 @@ export interface HazeSource {
   readonly active: boolean
 }
 
-/** Bloom + preset-scaled AA (SMAA on High, FXAA otherwise) + ACES, with speed-scaled velocity blur. */
+/** Bloom + preset-scaled AA (SMAA from Medium, FXAA on Low) + ACES + vignette, with speed-scaled velocity blur. */
 export class PostFX {
   private readonly vectors = new MotionVectors()
   private readonly motion: MotionBlurEffect
@@ -122,8 +124,10 @@ export class PostFX {
     this.mainPass = new EffectPass(
       camera,
       this.bloom,
-      quality === 'high' ? new SMAAEffect() : new FXAAEffect(),
+      // SMAA from Medium up: FXAA's blur softened the car's edges and badges.
+      quality === 'low' ? new FXAAEffect() : new SMAAEffect(),
       new ToneMappingEffect({ mode: ToneMappingMode.ACES_FILMIC }),
+      new VignetteEffect({ offset: VIGNETTE_OFFSET, darkness: VIGNETTE_DARKNESS }),
     )
     this.bloom.renderScale = quality === 'high' ? 1 : quality === 'medium' ? .5 : .25
     this.bloom.mipmapBlurPass.levels = quality === 'high' ? 8 : quality === 'medium' ? 5 : 3

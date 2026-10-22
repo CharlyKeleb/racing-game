@@ -1,6 +1,6 @@
 import * as THREE from 'three/webgpu'
 import { MotionVectors } from '../../effects/MotionVectors'
-import { Fn, Loop, convertToTexture, float, pass, renderOutput, screenUV, uniform, uv, texture, length, min, max, abs, step, smoothstep, vec2, If } from 'three/tsl'
+import { Fn, Loop, convertToTexture, float, pass, renderOutput, screenUV, uniform, uv, texture, length, min, max, abs, step, smoothstep, vec2, vec4, distance, If } from 'three/tsl'
 import { bloom } from 'three/addons/tsl/display/BloomNode.js'
 import { fxaa } from 'three/addons/tsl/display/FXAANode.js'
 import { smaa } from 'three/addons/tsl/display/SMAANode.js'
@@ -8,6 +8,7 @@ import type { QualityPreset } from '../../stores/gameStore'
 import { HAZE_STRENGTH } from '../../effects/HeatHaze'
 import { BOOST_BLUR_CENTER, BOOST_BLUR_INNER, BOOST_BLUR_OUTER, BOOST_BLUR_SPREAD, boostBlurSamples } from '../../effects/BoostBlur'
 import type { HazeSource } from '../../effects/PostFX'
+import { VIGNETTE_DARKNESS, VIGNETTE_OFFSET } from '../../effects/grade'
 
 /**
  * The post stack for WebGPURenderer, as TSL nodes: the same chain as the
@@ -109,8 +110,12 @@ export class NodePostFX {
     const glow = bloom(color, 0.35, 0.5, 1.2)
     glow.smoothWidth.value = 0.2
     glow.setResolutionScale(quality === 'high' ? 0.5 : quality === 'medium' ? 0.35 : 0.25)
-    const graded = renderOutput(color.add(glow))
-    this.pipeline.outputNode = quality === 'high' ? smaa(graded) : fxaa(graded)
+    const toned = renderOutput(color.add(glow))
+    // VignetteEffect's default technique (WebGL stack), written with the edges in rising order.
+    const fade = smoothstep(VIGNETTE_OFFSET * 0.799, 0.8, distance(screenUV, vec2(0.5)).mul(VIGNETTE_DARKNESS + VIGNETTE_OFFSET)).oneMinus()
+    const graded = vec4(toned.rgb.mul(fade), toned.a)
+    // SMAA from Medium up: FXAA's blur softened the car's edges and badges.
+    this.pipeline.outputNode = quality === 'low' ? fxaa(graded) : smaa(graded)
     this.pipeline.needsUpdate = true
   }
 
