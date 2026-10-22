@@ -1,22 +1,25 @@
 import * as THREE from 'three/webgpu'
 import { MotionVectors } from '../../effects/MotionVectors'
-import { Fn, Loop, convertToTexture, float, pass, renderOutput, screenUV, uniform, uv, texture, length, min, max, abs, step, If } from 'three/tsl'
+import { Fn, Loop, convertToTexture, float, pass, renderOutput, screenUV, uniform, uv, texture, length, min, max, abs, step, smoothstep, vec2, If } from 'three/tsl'
 import { bloom } from 'three/addons/tsl/display/BloomNode.js'
 import { fxaa } from 'three/addons/tsl/display/FXAANode.js'
 import { smaa } from 'three/addons/tsl/display/SMAANode.js'
 import type { QualityPreset } from '../../stores/gameStore'
 import { HAZE_STRENGTH } from '../../effects/HeatHaze'
+import { BOOST_BLUR_CENTER, BOOST_BLUR_INNER, BOOST_BLUR_OUTER, BOOST_BLUR_SPREAD, boostBlurSamples } from '../../effects/BoostBlur'
 import type { HazeSource } from '../../effects/PostFX'
 
 /**
  * The post stack for WebGPURenderer, as TSL nodes: the same chain as the
  * `postprocessing` one in effects/PostFX.ts (WebGL only). Bloom over a
  * half-float scene pass, then ACES + sRGB, then SMAA on High or FXAA, and
- * depth-aware velocity blur before bloom and grading.
+ * depth-aware velocity blur before bloom and grading, then the nitro zoom blur.
  */
 export class NodePostFX {
   private readonly vectors = new MotionVectors()
   private readonly exposure = uniform(0)
+  /** Nitro zoom blur strength (effects/BoostBlur.ts); 0 skips the samples. */
+  private readonly boost = uniform(0)
   private amount = 0
   private player: THREE.Object3D | null = null
   private readonly renderer: THREE.WebGPURenderer
@@ -82,6 +85,27 @@ export class NodePostFX {
       const offset = hazePass.getTextureNode('output').sample(screenUV).rg.mul(HAZE_STRENGTH)
       color = convertToTexture(blurred).sample(screenUV.add(offset))
     }
+    // Nitro zoom blur, after motion blur and haze, before bloom: same maths as BoostBlurEffect (WebGL).
+    const boost = this.boost
+    const boostSamples = boostBlurSamples(quality)
+    const boostSource = convertToTexture(color)
+    const aspect = this.aspect
+    color = Fn(() => {
+      const at = screenUV
+      const output = boostSource.sample(at).toVar()
+      If(boost.greaterThan(0.001), () => {
+        const toCenter = vec2(BOOST_BLUR_CENTER.x, 1 - BOOST_BLUR_CENTER.y).sub(at).toVar()
+        const d = length(toCenter.mul(vec2(aspect, 1))).mul(2)
+        const amount = boost.mul(smoothstep(BOOST_BLUR_INNER, BOOST_BLUR_OUTER, d))
+        const stepUv = toCenter.mul(amount.mul(BOOST_BLUR_SPREAD / (boostSamples - 1))).toVar()
+        const sum = output.toVar()
+        Loop({ start: 1, end: boostSamples, type: 'int', condition: '<' }, ({ i }) => {
+          sum.addAssign(boostSource.sample(at.add(stepUv.mul(float(i)))))
+        })
+        output.assign(sum.div(boostSamples))
+      })
+      return output
+    })()
     const glow = bloom(color, 0.35, 0.5, 1.2)
     glow.smoothWidth.value = 0.2
     glow.setResolutionScale(quality === 'high' ? 0.5 : quality === 'medium' ? 0.35 : 0.25)
@@ -91,6 +115,11 @@ export class NodePostFX {
   }
 
   private readonly size = new THREE.Vector2(1, 1)
+  private readonly aspect = uniform(1)
+
+  setBoostBlur(strength: number): void {
+    this.boost.value = strength
+  }
 
   setMotionBlur(exposure: number, player: THREE.Object3D | null): void {
     this.amount = exposure
@@ -106,6 +135,7 @@ export class NodePostFX {
 
   render(): void {
     this.renderer.getDrawingBufferSize(this.size)
+    this.aspect.value = this.size.x / Math.max(1, this.size.y)
     if (this.vectors.target.width !== this.size.x || this.vectors.target.height !== this.size.y) this.vectors.setSize(this.size.x, this.size.y)
     this.exposure.value = this.amount > 0 && this.vectors.capture(this.renderer, this.scene, this.camera, this.player) ? this.amount : 0
     this.pipeline.render()

@@ -1,5 +1,6 @@
 import { MotionVectors } from './MotionVectors'
 import { MotionBlurEffect } from './MotionBlur'
+import { BOOST_BLUR_CENTER, BOOST_BLUR_INNER, BOOST_BLUR_OUTER, BOOST_BLUR_SPREAD, boostBlurSamples } from './BoostBlur'
 import { ScaledBloomEffect } from './ScaledBloomEffect'
 import { HAZE_STRENGTH } from './HeatHaze'
 import type { QualityPreset } from '../stores/gameStore'
@@ -37,6 +38,40 @@ class HeatHazeEffect extends Effect {
   }
 }
 
+/** Nitro zoom blur toward BOOST_BLUR_CENTER (effects/BoostBlur.ts). */
+class BoostBlurEffect extends Effect {
+  constructor(samples: number) {
+    super('NitroBoostBlur', /* glsl */ `
+      uniform float strength;
+      uniform vec2 center;
+      uniform float aspect;
+      void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor) {
+        vec2 toCenter = center - uv;
+        float d = length(toCenter * vec2(aspect, 1.)) * 2.;
+        float amount = strength * smoothstep(${BOOST_BLUR_INNER.toFixed(3)}, ${BOOST_BLUR_OUTER.toFixed(3)}, d);
+        if (amount <= .001) { outputColor = inputColor; return; }
+        vec2 stepUv = toCenter * (${BOOST_BLUR_SPREAD.toFixed(3)} * amount / float(${samples - 1}));
+        vec4 sum = inputColor;
+        for (int i = 1; i < ${samples}; i++) sum += texture2D(inputBuffer, uv + stepUv * float(i));
+        outputColor = sum / float(${samples});
+      }
+    `, {
+      attributes: EffectAttribute.CONVOLUTION,
+      uniforms: new Map<string, THREE.Uniform>([
+        ['strength', new THREE.Uniform(0)],
+        ['center', new THREE.Uniform(BOOST_BLUR_CENTER.clone())],
+        ['aspect', new THREE.Uniform(1)],
+      ]),
+    })
+  }
+
+  set strength(value: number) { this.uniforms.get('strength')!.value = value }
+
+  override setSize(width: number, height: number): void {
+    this.uniforms.get('aspect')!.value = width / Math.max(1, height)
+  }
+}
+
 /** The heat-haze source: a scene of distortion puffs, and whether anything is in it this frame. */
 export interface HazeSource {
   readonly scene: THREE.Scene
@@ -60,6 +95,9 @@ export class PostFX {
   private readonly hazeTarget = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, format: THREE.RGBAFormat, depthBuffer: false })
   private readonly hazePass: EffectPass
   private haze: HazeSource | null = null
+  /** Nitro zoom blur (BoostBlur.ts); its pass is off while there's no boost. */
+  private readonly boost: BoostBlurEffect
+  private readonly boostPass: EffectPass
   private readonly clearColor = new THREE.Color()
 
   constructor(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera, quality: QualityPreset) {
@@ -76,6 +114,11 @@ export class PostFX {
     this.hazePass = new EffectPass(camera, new HeatHazeEffect(this.hazeTarget.texture))
     this.hazePass.enabled = false
     this.composer.addPass(this.hazePass)
+    // After motion blur and haze, before bloom: the trails' glow smears with the scene.
+    this.boost = new BoostBlurEffect(boostBlurSamples(quality))
+    this.boostPass = new EffectPass(camera, this.boost)
+    this.boostPass.enabled = false
+    this.composer.addPass(this.boostPass)
     this.mainPass = new EffectPass(
       camera,
       this.bloom,
@@ -99,6 +142,11 @@ export class PostFX {
 
   setHaze(haze: HazeSource | null): void {
     this.haze = haze
+  }
+
+  setBoostBlur(strength: number): void {
+    this.boost.strength = strength
+    this.boostPass.enabled = strength > 0.001
   }
 
   setSize(w: number, h: number): void {

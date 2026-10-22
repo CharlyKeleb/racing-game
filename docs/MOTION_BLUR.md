@@ -13,3 +13,7 @@ The extra opaque-geometry pass has a GPU/draw-call cost; no device-wide performa
 ## Verification fixture
 
 Open `/src/dev/motion-preview.html`, or append `?renderer=webgpu`. It reads the actual half-float velocity buffer for stationary geometry, camera/object movement and the body mask, checks camera-cut rejection, then renders a moving scene through the real post stack. The reported renderer must be `webgpu` to establish native WebGPU coverage.
+
+## Nitro zoom blur
+
+While nitro burns, `effects/BoostBlur.ts` smears the frame outward from just above the centre (near the horizon), with the middle of the frame (the car and the road ahead) kept sharp and the smear growing toward the edges. It runs after velocity blur and heat haze, before bloom, as `BoostBlurEffect` in `effects/PostFX.ts` (WebGL) and the matching node in `engine/nodes/postfx.ts` (WebGPU), with 6/9/12 samples on Low/Medium/High. Strength follows the boost, needs 50 km/h (full from 140), and scales with the Motion blur setting, so zero blur (or reduced motion) turns it off. It needs post effects; without them the streak rush (`NitroRush`) still plays.

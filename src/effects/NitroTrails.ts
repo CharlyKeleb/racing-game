@@ -2,20 +2,37 @@ import * as THREE from 'three'
 import type { VehicleConfig } from '../vehicles/VehicleConfig'
 
 /** Points kept per trail (a ring buffer, sampled every rendered frame). */
-const POINTS = 40
-/** Seconds a trail point lives: the length of the streak at speed. */
-const LIFE = 0.42
-/** Ribbon width at the car and at the tail end, m. */
-const WIDTH_HEAD = 0.2
-const WIDTH_TAIL = 0.05
+const POINTS = 48
+/** Seconds a trail point lives: the length of the streak at speed (~33 m at 200 km/h). */
+const LIFE = 0.6
 
 /**
- * Trail colour from the car (0) to the tail end (1): white-hot cyan at the
- * lights, electric blue, then violet as it dies. A perfect boost burns pink.
- * Above 1 so the bloom picks it up.
+ * Each trail is two ribbons on the same path, like a neon tube: a wide, deep
+ * violet glow and a thin hot core inside it. Colours run from the car (0) to
+ * the tail end (1); the core is above 1 so the bloom picks it up, the glow
+ * mostly isn't, so it stays saturated instead of washing out to white.
+ * A perfect boost burns magenta-pink.
  */
-const BOOST_STOPS = [new THREE.Color(1.6, 2.4, 3), new THREE.Color(0.25, 0.9, 2.6), new THREE.Color(0.75, 0.25, 1.9), new THREE.Color(0, 0, 0)]
-const PERFECT_STOPS = [new THREE.Color(3, 2, 2.6), new THREE.Color(2.6, 0.45, 1.7), new THREE.Color(1.1, 0.2, 1.9), new THREE.Color(0, 0, 0)]
+interface Layer {
+  /** Ribbon half-width at the car and at the tail end, m. */
+  head: number
+  tail: number
+  boost: THREE.Color[]
+  perfect: THREE.Color[]
+}
+const c = (r: number, g: number, b: number) => new THREE.Color(r, g, b)
+const LAYERS: Layer[] = [
+  {
+    head: 0.24, tail: 0.15,
+    boost: [c(0.55, 0.12, 1.25), c(0.48, 0.08, 1.15), c(0.3, 0.04, 0.85), c(0, 0, 0)],
+    perfect: [c(1.2, 0.12, 0.8), c(1.0, 0.08, 0.95), c(0.55, 0.04, 0.8), c(0, 0, 0)],
+  },
+  {
+    head: 0.065, tail: 0.03,
+    boost: [c(2.4, 1.5, 3.2), c(1.5, 0.55, 2.9), c(0.85, 0.2, 2.0), c(0, 0, 0)],
+    perfect: [c(3.2, 1.9, 2.7), c(2.6, 0.6, 2.0), c(1.4, 0.25, 1.7), c(0, 0, 0)],
+  },
+]
 function trailColor(stops: THREE.Color[], t: number, out: THREE.Color): THREE.Color {
   const x = Math.min(0.999, Math.max(0, t)) * (stops.length - 1)
   const i = Math.floor(x)
@@ -26,7 +43,8 @@ function trailColor(stops: THREE.Color[], t: number, out: THREE.Color): THREE.Co
 export function trailEmitters(cfg: VehicleConfig): [number, number, number][] {
   const [hx, hy, hz] = cfg.chassisHalfExtents
   const [cx, cy, cz] = cfg.chassisCenter
-  const y = cy + hy * 0.3
+  // Low at the rear valance, where the exhausts and diffuser are: the ribbons hug the road.
+  const y = cy - hy * 0.15
   const z = cz - hz + 0.06
   return [
     [cx + hx - 0.2, y, z],
@@ -78,14 +96,15 @@ export class NitroTrails {
       head: 0,
       count: 0,
     }))
-    const verts = this.trails.length * POINTS * 2
+    const ribbons = this.trails.length * LAYERS.length
+    const verts = ribbons * POINTS * 2
     this.positions = new Float32Array(verts * 3)
     this.colors = new Float32Array(verts * 3)
     const uvs = new Float32Array(verts * 2)
     const index: number[] = []
-    for (let t = 0; t < this.trails.length; t++) {
+    for (let r = 0; r < ribbons; r++) {
       for (let k = 0; k < POINTS; k++) {
-        const v = (t * POINTS + k) * 2
+        const v = (r * POINTS + k) * 2
         uvs[v * 2] = k / (POINTS - 1)
         uvs[v * 2 + 1] = 0
         uvs[v * 2 + 2] = k / (POINTS - 1)
@@ -112,7 +131,7 @@ export class NitroTrails {
   /**
    * @param body the car's leaning body node (the emitters ride on it)
    * @param intensity nitro boost, 0..1 (above 1 in a perfect boost); 0 lets the trails die out
-   * @param perfect a perfect boost: the trails burn pink
+   * @param perfect a perfect boost: the trails burn magenta
    */
   update(body: THREE.Object3D, camera: THREE.Camera, intensity: number, perfect: boolean, dt: number): void {
     this.time += dt
@@ -141,12 +160,14 @@ export class NitroTrails {
     this.mesh.visible = alive
     if (!alive) return
 
-    const stops = perfect ? PERFECT_STOPS : BOOST_STOPS
     camera.getWorldPosition(_view)
-    for (let t = 0; t < this.trails.length; t++) {
+    for (let r = 0; r < this.trails.length * LAYERS.length; r++) {
+      const t = r % this.trails.length
+      const layer = LAYERS[(r - t) / this.trails.length]
+      const stops = perfect ? layer.perfect : layer.boost
       const trail = this.trails[t]
       for (let k = 0; k < POINTS; k++) {
-        const v = (t * POINTS + k) * 2
+        const v = (r * POINTS + k) * 2
         // k = 0 is the newest point; beyond the live points the ribbon collapses onto the last one.
         const n = Math.min(k, Math.max(0, trail.count - 1))
         const i = (trail.head - n + POINTS) % POINTS
@@ -161,7 +182,7 @@ export class NitroTrails {
         const age = Math.min(1, (this.time - trail.born[i]) / LIFE)
         const along = Math.max(age, trail.count > 1 ? n / (trail.count - 1) : 1)
         const live = k < trail.count ? 1 : 0
-        const width = (WIDTH_HEAD + (WIDTH_TAIL - WIDTH_HEAD) * along) * (0.7 + 0.3 * trail.strength[i])
+        const width = (layer.head + (layer.tail - layer.head) * along) * (0.7 + 0.3 * trail.strength[i])
         this.positions[v * 3] = _a.x + _side.x * width
         this.positions[v * 3 + 1] = _a.y + _side.y * width
         this.positions[v * 3 + 2] = _a.z + _side.z * width
