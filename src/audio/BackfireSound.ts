@@ -1,5 +1,6 @@
 import { BANG, type PopKind } from '../vehicles/Backfire'
 import { makeThumpPCM } from './ImpactPCM'
+import { DEFAULT_VOICE, type PopVoice } from './EngineVoice'
 
 /** Where each recorded pop sits in backfire-bank.wav (scripts/audio/build-backfire-bank.mjs writes it). */
 export interface BackfireBankIndex {
@@ -59,18 +60,31 @@ const MAX_VOICES = 8
 /**
  * One car's exhaust pops: the sharp crackle of the overrun and the big "POOO"
  * of a supercar upshift, nitro lighting or a burnout, from real recordings,
- * varied in pitch so a burst never repeats itself. Plays into `destination`
- * (the player's effects bus, or a rival's 3D panner).
+ * varied in pitch so a burst never repeats itself, and voiced per car (see
+ * EngineVoice.pops): a muscle car's deep, muffled thud, a race car's sharp
+ * crack. Plays into `destination` (the player's effects bus, or a rival's 3D panner).
  */
 export class BackfireSound {
   private readonly ctx: BaseAudioContext
-  private readonly destination: AudioNode
+  /** The car's exhaust tone: every pop goes through it. */
+  private readonly tone: BiquadFilterNode
   private readonly voices = new Set<AudioBufferSourceNode>()
   private variant = 0
+  private voice: PopVoice = DEFAULT_VOICE.pops
 
   constructor(ctx: BaseAudioContext, destination: AudioNode) {
     this.ctx = ctx
-    this.destination = destination
+    this.tone = ctx.createBiquadFilter()
+    this.tone.type = 'lowpass'
+    this.tone.Q.value = 0.7
+    this.tone.frequency.value = this.voice.toneHz
+    this.tone.connect(destination)
+  }
+
+  /** The car's pops (see EngineVoice.pops). */
+  setVoice(voice: PopVoice): void {
+    this.voice = voice
+    this.tone.frequency.value = voice.toneHz
   }
 
   /** Level a pop of this kind and strength plays at (before distance), for tests and the engine duck. */
@@ -86,11 +100,12 @@ export class BackfireSound {
     const list = kind === BANG ? bank.bang : bank.crackle
     if (!list.length) return false
     const at = this.ctx.currentTime
-    const level = BackfireSound.level(kind, strength)
-    // Bangs a touch deeper, crackles scattered either side.
-    const rate = kind === BANG ? 0.86 + Math.random() * 0.14 : 0.9 + Math.random() * 0.22
+    const v = this.voice
+    const level = BackfireSound.level(kind, strength) * (kind === BANG ? v.bang : v.crackle)
+    // Bangs a touch deeper, crackles scattered either side, around the car's own pitch.
+    const rate = v.pitch * (kind === BANG ? 0.86 + Math.random() * 0.14 : 0.9 + Math.random() * 0.22)
     this.play(list[this.variant++ % list.length], rate, level, at)
-    if (kind === BANG) this.play(bank.thump, 0.9 + Math.random() * 0.15, level * THUMP_GAIN, at)
+    if (kind === BANG) this.play(bank.thump, Math.sqrt(v.pitch) * (0.9 + Math.random() * 0.15), level * THUMP_GAIN * v.thump, at)
     return true
   }
 
@@ -99,7 +114,7 @@ export class BackfireSound {
     source.buffer = buffer
     source.playbackRate.value = rate
     gain.gain.value = level
-    source.connect(gain).connect(this.destination)
+    source.connect(gain).connect(this.tone)
     this.voices.add(source)
     source.onended = () => { source.disconnect(); gain.disconnect(); this.voices.delete(source) }
     source.start(at)
@@ -108,6 +123,7 @@ export class BackfireSound {
   dispose(): void {
     for (const source of this.voices) { source.onended = null; source.stop(); source.disconnect() }
     this.voices.clear()
+    this.tone.disconnect()
   }
 }
 

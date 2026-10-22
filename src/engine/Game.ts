@@ -432,7 +432,7 @@ export class Game {
     progress(0.6)
     const entry = getCar(carId)
     this.carId = entry.id
-    this.audio.setCarAudio(entry.audioUrl, entry.firingPerRev, entry.noise)
+    this.audio.setCarAudio(entry.audioUrl, entry.firingPerRev, entry.noise, entry.voice)
     const build = gameStore.getState().build
     this.baseConfig = base
     gameStore.setState({ carName: base.name })
@@ -1116,7 +1116,7 @@ export class Game {
     const inShowroom = phase === 'menu' || phase === 'garage'
     this.effects.group.visible = !inShowroom
     if (inShowroom) this.setShowroomPad(true)
-    this.audio.setCarAudio(entry.audioUrl, entry.firingPerRev, entry.noise)
+    this.audio.setCarAudio(entry.audioUrl, entry.firingPerRev, entry.noise, entry.voice)
     gameStore.setState({ carName: base.name })
     telemetryStore.setState({ redlineRpm: config.engine.redlineRpm })
     this.camera.cockpitCar = entry.id
