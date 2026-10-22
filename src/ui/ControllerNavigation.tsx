@@ -31,6 +31,10 @@ export function ControllerNavigation({ phase }: { phase: GamePhase }) {
           if (items.includes(active)) active.click()
           else items[0]?.focus()
         }
+        // LB / RB page through the hub's tabs: the hub already binds Q / E for that.
+        for (const [button, code] of [[PAD.LB, 'KeyQ'], [PAD.RB, 'KeyE']] as const) {
+          if (pressed[button] && !previous[button] && !document.querySelector('dialog[open]')) window.dispatchEvent(new KeyboardEvent('keydown', { code }))
+        }
         if (pressed[PAD.B] && !previous[PAD.B]) {
           const dialogs = document.querySelectorAll<HTMLDialogElement>('dialog[open]')
           const dialog = dialogs.item(dialogs.length - 1)
@@ -41,7 +45,8 @@ export function ControllerNavigation({ phase }: { phase: GamePhase }) {
       previous = pressed
       frame = requestAnimationFrame(poll)
     }
-    const clearFocus = () => document.documentElement.classList.remove('controller-input')
+    // Real mouse or keyboard input hands focus styling back; the pad's own synthetic keys don't.
+    const clearFocus = (e?: Event) => { if (!e || e.isTrusted) document.documentElement.classList.remove('controller-input') }
     window.addEventListener('pointerdown', clearFocus)
     window.addEventListener('keydown', clearFocus)
     frame = requestAnimationFrame(poll)
