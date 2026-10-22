@@ -16,6 +16,7 @@ import { WetRoads } from '../effects/WetRoads'
 import { motionExposure } from '../effects/MotionBlur'
 import { WhipStreaks } from '../effects/WhipStreaks'
 import { NitroRush } from '../effects/NitroRush'
+import { boostBlurTarget, stepBoostBlur } from '../effects/BoostBlur'
 import { DrivingLine } from '../effects/DrivingLine'
 import { BrakingGuide } from '../racing/BrakingGuide'
 import { performanceCapture } from './PerformanceCapture'
@@ -182,6 +183,8 @@ export class Game {
   private readonly whipStreaks = new WhipStreaks()
   /** Nitro speed streaks bursting out of the frame (behind the Speed Lines setting). */
   private readonly nitroRush = new NitroRush()
+  /** Nitro zoom blur strength, eased (effects/BoostBlur.ts). */
+  private boostBlur = 0
   private readonly renderer: Renderer
   private readonly assets = new AssetManager()
   private readonly input = new InputManager()
@@ -1710,6 +1713,10 @@ export class Game {
     const nitro = this.vehicle.controller.nitro
     const rushing = phase === 'racing' && !this.camera.lookBack
     this.nitroRush.update(camera, rushing ? nitro.intensity : 0, nitro.perfect, gameStore.getState().settings.speedLines, phase === 'paused' ? 0 : frameDt)
+    // Cockpit gets it too: the dash sits low in the sharp middle of the frame.
+    const boostTarget = rushing ? boostBlurTarget(nitro.intensity, this.vehicle.speedKmh, blurAmount) : 0
+    if (phase !== 'paused') this.boostBlur = stepBoostBlur(this.boostBlur, boostTarget, frameDt)
+    this.renderer.setBoostBlur(this.boostBlur)
     const staging = phase === 'intro' || phase === 'countdown'
     if (staging) this.updateStaging(phase, dt)
     else if (phase === 'racing' && this.lightsShown > 0) {

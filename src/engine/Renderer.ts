@@ -43,6 +43,8 @@ export function maxAnisotropy(renderer: AnyRenderer): number {
 interface PostStack {
   setMotionBlur(exposure: number, player: THREE.Object3D | null): void
   setHaze(haze: HazeSource | null): void
+  /** Nitro zoom blur, 0 = off (effects/BoostBlur.ts). */
+  setBoostBlur(strength: number): void
   setSize(w: number, h: number): void
   render(): void
   dispose(): void
@@ -215,6 +217,11 @@ export class Renderer {
 
   setMotionBlur(exposure: number, player: THREE.Object3D | null): void {
     this.postfx?.setMotionBlur(exposure, player)
+  }
+
+  /** Nitro zoom blur (post FX only; Low without post FX keeps the streak rush alone). */
+  setBoostBlur(strength: number): void {
+    this.postfx?.setBoostBlur(strength)
   }
 
   private viewOpacity = 1
