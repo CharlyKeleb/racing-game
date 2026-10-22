@@ -5,6 +5,13 @@ import type { CarModel } from './CarModel'
 import { SPOILER_FIT, SPOILER_URL, sanitizeSpoiler, spoilerStripe, type SpoilerId } from './SpoilerCatalog'
 
 /** Player-only bolt-on parts. AssetManager owns shared GLB geometry; this owns materials. */
+/** Cars whose stock wing is part of their body meshes, so it goes when a custom spoiler is fitted. */
+const STOCK_WINGS: Record<string,{materials:readonly string[];minY:number;maxZ:number}> = {
+  bmw:{materials:['Mat.3'],minY:.86,maxZ:-2.0},
+  diablo:{materials:['WC_TEAM_WINDOWS_PL.001','BLACK.001'],minY:.93,maxZ:-1.75},
+  amg:{materials:['amgMercedesAMG_GT3_2020Paint_Material1','amgMercedesAMG_GT3_2020Coloured_Material1','amgMercedesAMG_GT3_2020Carbon1_Material1','white'],minY:.98,maxZ:-1.9},
+}
+
 export class CarSpoiler {
   readonly group = new THREE.Group()
   private readonly blade = new THREE.MeshStandardMaterial({name:'custom_spoiler_blade',color:0x192127,metalness:.35,roughness:.34,side:THREE.DoubleSide})
@@ -76,21 +83,22 @@ export class CarSpoiler {
     this.design.needsUpdate=true
   }
 
-  /** BMW's stock wing is merged into Mat.3. Remove only its isolated upper-rear triangles. */
+  /** A stock wing merged into body materials: drop only its triangles above `minY` and behind `maxZ` (body metres). */
   private prepareStockWing():void {
-    if(this.originals.length||this.model.root.name!=='bmw')return
+    const wing=STOCK_WINGS[this.model.root.name]
+    if(this.originals.length||!wing)return
     this.model.body.updateWorldMatrix(true,true)
     const inverse=this.model.body.matrixWorld.clone().invert(),point=new THREE.Vector3()
     this.model.body.traverse(node=>{
       if(!(node instanceof THREE.Mesh)||Array.isArray(node.material))return
       const originalNames:unknown=node.userData.garageMaterialNames
-      if(node.material.name!=='Mat.3'&&!(Array.isArray(originalNames)&&originalNames.includes('Mat.3')))return
+      if(!wing.materials.includes(node.material.name)&&!(Array.isArray(originalNames)&&originalNames.some(n=>wing.materials.includes(n))))return
       const geometry=node.geometry,positions=geometry.getAttribute('position'),index=geometry.getIndex(),count=index?.count??positions.count
       const transform=new THREE.Matrix4().multiplyMatrices(inverse,node.matrixWorld),keep:number[]=[]
       let removed=0
-      for(let i=0;i<count;i+=3){let wing=true
-        for(let j=0;j<3;j++){const v=index?index.getX(i+j):i+j;point.fromBufferAttribute(positions,v).applyMatrix4(transform);if(point.y<.86||point.z> -2.0)wing=false}
-        if(wing)removed++;else for(let j=0;j<3;j++)keep.push(index?index.getX(i+j):i+j)
+      for(let i=0;i<count;i+=3){let inWing=true
+        for(let j=0;j<3;j++){const v=index?index.getX(i+j):i+j;point.fromBufferAttribute(positions,v).applyMatrix4(transform);if(point.y<wing.minY||point.z>wing.maxZ)inWing=false}
+        if(inWing)removed++;else for(let j=0;j<3;j++)keep.push(index?index.getX(i+j):i+j)
       }
       if(removed){const without=geometry.clone();without.setIndex(keep);this.originals.push({mesh:node,original:geometry,without})}
     })

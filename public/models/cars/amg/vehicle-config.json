@@ -1,0 +1,49 @@
+{
+  "id": "amg",
+  "name": "Mercedes-AMG GT3",
+  "massKg": 1285,
+  "chassisHalfExtents": [0.98, 0.32, 2.3],
+  "chassisCenter": [0, 0.6, -0.08],
+  "centerOfMass": [0, 0.33, -0.1],
+  "wheels": [
+    { "id": "FL", "position": [0.864, 0.661, 1.314], "radius": 0.341, "width": 0.337, "steered": true, "driven": false, "handbrake": false },
+    { "id": "FR", "position": [-0.864, 0.661, 1.314], "radius": 0.341, "width": 0.337, "steered": true, "driven": false, "handbrake": false },
+    { "id": "RL", "position": [0.866, 0.675, -1.314], "radius": 0.354, "width": 0.34, "steered": false, "driven": true, "handbrake": true },
+    { "id": "RR", "position": [-0.866, 0.675, -1.314], "radius": 0.354, "width": 0.34, "steered": false, "driven": true, "handbrake": true }
+  ],
+  "engine": {
+    "idleRpm": 1200,
+    "redlineRpm": 7500,
+    "torqueCurve": [
+      [1200, 320],
+      [3000, 520],
+      [5000, 640],
+      [6500, 600],
+      [7300, 520],
+      [7500, 480]
+    ],
+    "gearRatios": [-3.0, 3.18, 2.26, 1.75, 1.43, 1.2, 1.03],
+    "finalDrive": 3.2,
+    "efficiency": 0.88,
+    "shiftUpRpm": 7200,
+    "shiftDownRpm": 4300,
+    "shiftTimeSec": 0.05
+  },
+  "exhausts": [[0.32, 0.3, -2.38], [-0.32, 0.3, -2.38]],
+  "tires": {
+    "grip": 1.95,
+    "corneringStiffness": 11,
+    "shape": 1.8,
+    "handbrakeGripScale": 0.4,
+    "rollingResistance": 0.012,
+    "tractionControl": true
+  },
+  "brakeForce": 36000,
+  "steerFalloffSpeed": 11,
+  "yawStability": 6,
+  "driftAssist": 0.2,
+  "maxDriftAngle": 0.6,
+  "dragCoefficient": 0.45,
+  "downforceCoefficient": 1.2,
+  "downforceFrontShare": 0.42
+}

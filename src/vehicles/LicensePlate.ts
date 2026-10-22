@@ -36,6 +36,9 @@ export class LicensePlate {
       porsche911: { front: [0, .41, 2.270], rear: [0, .6, -2.239] },
       bmw: { front: [0, .4, 2.125], rear: [0, .665, -2.289] },
       koenigsegg: { front: [0, .32, 2.264], rear: [0, .56, -2.023] },
+      diablo: { front: [0, .4, 2.19], rear: [0, .5, -2.33] },
+      amg: { front: [0, .4, 2.23], rear: [0, .55, -2.31] },
+      charger: { front: [0, .45, 2.4], rear: [0, .55, -2.68] },
     }
     const mount = mounts[model.root.name]
     if (!mount) return

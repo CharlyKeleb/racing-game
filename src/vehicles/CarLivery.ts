@@ -50,6 +50,8 @@ export class CarLivery {
   private readonly licensePlate: LicensePlate
   private graphics?: LiveryGraphics
   private stockMap: THREE.Texture | null = null
+  /** The aliased body's own colour, which tints `stockMap` (a near-black factor over a grey detail map, say). */
+  private readonly stockColor = new THREE.Color(1, 1, 1)
   private finish?: PaintFinish
   private readonly originals: { mesh: THREE.Mesh; material: THREE.Material | THREE.Material[]; geometry: THREE.BufferGeometry }[] = []
 
@@ -98,7 +100,10 @@ export class CarLivery {
           const slot = alias ? 'paint' : slotFor(m.name, wheel)
           if (slot === 'paint') {
             painted = true
-            if (alias && m instanceof THREE.MeshStandardMaterial) this.stockMap = m.map
+            if (alias && m instanceof THREE.MeshStandardMaterial) {
+              this.stockMap = m.map
+              this.stockColor.copy(m.color)
+            }
           }
           return slot ? slots[slot] : m
         }
@@ -133,7 +138,8 @@ export class CarLivery {
   apply(build: CarBuild): void {
     const map = this.stockMap && build.paint === DEFAULT_BUILD.paint && !hasLivery(build.livery) ? this.stockMap : null
     if (this.paint.map !== map) { this.paint.map = map; this.paint.needsUpdate = true }
-    this.paint.color.set(map ? '#ffffff' : build.paint)
+    if (map) this.paint.color.copy(this.stockColor)
+    else this.paint.color.set(build.paint)
     if (this.finish !== build.finish) {
       this.paint.setValues(FINISH[build.finish])
       this.paint.needsUpdate = true

@@ -31,4 +31,7 @@ export const SPOILER_FIT: Record<string,{position:readonly[number,number,number]
   porsche911:{position:[0,.90,-1.87],width:1.62},
   koenigsegg:{position:[0,.79,-1.64],width:1.72},
   bmw:{position:[0,.87,-2.16],width:1.62},
+  diablo:{position:[0,.87,-1.95],width:1.6},
+  amg:{position:[0,.95,-1.95],width:1.7},
+  charger:{position:[0,.92,-2.45],width:1.7},
 }

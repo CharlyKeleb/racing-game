@@ -96,6 +96,61 @@ export const CARS: CarEntry[] = [
     },
   },
   {
+    id: 'diablo',
+    name: 'Lamborghini Diablo GT1',
+    modelUrl: '/models/cars/diablo/diablo.glb',
+    modelUrlLow: '/models/cars/diablo/diablo_low.glb',
+    configUrl: '/models/cars/diablo/vehicle-config.json',
+    // Stand-in until it has its own recordings: the Koenigsegg's V8, fired as a V12 (6 per rev) so it screams higher.
+    audioUrl: '/audio/koenigsegg/',
+    firingPerRev: 6,
+    selectable: true,
+    stats: { power: 0.8, grip: 0.9, handling: 0.88, braking: 0.84 },
+    specs: { powerHp: 600, torqueNm: 650, zeroToHundred: 2.9, topSpeedKmh: 330, drivetrain: 'RWD', weightKg: 1100 },
+    // A 2000 Le Mans GT1 car on slicks: scrub and groan rather than squeal.
+    // Race pads on iron discs, no ABS.
+    noise: {
+      tyres: { squealHz: 540, tonal: 0.25, scrubHz: 620 },
+      brakes: { hissHz: 3200, squealHz: 0, grind: 0.8, abs: false },
+    },
+  },
+  {
+    id: 'amg',
+    name: 'Mercedes-AMG GT3',
+    modelUrl: '/models/cars/amg/amg.glb',
+    modelUrlLow: '/models/cars/amg/amg_low.glb',
+    configUrl: '/models/cars/amg/vehicle-config.json',
+    // Stand-in until it has its own recordings: the Koenigsegg's V8.
+    audioUrl: '/audio/koenigsegg/',
+    firingPerRev: 4,
+    selectable: true,
+    stats: { power: 0.7, grip: 0.92, handling: 0.9, braking: 0.86 },
+    specs: { powerHp: 548, torqueNm: 640, zeroToHundred: 3.1, topSpeedKmh: 304, drivetrain: 'RWD', weightKg: 1285 },
+    // A GT3 car on slicks: scrub rather than squeal. Race brakes, with ABS.
+    noise: {
+      tyres: { squealHz: 560, tonal: 0.25, scrubHz: 640 },
+      brakes: { hissHz: 3600, squealHz: 0, grind: 0.6, abs: true },
+    },
+  },
+  {
+    id: 'charger',
+    name: 'Dodge Ice Charger',
+    modelUrl: '/models/cars/charger/charger.glb',
+    modelUrlLow: '/models/cars/charger/charger_low.glb',
+    configUrl: '/models/cars/charger/vehicle-config.json',
+    // Stand-in until it has its own recordings: the Koenigsegg's V8.
+    audioUrl: '/audio/koenigsegg/',
+    firingPerRev: 4,
+    selectable: true,
+    stats: { power: 0.86, grip: 0.62, handling: 0.55, braking: 0.62 },
+    specs: { powerHp: 707, torqueNm: 880, zeroToHundred: 2.9, topSpeedKmh: 325, drivetrain: 'AWD', weightKg: 1700 },
+    // Fat street tyres that howl, big Wilwood brakes with ABS.
+    noise: {
+      tyres: { squealHz: 900, tonal: 0.75, scrubHz: 780 },
+      brakes: { hissHz: 4200, squealHz: 3000, grind: 0.1, abs: true },
+    },
+  },
+  {
     id: 'mclaren',
     name: 'McLaren',
     modelUrl: '/models/cars/mclaren/mclaren.glb',

@@ -63,5 +63,8 @@ export interface LiveryPlacement {
 export const LIVERY_PLACEMENTS: Readonly<Record<string, LiveryPlacement>> = {
   porsche911: { hoodZ: 1.35, hoodWidth: .55, paintAliases: [], stripeWidth: .09, stripeGap: .15, stripeOffset: -.32, topMinY: .72, panelY: .76, panelZ: .05, panelWidth: .64, panelHeight: .44, decalZ: -.72, decalWidth: .36 },
   bmw: { hoodZ: 1.25, hoodWidth: .6, paintAliases: ['Mat.3'], stripeWidth: .1, stripeGap: .17, stripeOffset: -.34, topMinY: .68, panelY: .73, panelZ: .04, panelWidth: .68, panelHeight: .42, decalZ: -.79, decalWidth: .4 },
+  diablo: { hoodZ: 1.65, hoodWidth: .55, paintAliases: ['WC_TEAM_BODY1_PA.001'], stripeWidth: .09, stripeGap: .15, stripeOffset: -.32, topMinY: .64, panelY: .64, panelZ: .1, panelWidth: .6, panelHeight: .36, decalZ: -.8, decalWidth: .34 },
+  amg: { hoodZ: 1.0, hoodWidth: .55, paintAliases: ['amgMercedesAMG_GT3_2020Paint_Material1'], stripeWidth: .09, stripeGap: .15, stripeOffset: -.32, topMinY: .74, panelY: .62, panelZ: .05, panelWidth: .64, panelHeight: .4, decalZ: -.9, decalWidth: .36 },
+  charger: { hoodZ: 1.6, hoodWidth: .6, paintAliases: ['vehicle_generic_smallspecmap_PRIMARY'], stripeWidth: .1, stripeGap: .17, stripeOffset: -.34, topMinY: .8, panelY: .62, panelZ: .1, panelWidth: .7, panelHeight: .42, decalZ: -1.1, decalWidth: .4 },
   koenigsegg: { hoodZ: 1.28, hoodWidth: .48, paintAliases: [], stripeWidth: .085, stripeGap: .14, stripeOffset: -.3, topMinY: .56, panelY: .6, panelZ: .03, panelWidth: .58, panelHeight: .34, decalZ: -.64, decalWidth: .32 },
 }
