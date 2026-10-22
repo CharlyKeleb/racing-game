@@ -35,6 +35,19 @@ function findWheel(root: THREE.Object3D, id: WheelId): THREE.Object3D | undefine
   return found
 }
 
+/** Anisotropic filtering for car textures (clamped to the GPU's maximum): badges, decals and grilles stay crisp at glancing angles. */
+const CAR_ANISOTROPY = 8
+const TEXTURE_SLOTS = ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'emissiveMap', 'aoMap', 'clearcoatNormalMap'] as const
+function sharpenTextures(material: THREE.Material): void {
+  const slots = material as unknown as Partial<Record<(typeof TEXTURE_SLOTS)[number], THREE.Texture | null>>
+  for (const slot of TEXTURE_SLOTS) {
+    const texture = slots[slot]
+    if (!texture || texture.anisotropy >= CAR_ANISOTROPY) continue
+    texture.anisotropy = CAR_ANISOTROPY
+    texture.needsUpdate = true
+  }
+}
+
 export function rigCarModel(scene: THREE.Group, config: VehicleConfig): CarModel {
   const root = new THREE.Group()
   root.name = config.id
@@ -42,9 +55,11 @@ export function rigCarModel(scene: THREE.Group, config: VehicleConfig): CarModel
   root.updateMatrixWorld(true)
 
   scene.traverse((o) => {
-    if ((o as THREE.Mesh).isMesh) {
-      o.castShadow = true
-      o.receiveShadow = true
+    const mesh = o as THREE.Mesh
+    if (mesh.isMesh) {
+      mesh.castShadow = true
+      mesh.receiveShadow = true
+      for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) sharpenTextures(m)
     }
   })
 

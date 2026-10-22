@@ -4,6 +4,7 @@ import type RAPIER from '@dimforge/rapier3d-compat'
 import type { InputState } from '../input/InputManager'
 import { Vehicle, type SpawnPoint } from '../vehicles/Vehicle'
 import { rigCarModel } from '../vehicles/CarModel'
+import { rivalMaterial } from '../vehicles/RivalPaint'
 import type { VehicleConfig } from '../vehicles/VehicleConfig'
 import type { RaceTrack } from '../world/RaceTrack'
 import { DRIVER_PROFILES, type AiDifficulty } from './AiProfiles'
@@ -38,8 +39,7 @@ export class Opponent {
       const mesh = object as THREE.Mesh
       if (!mesh.isMesh) return
       const copy = (mat: THREE.Material) => {
-        const own = mat.clone()
-        if (/paint|body.?color/i.test(mat.name) && 'color' in own) (own as THREE.MeshStandardMaterial).color.setHex(COLORS[(id - 1) % COLORS.length])
+        const own = rivalMaterial(mat, config.id, COLORS[(id - 1) % COLORS.length])
         this.ownedMaterials.push(own)
         return own
       }
