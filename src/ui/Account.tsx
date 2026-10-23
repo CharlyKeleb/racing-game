@@ -29,7 +29,7 @@ export function AccountButton({ onOpen }: { onOpen(): void }) {
 export function AccountDialog({ onClose }: { onClose(): void }) {
   const dialog = useRef<HTMLDialogElement>(null)
   const game = useGameInstance()
-  const { status, player, sync, lastSyncedAt, error, linkSentTo } = useAccount((s) => s)
+  const { status, player, sync, lastSyncedAt, error, linkSentTo, providers } = useAccount((s) => s)
   const [email, setEmail] = useState('')
   const [busy, setBusy] = useState(false)
   useEffect(() => { dialog.current?.showModal() }, [])
@@ -56,17 +56,17 @@ export function AccountDialog({ onClose }: { onClose(): void }) {
           <Button variant="secondary" disabled={busy} onClick={() => run(() => game?.signOut())}>Sign out</Button>
         </> : <>
           <p className="race-setup__note">Save your settings, garage builds, presets and best laps, and pick them up on any device. You can keep playing without an account.</p>
-          <Button variant="secondary" className="account-dialog__google" disabled={busy || !game} onClick={() => run(() => game?.signInWithGoogle())}>
+          {providers.google && <Button variant="secondary" className="account-dialog__google" disabled={busy || !game} onClick={() => run(() => game?.signInWithGoogle())}>
             <FcGoogle aria-hidden /> Continue with Google
-          </Button>
-          <form className="account-dialog__email" onSubmit={sendLink}>
+          </Button>}
+          {providers.email && <form className="account-dialog__email" onSubmit={sendLink}>
             <label className="ui-field">
-              <span className="ui-field__label">Or get a sign-in link by email</span>
+              <span className="ui-field__label">{providers.google ? 'Or get a sign-in link by email' : 'Get a sign-in link by email'}</span>
               <input className="ui-input" type="email" required autoComplete="email" placeholder="you@example.com"
                 value={email} onChange={(e) => setEmail(e.target.value)} />
             </label>
             <Button variant="primary" type="submit" disabled={busy || !game}>Email me a link</Button>
-          </form>
+          </form>}
           {linkSentTo && <p className="account-dialog__sent" role="status">Check {linkSentTo} and open the link on this device.</p>}
         </>}
         {error && <p className="account-dialog__error" role="alert">{error}</p>}

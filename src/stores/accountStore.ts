@@ -22,6 +22,8 @@ export interface AccountState {
   error: string | null
   /** Email a sign-in link was just sent to, so the dialog can say "check your inbox". */
   linkSentTo: string | null
+  /** Sign-in methods enabled in the Supabase project; Google stays hidden until it's set up. */
+  providers: { google: boolean; email: boolean }
   /** Bumped when progress saves outside gameStore (Time Trial bests, drift records). */
   localSaves: number
 }
@@ -33,6 +35,7 @@ export const accountStore = createStore<AccountState>()(() => ({
   lastSyncedAt: null,
   error: null,
   linkSentTo: null,
+  providers: { google: false, email: true },
   localSaves: 0,
 }))
 

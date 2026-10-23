@@ -64,5 +64,5 @@ it would end up in the bundle. Without the variables, the game is local-only.
 4. **Google.** Authentication → Sign In / Providers → Google: create an OAuth
    client in Google Cloud (type "Web application", authorised redirect URI
    `https://uqxxdjxiqczgigyifldl.supabase.co/auth/v1/callback`), then paste its
-   client ID and secret into Supabase. Until this is done, the Google button
-   shows Supabase's "provider is not enabled" error.
+   client ID and secret into Supabase. The game reads `/auth/v1/settings` at
+   startup and only shows the Google button once the provider is enabled.

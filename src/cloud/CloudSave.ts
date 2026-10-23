@@ -47,6 +47,7 @@ export class CloudSave {
       return
     }
     accountStore.setState({ status: 'loading' })
+    void loadProviders(config)
     // Lazy: keeps supabase-js out of the boot path.
     this.client = import('@supabase/supabase-js')
       .then(({ createClient }) => {
@@ -200,6 +201,17 @@ export class CloudSave {
 
   private readonly onPageHide = () => {
     if (this.uploadTimer) void this.uploadNow()
+  }
+}
+
+/** Public auth settings: which providers the project has turned on. */
+async function loadProviders(config: { url: string; key: string }): Promise<void> {
+  try {
+    const res = await fetch(`${config.url}/auth/v1/settings`, { headers: { apikey: config.key } })
+    const external = ((await res.json()) as { external?: Record<string, unknown> }).external ?? {}
+    accountStore.setState({ providers: { google: external.google === true, email: external.email !== false } })
+  } catch {
+    // Offline: keep the defaults (email only).
   }
 }
 
