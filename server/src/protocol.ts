@@ -1,4 +1,5 @@
 /** Shared lobby and optional development race transport. No client-authored builds or results. */
+export const ROOM_CLOSED_CODE = 4011
 export const LOBBY_PROTOCOL = 1
 export const LOBBY_CARS = ['porsche911', 'koenigsegg', 'bmw', 'diablo', 'amg', 'charger'] as const
 export type LobbyCar = typeof LOBBY_CARS[number]
@@ -20,6 +21,7 @@ export interface LobbySnapshot {
   track: 'nurburgring'
   laps: number
   phase: 'lobby' | 'loading' | 'countdown' | 'racing' | 'finished'
+  draining?: boolean
   raceEnabled: boolean
   reconnectGraceSeconds?: number
   rematchEnabled?: boolean

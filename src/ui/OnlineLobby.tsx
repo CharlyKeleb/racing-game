@@ -22,7 +22,7 @@ export function OnlineLobby({ onClose, onAccount }: { onClose(): void; onAccount
   const host = self && snapshot?.hostId === self.id
   const busy = status === 'connecting' || status === 'reconnecting'
   const connected = status === 'connected' || status === 'reconnecting'
-  const canLaunch = !busy && !preparing && !!host && snapshot?.racers.length === 2 && snapshot.racers.every(r => r.ready && r.connected !== false)
+  const canLaunch = !snapshot?.draining && !busy && !preparing && !!host && snapshot?.racers.length === 2 && snapshot.racers.every(r => r.ready && r.connected !== false)
   const enter = (action: 'create' | 'join') => {
     if (game) void enterLobby(action, code, isLobbyCar(selectedCar) ? selectedCar : 'porsche911', () => game.multiplayerToken())
   }
@@ -66,6 +66,7 @@ export function OnlineLobby({ onClose, onAccount }: { onClose(): void; onAccount
         <p className="racer-hint" role="status">{snapshot.raceEnabled ? snapshot.racers.length !== 2 ? 'Practice needs exactly two racers.' : canLaunch ? 'Both racers are ready. Launch when you are.' : snapshot.racers.every(r => r.ready && r.connected !== false) ? 'Waiting for the host to launch practice.' : 'Waiting for both racers to ready up.' : snapshot.racers.length < 2 ? 'Share the code to invite another racer.' : snapshot.racers.every((r) => r.ready) ? 'Everyone is ready. Race launches arrive in the next milestone.' : 'Waiting for everyone to ready up.'}</p>
         <Button variant="ghost" onClick={() => void leaveLobby()}>Leave lobby</Button>
       </> : <p role="status">Loading the grid…</p>}
+      {snapshot?.draining && <p role="status">The server is restarting. New races are paused; create a new lobby shortly.</p>}
       {status === 'reconnecting' && <p role="status">Reconnecting to your crew… Your seat is held for up to 15 seconds.</p>}
       {error && <p className="racer-error" role="alert">{error}</p>}
       {connected && <p className="racer-hint">You can close this panel and return to your lobby. Leaving the page ends your seat.</p>}

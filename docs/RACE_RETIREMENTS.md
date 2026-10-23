@@ -19,8 +19,8 @@ room disposal and is independent of it. If someone remains unfinished, the
 existing 60-second finish window and ten-minute racing limit still bound the race.
 
 Loading/countdown departure, simulation failure, room expiry/shutdown and server
-restart abort without inventing a result. Process recovery and graceful draining
-remain separate work. The original two-racer grid is retained in `raceRacers` for
+restart abort without inventing a result. [Graceful draining](MULTIPLAYER_SHUTDOWN.md) now offers a bounded finish window;
+process recovery remains unsupported. The original two-racer grid is retained in `raceRacers` for
 names/car identity in the surviving browser's results. Current lobby membership
 and host ownership still follow connected/held seats. Departed racers cannot join
 the in-progress race; a later new race needs normal admission/readiness.

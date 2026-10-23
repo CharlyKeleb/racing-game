@@ -1,6 +1,6 @@
 import { Client, type Room } from '@colyseus/sdk'
 import { accountStore } from '../stores/accountStore'
-import { LOBBY_PROTOCOL, RACE_PROTOCOL, type LobbyCar, type LobbySnapshot, type RaceSnapshot, type RaceInput, type RaceDescriptor, type RaceResume } from '../../server/src/protocol'
+import { LOBBY_PROTOCOL, RACE_PROTOCOL, ROOM_CLOSED_CODE, type LobbyCar, type LobbySnapshot, type RaceSnapshot, type RaceInput, type RaceDescriptor, type RaceResume } from '../../server/src/protocol'
 
 import { lobbyStore } from './lobbyStore'
 export { lobbyStore } from './lobbyStore'
@@ -116,7 +116,7 @@ function watchRoom(joined: Room, context: ConnectionContext, restoring: boolean)
     const grace = lobbyStore.getState().snapshot?.reconnectGraceSeconds
     if (lobbyStore.getState().status === 'connected' && grace === 15 && [1001, 1005, 1006, 4010].includes(code)) {
       void recoverRoom(joined, context)
-    } else failedConnection(code === 4001 ? 'Your session ended. Sign in again to rejoin.' : 'Disconnected from the lobby. You can create or join another.')
+    } else failedConnection(code === ROOM_CLOSED_CODE ? 'The room closed for a restart or expiry. Create or join a new lobby.' : code === 4001 ? 'Your session ended. Sign in again to rejoin.' : 'Disconnected from the lobby. You can create or join another.')
   })
   joined.onError(() => { if (room === joined && current(context) && lobbyStore.getState().status !== 'reconnecting') lobbyStore.setState({ error: 'The lobby connection had a problem. Leave and rejoin if it persists.' }) })
   if (!restoring) joined.send('sync')

@@ -19,18 +19,18 @@ const bundle = JSON.parse(await readFile(new URL('../../.cache/multiplayer/simul
 const backend = createBackend({ authenticate: supabaseAuthenticator(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY),
   origins: ALLOWED_ORIGINS.split(',').map(s => s.trim()).filter(Boolean), raceFactory: createRaceFactory(bundle), resultPersistence, maxRooms: 5 })
 await backend.listen(2568, '127.0.0.1')
-console.info('Local development race transport listening on 127.0.0.1:2568; one two-racer simulation maximum')
 let stopping = false
 async function stop() {
   if (stopping) return
   stopping = true
-  backend.drain()
   const deadline = setTimeout(() => process.exit(1), 20_000)
   deadline.unref()
-  await backend.gameServer.gracefullyShutdown(false)
+  const report = await backend.shutdown(15_000)
+  console.info('Multiplayer shutdown', report)
   await resultPersistence?.close()
   clearTimeout(deadline)
-  process.exit(0)
+  process.exit(report.pendingResultWrites ? 1 : 0)
 }
 process.on('SIGTERM', () => void stop())
 process.on('SIGINT', () => void stop())
+console.info('Local development race transport listening on 127.0.0.1:2568; one two-racer simulation maximum')

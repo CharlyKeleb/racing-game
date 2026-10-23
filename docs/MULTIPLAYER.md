@@ -184,3 +184,5 @@ while preserving simulation state. The deployed lobby pilot remains unchanged;
 reload recovery, disconnect DNF and hosted acceptance remain separate gates.
 
 Post-race [rematch voting](RACE_REMATCH.md) requires fresh consent from both original racers.
+
+[Draining and shutdown](MULTIPLAYER_SHUTDOWN.md) stops new races and bounds in-flight finish/durable enqueue work.

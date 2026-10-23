@@ -5,7 +5,7 @@ import { performance } from 'node:perf_hooks'
 import { RaceSession, SERVER_TICK_MS, type RaceFactory } from './RaceSession.js'
 import { Room, ServerError, type Client } from '@colyseus/core'
 import type { Authenticate, VerifiedRacer } from './auth.js'
-import { isLobbyCar, LOBBY_PROTOCOL, type LobbyRacer, type LobbySnapshot, type ResultPersistence } from './protocol.js'
+import { isLobbyCar, LOBBY_PROTOCOL, ROOM_CLOSED_CODE, type LobbyRacer, type LobbySnapshot, type ResultPersistence } from './protocol.js'
 
 export const RECONNECT_GRACE_SECONDS = 15
 export const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
@@ -27,6 +27,8 @@ export class LobbyRoom extends Room {
   private resultWriter?: ResultPersistenceService
   private resultPersistence?: ResultPersistence
   private disposed = false
+  private closing = false
+  private isDraining: () => boolean = () => false
   private race: RaceSession | null = null
   private readonly rematchVotes = new Set<string>()
   private rematchTimer: ReturnType<typeof setTimeout> | undefined
@@ -40,7 +42,8 @@ export class LobbyRoom extends Room {
   private expiry = new Map<string, ReturnType<typeof setTimeout>>()
   /** All HTTP SDK matchmake methods are denied. Only our verified /rooms endpoint reserves seats. */
   static async onAuth(): Promise<never> { throw new ServerError(403, 'Use private room admission.') }
-  onCreate(options: { raceFactory?: RaceFactory; resultPersistence?: ResultPersistenceService } = {}) {
+  onCreate(options: { raceFactory?: RaceFactory; resultPersistence?: ResultPersistenceService; isDraining?: () => boolean } = {}) {
+    this.isDraining = options.isDraining ?? (() => false)
     this.raceFactory = options.raceFactory
     this.resultWriter = options.resultPersistence
     this.maxClients = 4
@@ -116,6 +119,7 @@ export class LobbyRoom extends Room {
     })
   }
   onJoin(client: Client, options: { carId?: unknown }) {
+    if (this.isDraining() || this.closing) throw new ServerError(503, 'Server is restarting. Join another lobby shortly.')
     if (this.race) throw new ServerError(409, 'This race has already started.')
     const racer = client.auth as VerifiedRacer | undefined
     if (!racer || racer.expiresAt <= Date.now() || [...this.racers.values()].some((r) => r.id === racer.id)) throw new ServerError(403, 'Invalid or duplicate racer session.')
@@ -159,7 +163,7 @@ export class LobbyRoom extends Room {
     this.leases.delete(client.sessionId)
     this.refreshing.delete(client.sessionId)
     this.recoveries.delete(client.sessionId)
-    if (this.race) {
+    if (this.race && !this.closing) {
       const wasFinished = this.race.phase === 'finished'
       const reason = code === 4001 || authExpired ? 'auth-expired' : code === 4000 ? 'left' : 'connection-lost'
       if (!this.race.retire(client.sessionId, reason)) {
@@ -173,6 +177,23 @@ export class LobbyRoom extends Room {
     this.expiry.delete(client.sessionId)
     if (racer.id === this.hostId) this.hostId = this.racers.values().next().value?.id ?? ''
     this.publish()
+  }
+  beginDrain(): void {
+    this.clearRematch()
+    this.broadcast('notice', 'The server is restarting. Active races have a limited window to finish.')
+    this.publish()
+  }
+  hasActiveRace(): boolean { return !!this.race && ['loading', 'countdown', 'racing'].includes(this.race.phase) }
+  override onBeforeShutdown(): void { void this.disconnect(ROOM_CLOSED_CODE).catch(() => {}) }
+  override disconnect(closeCode = ROOM_CLOSED_CODE): Promise<unknown> {
+    // Whole-room failure/expiry is never a pair of individual retirements.
+    this.closing = true
+    this.clearRematch()
+    if (this.hasActiveRace()) {
+      this.race!.close('The room closed before this race completed. No result was awarded.')
+      this.finishRace()
+    }
+    return super.disconnect(closeCode)
   }
   onDispose() {
     this.disposed = true
@@ -198,10 +219,10 @@ export class LobbyRoom extends Room {
     }, Math.max(0, Math.min(due - Date.now(), 2_147_483_647))))
   }
   snapshot(): LobbySnapshot {
-    return { protocol: LOBBY_PROTOCOL, code: this.code, hostId: this.hostId, racers: [...this.racers.values()].map((r) => ({ ...r })), maxPlayers: 4, track: 'nurburgring', laps: this.laps, phase: this.race && this.race.phase !== 'closed' ? this.race.phase : 'lobby', raceEnabled: !!this.raceFactory, ...(this.raceFactory ? { reconnectGraceSeconds: RECONNECT_GRACE_SECONDS, rematchEnabled: true } : {}), race: this.race?.descriptor ?? null, raceRacers: this.raceRacers, rematchVotes: [...this.rematchVotes], rematchExpiresAt: this.rematchExpiresAt, resultPersistence: this.resultPersistence }
+    return { protocol: LOBBY_PROTOCOL, code: this.code, hostId: this.hostId, racers: [...this.racers.values()].map((r) => ({ ...r })), maxPlayers: 4, track: 'nurburgring', laps: this.laps, draining: this.isDraining(), phase: this.race && this.race.phase !== 'closed' ? this.race.phase : 'lobby', raceEnabled: !!this.raceFactory, ...(this.raceFactory ? { reconnectGraceSeconds: RECONNECT_GRACE_SECONDS, rematchEnabled: !this.isDraining() } : {}), race: this.race?.descriptor ?? null, raceRacers: this.raceRacers, rematchVotes: [...this.rematchVotes], rematchExpiresAt: this.rematchExpiresAt, resultPersistence: this.resultPersistence }
   }
   private startRace(client: Client): void {
-    if (!this.raceFactory || this.race || this.racers.get(client.sessionId)?.id !== this.hostId) return
+    if (this.isDraining() || this.closing || !this.raceFactory || this.race || this.racers.get(client.sessionId)?.id !== this.hostId) return
     if (this.resultWriter && !this.resultWriter.available) { client.send('notice', 'Result storage is full. Try again later.'); return }
     // Two-racer development gate; four-car capacity requires measurements first.
     if (this.racers.size !== 2 || ![...this.racers.values()].every(r => r.ready && r.connected !== false)) return
@@ -230,7 +251,7 @@ export class LobbyRoom extends Room {
     this.rematchVotes.clear()
   }
   private voteRematch(client: Client, value: unknown): void {
-    if (!this.raceFactory || this.race?.phase !== 'finished' || !value || typeof value !== 'object') return
+    if (this.isDraining() || this.closing || !this.raceFactory || this.race?.phase !== 'finished' || !value || typeof value !== 'object') return
     const vote = value as { raceId?: unknown; ready?: unknown }
     if (Object.keys(vote).some(k => k !== 'raceId' && k !== 'ready') || vote.raceId !== this.race.descriptor.id || typeof vote.ready !== 'boolean') return
     const eligible = this.racers.size === 2 && this.race.racers.every(r => {

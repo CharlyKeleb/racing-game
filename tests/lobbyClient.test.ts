@@ -184,3 +184,12 @@ it('binds rematch consent to the active finished race and suppresses it offline'
   receive({ ...state, phase: 'loading', race: { id: 'second' } }); lobby.setRematchReady(true)
   expect(room.send).not.toHaveBeenCalled()
 })
+
+it('explains a maintenance room closure without asking for unnecessary reauthentication', async () => {
+  const room = fakeRoom(); sdk.consume.mockResolvedValue(room)
+  vi.stubGlobal('fetch', async () => new Response(JSON.stringify({ sessionId: 'seat' })))
+  await lobby.enterLobby('create', '', 'porsche911', async () => 'test-token')
+  room.onLeave.mock.calls[0][0](4011)
+  expect(lobby.lobbyStore.getState()).toMatchObject({ status: 'idle', error: 'The room closed for a restart or expiry. Create or join a new lobby.' })
+  expect(sdk.reconnect).not.toHaveBeenCalled()
+})

@@ -39,7 +39,7 @@ export function OnlineRaceHud() {
       <span>{formatTicks(progress.finishTicks ?? Math.max(0, (frame?.tick ?? 0) - (race?.countdownTicks ?? 180)))}</span>
       <small>{progress.finishTicks !== null ? 'Your rival has up to 60 seconds to finish.' : `Next gate ${progress.nextCheckpoint === 0 ? 'Finish' : progress.nextCheckpoint}`}</small>
     </div>}
-    {(state.delayed || recovering) && !result && <p className="online-race__delay" role="status">{recovering ? 'Reconnecting · Your race continues · Controls released' : 'Connection delayed · Controls released'}</p>}
+    {(state.delayed || recovering || lobby?.draining) && !result && <p className="online-race__delay" role="status">{recovering ? 'Reconnecting · Your race continues · Controls released' : state.delayed ? 'Connection delayed · Controls released' : 'Server restarting · Finish before the shutdown window closes'}</p>}
     <div className="online-race__gauges" aria-label={`${Math.round(state.speedKmh)} km/h, gear ${state.gear}`}>
       <span className="eyebrow">{Math.round(state.rpm)} rpm <b>{state.gear < 0 ? 'R' : state.gear}</b></span>
       <strong>{Math.round(state.speedKmh)}<small>km/h</small></strong>
