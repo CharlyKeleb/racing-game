@@ -1051,6 +1051,14 @@ export class Game {
     return this.cloud.sendSignInLink(email)
   }
 
+  saveRacerProfile(handle: string, displayName: string): Promise<void> {
+    return this.cloud.saveRacerProfile(handle, displayName)
+  }
+
+  loadRacerProfile(): Promise<void> {
+    return this.cloud.loadProfile()
+  }
+
   signOut(): Promise<void> {
     return this.cloud.signOut()
   }

@@ -1,3 +1,4 @@
+import type { RacerProfile } from '../cloud/racerIdentity'
 import { createStore } from 'zustand/vanilla'
 
 /**
@@ -16,6 +17,9 @@ export interface AccountState {
   /** 'unavailable': no Supabase env vars in this build, the game stays local-only. */
   status: 'unavailable' | 'loading' | 'signedOut' | 'signedIn'
   player: Player | null
+  profile: RacerProfile | null
+  profileStatus: 'idle' | 'loading' | 'ready' | 'error'
+  profileError: string | null
   sync: 'idle' | 'syncing' | 'synced' | 'error'
   lastSyncedAt: number | null
   /** The last sign-in or sync failure, shown in the account dialog. */
@@ -33,6 +37,9 @@ export interface AccountState {
 export const accountStore = createStore<AccountState>()(() => ({
   status: 'unavailable',
   player: null,
+  profile: null,
+  profileStatus: 'idle',
+  profileError: null,
   sync: 'idle',
   lastSyncedAt: null,
   error: null,

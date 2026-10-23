@@ -42,6 +42,14 @@ export function MainMenu() {
   const tab: Tab = phase === 'garage' ? 'garage' : picked
   // A sign-in link that failed opens the account dialog, to say why.
   const [dialog, setDialog] = useState<'settings' | 'setup' | 'tracks' | 'account' | null>(() => accountStore.getState().returnError ? 'account' : null)
+  useEffect(() => {
+    const check = () => {
+      const s = accountStore.getState()
+      if (s.status === 'signedIn' && s.profileStatus === 'ready' && !s.profile) setDialog('account')
+    }
+    check()
+    return accountStore.subscribe(check)
+  }, [])
   const switching = useGame((s) => s.carSwitching || s.trackSwitching)
   const carName = useGame((s) => s.carName)
   const carId = useGame((s) => s.settings.car)

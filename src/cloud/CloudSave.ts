@@ -1,3 +1,4 @@
+import { validateRacer, profileError } from './racerIdentity'
 import type { Session, SupabaseClient } from '@supabase/supabase-js'
 import { accountStore, type Player } from '../stores/accountStore'
 import { gameStore, type GamePhase } from '../stores/gameStore'
@@ -103,6 +104,38 @@ export class CloudSave {
     if (error) accountStore.setState({ error: message(error) })
   }
 
+  async loadProfile(): Promise<void> {
+    const client = await this.client
+    const playerId = this.playerId
+    if (!client || !playerId) return
+    accountStore.setState({ profileStatus: 'loading', profileError: null })
+    try {
+      const { data, error } = await client.from('profiles').select('id, handle, display_name, handle_changed_at').eq('id', playerId).maybeSingle()
+      if (this.disposed || this.playerId !== playerId) return
+      if (error) throw error
+      accountStore.setState({ profile: data, profileStatus: 'ready' })
+    } catch {
+      if (!this.disposed && this.playerId === playerId) accountStore.setState({ profileStatus: 'error', profileError: 'Could not load your racer. Please retry.' })
+    }
+  }
+
+  async saveRacerProfile(handle: string, displayName: string): Promise<void> {
+    const client = await this.client
+    const playerId = this.playerId
+    if (!client || !playerId) return
+    const validation = validateRacer(handle, displayName)
+    if (validation) { accountStore.setState({ profileError: validation }); return }
+    accountStore.setState({ profileError: null })
+    try {
+      const { data, error } = await client.rpc('save_racer_profile', { requested_handle: handle.trim(), requested_display_name: displayName.normalize('NFC').trim() })
+      if (this.disposed || this.playerId !== playerId) return
+      if (error) { accountStore.setState({ profileError: profileError(error) }); return }
+      accountStore.setState({ profile: data, profileStatus: 'ready' })
+    } catch {
+      if (!this.disposed && this.playerId === playerId) accountStore.setState({ profileError: 'Could not save your racer. Please try again.' })
+    }
+  }
+
   dispose(): void {
     this.disposed = true
     if (this.uploadTimer) clearTimeout(this.uploadTimer)
@@ -117,7 +150,7 @@ export class CloudSave {
       this.merged = this.pendingMerge = false
       this.lastUploaded = null
       if (this.uploadTimer) clearTimeout(this.uploadTimer)
-      accountStore.setState({ status: 'signedOut', player: null, sync: 'idle', lastSyncedAt: null })
+      accountStore.setState({ status: 'signedOut', player: null, profile: null, profileStatus: 'idle', profileError: null, sync: 'idle', lastSyncedAt: null })
       return
     }
     const meta = user.user_metadata ?? {}
@@ -131,6 +164,8 @@ export class CloudSave {
     // Token refreshes re-send the session: only a new player needs the merge.
     if (user.id === this.playerId) return
     this.playerId = user.id
+    accountStore.setState({ profile: null, profileStatus: 'loading', profileError: null })
+    void this.loadProfile()
     this.merged = false
     void this.pullAndMerge()
   }

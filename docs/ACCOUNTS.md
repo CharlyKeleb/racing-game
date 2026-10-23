@@ -66,3 +66,43 @@ it would end up in the bundle. Without the variables, the game is local-only.
    `https://uqxxdjxiqczgigyifldl.supabase.co/auth/v1/callback`), then paste its
    client ID and secret into Supabase. The game reads `/auth/v1/settings` at
    startup and only shows the Google button once the provider is enabled.
+
+## Racer usernames (#120)
+
+After signing in, existing and new accounts without a profile see **Create your
+racer**. Offline play and cloud saves remain usable without completing this step.
+The account chip uses the saved display name; provider names and email addresses
+are not used as a public racer identity. Email remains visible only in the owner's
+account dialog. Authentication still uses the existing Google/email-link flow.
+
+Apply `supabase/migrations/0002_racer_profiles.sql` before deploying this UI.
+`profiles.id` is the immutable Auth UUID. Handles are canonical lowercase ASCII,
+3–20 characters, starting with a letter, followed by letters, digits or underscore.
+Display names are separate, nonunique, NFC-normalized Unicode, 2–24 codepoints,
+without controls or hidden formatting. A starter reserved-handle list rejects
+staff/system names; broader offensive-name moderation remains future work.
+
+The `save_racer_profile` RPC derives its owner from `auth.uid()`, validates names
+on the server, and reserves handles atomically. A unique constraint resolves
+concurrent claims; the losing player sees a collision message with suggestions.
+There is **no rename cooldown** (user decision). Old handles remain reserved to
+their original owner and can be reclaimed by them. `username_history` records
+first claims, not a complete log of subsequent rename events. No old-handle public
+redirects, availability lookup, public search or leaderboard endpoint ships here.
+This avoids an unbounded username-enumeration endpoint; future search requires
+server rate limits. Online entry must require a profile when multiplayer ships.
+
+Profiles are owner-readable via RLS, with no direct browser insert/update/delete
+grants. History and reservations are private. Only the constrained authenticated
+RPC writes profiles; it cannot accept another player's UUID or competitive stats.
+This follows [Supabase's database-function permissions guidance](https://supabase.com/docs/guides/database/functions).
+There are no staff flags, stats or privileged credentials in this client schema.
+
+Verification: `npm test -- tests/racerIdentity.test.ts tests/accountIdentity.test.tsx tests/cloudSave.test.ts`.
+Run `psql -v ON_ERROR_STOP=1 -f supabase/tests/racer_profiles.sql` on a disposable
+migrated database for owner/other-player/anonymous access, validation, collisions
+and immediate rename checks. Never use test fixtures against production.
+Rollback: revert the frontend first; retain profile/history tables to preserve
+claimed identities. If removing the schema is necessary, back it up before
+explicitly dropping the RPC and three new tables. Existing `player_saves` and
+Auth users are independent and should be retained.
