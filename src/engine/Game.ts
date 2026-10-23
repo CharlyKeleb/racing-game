@@ -1,3 +1,6 @@
+import { OnlineRaceScene } from '../multiplayer/OnlineRaceScene'
+import { onlineRaceStore, RELEASED_ONLINE_INPUT } from '../multiplayer/onlineRaceStore'
+import { lobbyStore, acknowledgeRaceLoaded, leaveLobby, sendRaceInput } from '../multiplayer/LobbyClient'
 import { CockpitRig } from '../vehicles/CockpitRig'
 import { AwarenessRoute, ProximityRadar, type AwarenessCar } from '../racing/ProximityRadar'
 import { proximityStore } from '../stores/proximityStore'
@@ -351,6 +354,13 @@ export class Game {
   private fps = 0
   private disposed = false
   private readonly unsubscribe: () => void
+  private readonly unsubscribeLobby: () => void
+  private onlineScene: OnlineRaceScene | null = null
+  private onlineRaceId: string | null = null
+  private onlineToken = 0
+  private onlinePreparing: Promise<void> | null = null
+  private onlineEnding = false
+  private onlineOriginalBuild: CarBuild | null = null
 
   constructor(container: HTMLElement) {
     this.renderer = new Renderer(container, gameStore.getState().settings.renderer)
@@ -373,11 +383,13 @@ export class Game {
       if (gameStore.getState().raceTrack?.title !== raceTrack?.title) gameStore.setState({ raceTrack })
     }
     this.unsubscribe = gameStore.subscribe((s, prev) => {
-      if (s.settings.car !== prev.settings.car && this.vehicle) void this.switchCar(s.settings.car)
-      if (s.settings.track !== prev.settings.track && this.track) void this.switchTrack(s.settings.track)
-      else if (s.settings !== prev.settings) this.applySettings(s.settings)
-      // A car switch swaps in that car's build too; installCar applies it to the new car.
-      if (s.build !== prev.build && s.settings.car === prev.settings.car) this.applyBuild(s.build, prev.build)
+      if (!this.onlineRaceId && !this.onlineEnding) {
+        if (s.settings.car !== prev.settings.car && this.vehicle) void this.switchCar(s.settings.car)
+        if (s.settings.track !== prev.settings.track && this.track) void this.switchTrack(s.settings.track)
+        else if (s.settings !== prev.settings) this.applySettings(s.settings)
+        // A car switch swaps in that car's build too; installCar applies it to the new car.
+        if (s.build !== prev.build && s.settings.car === prev.settings.car) this.applyBuild(s.build, prev.build)
+      }
       if (s.phase !== prev.phase) {
         this.clearAwareness()
         this.updateShowroom(s.phase)
@@ -385,6 +397,7 @@ export class Game {
       }
       if(s.settings.proximityRadar!==prev.settings.proximityRadar||s.settings.spotterVisual!==prev.settings.spotterVisual||s.settings.spotterAudio!==prev.settings.spotterAudio)this.clearAwareness()
     })
+    this.unsubscribeLobby = lobbyStore.subscribe(() => this.syncOnlineLobby())
   }
 
   /**
@@ -491,6 +504,7 @@ export class Game {
     this.vehicle.render(1)
     if (!document.hidden) this.loop.start()
     setPhase('menu')
+    this.syncOnlineLobby()
     if (new URLSearchParams(location.search).get('bench') === '1') this.startBenchmark()
     performance.measure('boot:menu', 'boot:start')
     if (import.meta.env.DEV) (window as unknown as { __game: Game }).__game = this
@@ -784,6 +798,8 @@ export class Game {
   // ── Commands (called by React) ─────────────────────────────────────────
 
   startRace(): void {
+    if (this.onlineRaceId || this.onlineEnding) return
+    if (lobbyStore.getState().status === 'connected') void leaveLobby()
     const { settings, carSwitching } = gameStore.getState()
     if (this.disposed || carSwitching || gameStore.getState().trackSwitching || this.raceQueued) return
     if (!this.trackReady) {
@@ -1198,6 +1214,17 @@ export class Game {
   /** A hidden race stays paused on return; the player explicitly resumes it. */
   private onVisibilityChange = (): void => {
     if (this.disposed || !this.race) return
+    if (this.onlineRaceId || this.onlineEnding) {
+      this.input.setTouch(RELEASED_ONLINE_INPUT)
+      if (document.hidden) {
+        sendRaceInput(RELEASED_ONLINE_INPUT)
+        this.audio.suspend(); this.loop.stop()
+      } else {
+        this.onlineScene?.buffer.resync()
+        this.audio.resume(); this.loop.start()
+      }
+      return
+    }
     if (document.hidden) {
       const phase = gameStore.getState().phase
       if (phase === 'racing' || phase === 'countdown' || phase === 'intro') this.togglePause()
@@ -1210,6 +1237,7 @@ export class Game {
   }
 
   togglePause(): void {
+    if (this.onlineRaceId) { onlineRaceStore.setState(s => ({ menuOpen: !s.menuOpen })); return }
     const { phase, setPhase } = gameStore.getState()
     if (phase === 'paused') {
       setPhase(this.race.state === 'intro' ? 'intro' : this.race.state === 'countdown' ? 'countdown' : 'racing')
@@ -1222,6 +1250,7 @@ export class Game {
   }
 
   quitToMenu(): void {
+    if (this.onlineRaceId) { void leaveLobby(); return }
     this.finish.reset(); this.loop.timeScale = 1; this.audio.setFinishMix(false)
     this.clearOpponents()
     this.race.state = 'idle'
@@ -1263,6 +1292,85 @@ export class Game {
     this.driftLastX=spawn.position.x; this.driftLastZ=spawn.position.z
     this.progress.reset()
     this.progress.update(spawn.position.x, spawn.position.z)
+  }
+
+  /** Online presentation has its own commands/clock; offline race rules never run here. */
+  private syncOnlineLobby(): void {
+    if (this.disposed || !this.vehicle || !this.track) return
+    const { snapshot, sessionId, raceSnapshot } = lobbyStore.getState()
+    if (!snapshot?.race || snapshot.phase === 'lobby') {
+      if (this.onlineRaceId) this.endOnlineRace()
+      return
+    }
+    if (this.onlineEnding) return
+    if (snapshot.race.id === this.onlineRaceId) {
+      if (raceSnapshot) this.onlineScene?.push(raceSnapshot, performance.now())
+      return
+    }
+    const self = snapshot.racers.find(r => r.sessionId === sessionId)
+    if (!self || gameStore.getState().carSwitching || gameStore.getState().trackSwitching || !['menu', 'garage'].includes(gameStore.getState().phase)) {
+      void leaveLobby()
+      return
+    }
+    const token = ++this.onlineToken
+    this.onlineRaceId = snapshot.race.id
+    this.onlineOriginalBuild = gameStore.getState().build
+    this.input.setTouch(RELEASED_ONLINE_INPUT)
+    onlineRaceStore.setState({ active: true, loaded: false, menuOpen: false, delayed: false, speedKmh: 0, countdown: null })
+    gameStore.getState().setPhase('online')
+    this.onlinePreparing = (async () => {
+      if (this.track.id !== snapshot.track) await this.switchTrack(snapshot.track)
+      if (this.disposed || token !== this.onlineToken) return
+      await this.loadTrackVisuals()
+      if (this.disposed || token !== this.onlineToken) return
+      this.environment.setRain(false)
+      this.environment.setTimeOfDay('noon')
+      this.environment.apply(this.renderer.scene)
+      const scene = await OnlineRaceScene.load({ renderer: this.renderer, assets: this.assets, environment: this.environment,
+        track: this.track, audio: this.audio, settings: gameStore.getState().settings }, snapshot, self.id)
+      if (this.disposed || token !== this.onlineToken) { scene.dispose(); return }
+      this.onlineScene = scene
+      const frame = lobbyStore.getState().raceSnapshot
+      if (frame) scene.push(frame, performance.now())
+      acknowledgeRaceLoaded(snapshot.race!)
+    })().catch((error: unknown) => {
+      if (this.disposed || token !== this.onlineToken) return
+      lobbyStore.setState({ error: error instanceof Error ? error.message : 'The online grid could not load. Rejoin to try again.' })
+      void leaveLobby()
+    })
+  }
+
+  private endOnlineRace(): void {
+    ++this.onlineToken
+    this.onlineRaceId = null
+    this.onlineEnding = true
+    onlineRaceStore.setState({ loaded: false, menuOpen: false, delayed: false })
+    this.input.setTouch(RELEASED_ONLINE_INPUT)
+    void (this.onlinePreparing ?? Promise.resolve()).then(async () => {
+      if (this.disposed) return
+      this.onlineScene?.dispose()
+      this.onlineScene = null
+      const settings = gameStore.getState().settings
+      if (this.track.id !== settings.track) await this.switchTrack(settings.track)
+      if (this.disposed) return
+      if (this.carId !== settings.car) await this.switchCar(settings.car)
+      else if (this.onlineOriginalBuild && this.onlineOriginalBuild !== gameStore.getState().build) this.applyBuild(gameStore.getState().build, this.onlineOriginalBuild)
+      this.onlineOriginalBuild = null
+      if (this.disposed) return
+      this.renderer.setHaze(this.haze)
+      this.applySettings(settings)
+      const entry = getCar(this.carId)
+      this.audio.setCarAudio(entry.audioUrl, entry.firingPerRev, entry.noise, entry.voice)
+      this.audio.resume()
+      this.race.state = 'idle'
+      this.resetCar()
+      this.onlineEnding = false
+      onlineRaceStore.setState({ active: false, loaded: false, menuOpen: false })
+      gameStore.getState().setPhase('menu')
+      this.syncOnlineLobby()
+    }).catch((error: unknown) => {
+      if (!this.disposed) gameStore.getState().setError(error instanceof Error ? error.message : 'Could not return to the menu.')
+    })
   }
 
   private nearestCheckpoint(): number {
@@ -1403,6 +1511,14 @@ export class Game {
   // ── Loop ───────────────────────────────────────────────────────────────
 
   private fixedUpdate(dt: number): void {
+    if (this.onlineRaceId || this.onlineEnding) {
+      this.input.poll(onlineRaceStore.getState().menuOpen)
+      if (this.input.consume('pause')) this.togglePause()
+      for (const action of ['camera', 'reset', 'restart', 'shiftUp', 'shiftDown', 'skip'] as const) this.input.consume(action)
+      const active = this.onlineScene && !onlineRaceStore.getState().menuOpen && !document.hidden && !this.onlineScene.buffer.delayed(performance.now())
+      sendRaceInput(active ? this.input.state : RELEASED_ONLINE_INPUT)
+      return
+    }
     const inputPhase = gameStore.getState().phase
     this.input.poll(['menu', 'garage', 'paused', 'finished', 'loading', 'boot'].includes(inputPhase))
     if (this.input.consume('pause')) {
@@ -1611,6 +1727,10 @@ export class Game {
   }
 
   private renderFrame(alpha: number, dt: number): void {
+    if (this.onlineRaceId || this.onlineEnding) {
+      this.onlineScene?.render(performance.now(), dt, !!this.input.state.lookBack)
+      return
+    }
     const frameDt = dt
     const phase = gameStore.getState().phase
     if (phase === 'finished') {
@@ -2408,6 +2528,12 @@ export class Game {
     this.clearRaceLoading()
     this.loop.stop()
     this.unsubscribe()
+    this.unsubscribeLobby()
+    ++this.onlineToken
+    this.onlineScene?.dispose()
+    if (this.onlineRaceId) void leaveLobby()
+    this.onlineRaceId = null
+    onlineRaceStore.setState({ active: false, loaded: false, menuOpen: false })
     this.clearOpponents()
     this.input.dispose()
     this.audio.dispose()

@@ -24,7 +24,9 @@
     "benchmark:simulation": "npm run build:simulation && server/node_modules/.bin/tsx scripts/multiplayer/benchmark.ts",
     "test:simulation": "vitest run tests/headlessSimulation.test.ts tests/handling.test.ts",
     "server:race-dev": "npm run build:simulation && node --env-file=server/.env.local --import ./server/node_modules/tsx/dist/loader.mjs scripts/multiplayer/dev-race-server.ts",
-    "test:race-transport": "vitest run tests/raceSession.test.ts tests/raceTransport.test.ts tests/lobbyClient.test.ts"
+    "test:race-transport": "vitest run tests/raceSession.test.ts tests/raceTransport.test.ts tests/lobbyClient.test.ts",
+    "predev": "npm run build:simulation",
+    "prebuild": "npm run build:simulation"
   },
   "dependencies": {
     "@colyseus/sdk": "0.18.6",

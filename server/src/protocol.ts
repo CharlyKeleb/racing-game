@@ -59,6 +59,9 @@ export interface RaceVehicleState {
   rpm: number
   gear: number
   nitro: number
+  nitroIntensity?: number
+  braking?: number
+  wheelOffsets?: number[]
 }
 export interface RaceSnapshot {
   raceId: string

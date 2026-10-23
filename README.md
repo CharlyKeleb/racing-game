@@ -63,6 +63,7 @@ placeholder car with the same node names and physics.
 
 ## Docs
 
+- [Online practice](docs/BROWSER_MULTIPLAYER.md): local two-racer server-driven practice and remaining online milestones
 - [Architecture](docs/ARCHITECTURE.md): layers, frame lifecycle, vehicle model,
   conventions and roadmap
 - [AI racers](docs/AI_RACERS.md): difficulty, rival personalities, drafting,

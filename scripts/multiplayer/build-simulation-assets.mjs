@@ -90,5 +90,8 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   const assets = await buildSimulationAssets()
   await mkdir(path.dirname(output), { recursive: true })
   await writeFile(output, JSON.stringify(assets))
+  const browserOutput = path.join(root, 'public/multiplayer/manifest.json')
+  await mkdir(path.dirname(browserOutput), { recursive: true })
+  await writeFile(browserOutput, JSON.stringify({ protocol: 1, simulationVersion: 1, fingerprint: assets.fingerprint, track: assets.track.id, cars: Object.keys(assets.cars) }))
   console.log(JSON.stringify({ output, fingerprint: assets.fingerprint, meshes: assets.track.meshes.length, cars: Object.keys(assets.cars) }))
 }

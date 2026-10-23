@@ -2,9 +2,9 @@
 
 This slice connects the shared physics spike to a server-owned room lifecycle.
 Two real SDK clients can load the same race, count down, submit driving controls
-and receive identical authoritative car snapshots. The browser race view,
-prediction/reconciliation, remote-car interpolation and verified finish/results
-are still pending. The menu deliberately remains a lobby preview.
+and receive identical authoritative car snapshots. The [browser practice adapter](BROWSER_MULTIPLAYER.md)
+now draws both cars with interpolation and exposes launch on the optional local
+backend. Full prediction/reconciliation and verified finish/results remain pending.
 
 ## Local development only
 
@@ -25,8 +25,7 @@ npm run server:race-dev
 
 This builds the fingerprinted simulation package, initializes WASM, and binds
 **127.0.0.1:2568** using the real Supabase authenticator. It allows one active
-simulation per process and exactly two racers per start. Local SDK callers can
-exercise the transport; a browser Start button will ship with its race adapter.
+simulation per process and exactly two racers per start. Local SDK callers and the browser practice adapter can exercise the transport.
 There is no test-auth flag or bypass in this runner. Integration tests construct
 an in-process backend with their own injected authenticator, as lobby tests do.
 
@@ -86,8 +85,8 @@ The development session has a ten-minute tick limit and inherits the lobby's
 
 `LobbyClient` exposes start/cancel/load-ack/input commands, caps outgoing controls
 at 30 Hz and stores only the latest ordered snapshot for the active race. Race
-changes/leave/logout clear snapshot/sequence state. It does not launch an offline
-race or present local results as server-verified results.
+changes/leave/logout clear snapshot/sequence state. The browser adapter renders the shared simulation separately from offline race
+rules and never presents local results as server-verified results.
 
 ## Verification
 

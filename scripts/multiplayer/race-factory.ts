@@ -48,7 +48,8 @@ export function createRaceFactory(bundle: SimulationBundle): RaceFactory {
               const p = vehicle.body.translation(), q = vehicle.body.rotation(), v = vehicle.body.linvel(), av = vehicle.body.angvel()
               states.push({ id, position: { x: p.x, y: p.y, z: p.z }, rotation: { x: q.x, y: q.y, z: q.z, w: q.w },
                 velocity: { x: v.x, y: v.y, z: v.z }, angularVelocity: { x: av.x, y: av.y, z: av.z },
-                speed: controller.forwardSpeed, steer: controller.wheelAngle, rpm: controller.drivetrain.rpm, gear: controller.drivetrain.gear, nitro: controller.nitro.charge })
+                speed: controller.forwardSpeed, steer: controller.wheelAngle, rpm: controller.drivetrain.rpm, gear: controller.drivetrain.gear, nitro: controller.nitro.charge, nitroIntensity: controller.nitro.intensity, braking: controller.braking,
+                wheelOffsets: controller.wheels.map(w => w.suspension.wheelOffset()) })
             }
             return states
           },

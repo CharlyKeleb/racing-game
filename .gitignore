@@ -31,3 +31,6 @@ dist-ssr
 .vercel
 .env*
 !.env.example
+
+# Derived compatibility metadata (build:simulation)
+/public/multiplayer/manifest.json

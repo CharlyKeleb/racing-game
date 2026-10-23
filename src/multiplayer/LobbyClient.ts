@@ -1,16 +1,10 @@
 import { Client, type Room } from '@colyseus/sdk'
-import { createStore } from 'zustand/vanilla'
 import { accountStore } from '../stores/accountStore'
 import { LOBBY_PROTOCOL, RACE_PROTOCOL, type LobbyCar, type LobbySnapshot, type RaceSnapshot, type RaceInput, type RaceDescriptor } from '../../server/src/protocol'
 
-interface LobbyState {
-  status: 'idle' | 'connecting' | 'connected'
-  snapshot: LobbySnapshot | null
-  raceSnapshot: RaceSnapshot | null
-  sessionId: string | null
-  error: string | null
-}
-export const lobbyStore = createStore<LobbyState>()(() => ({ status: 'idle', snapshot: null, raceSnapshot: null, sessionId: null, error: null }))
+import { lobbyStore } from './lobbyStore'
+export { lobbyStore } from './lobbyStore'
+
 const endpoint = import.meta.env.VITE_MULTIPLAYER_URL as string | undefined
 export const multiplayerConfigured = !!endpoint
 let room: Room | null = null

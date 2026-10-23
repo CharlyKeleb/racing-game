@@ -28,9 +28,11 @@ the host leaves. The pilot track is Nürburgring GP. Lobby codes expire with the
 room, after at most 30 minutes. Closing the panel keeps the seat; leaving the
 room/page, signing out, expiry or a network drop releases it.
 
-**This is a lobby milestone.** There is no online race launch, network vehicle
-simulation, reconnect grace, matchmaking, public room listing, verified results,
-leaderboards or live ping measurement. The panel explains this rather than
+**The deployed pilot is a lobby milestone.** Its production entrypoint does not
+launch online races. The optional [local browser practice](BROWSER_MULTIPLAYER.md)
+now exercises server simulation and two-car presentation. Reconnect grace,
+matchmaking, public room listing, verified results, leaderboards and live ping
+measurement are still pending. The panel explains this rather than
 starting separate local races and presenting them as multiplayer. Local racing
 and cloud saves continue to work independently.
 
@@ -163,10 +165,11 @@ and a local CPU/memory benchmark. It is not wired into deployed lobbies.
 The [local race transport](RACE_TRANSPORT.md) now exercises loading/countdown,
 sequenced inputs and authoritative snapshots through two SDK clients. It is
 explicitly gated behind a local simulation factory; the deployed entrypoint
-remains lobby-only and the browser race adapter is pending.
+remains lobby-only. The [browser adapter](BROWSER_MULTIPLAYER.md) now supports
+local two-racer practice with server-pose interpolation.
 
-Next: browser prediction/interpolation and race presentation, production-image
-profiling, then authoritative checkpoints/results. Never upload
+Next: full prediction/reconciliation, production-image profiling and authoritative
+checkpoints/results. Never upload
 browser lap records as verified competition data.
 
 References: [Fly configuration](https://fly.io/docs/reference/configuration/),

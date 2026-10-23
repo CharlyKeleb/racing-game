@@ -19,7 +19,7 @@ import type { RendererKind } from '../engine/backend'
  * Vanilla store so the engine can read/write it without importing React.
  */
 
-export type GamePhase = 'boot' | 'menu' | 'garage' | 'loading' | 'intro' | 'countdown' | 'racing' | 'paused' | 'finished'
+export type GamePhase = 'boot' | 'menu' | 'garage' | 'loading' | 'intro' | 'countdown' | 'racing' | 'paused' | 'finished' | 'online'
 export type QualityPreset = 'low' | 'medium' | 'high'
 export type CameraMode = 'chase' | 'cockpit'
 export type Weather = 'dry' | 'rain'
