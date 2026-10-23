@@ -123,6 +123,8 @@ export interface GameState {
   renamePreset(id: string, name: string): void
   duplicatePreset(id: string): void
   deletePreset(id: string): void
+  /** Re-read settings, builds and presets from localStorage, after a cloud save was written there. */
+  reloadSaved(): void
 }
 
 const SETTINGS_KEY = 'racing-game:settings'
@@ -344,6 +346,11 @@ export const gameStore = createStore<GameState>()((set, get) => ({
   deletePreset: (id) => {
     const car = get().settings.car
     setPresets(car, deletePreset(get().presets[car] ?? [], id))
+  },
+  reloadSaved: () => {
+    const settings = loadSettings()
+    const builds = loadBuilds()
+    set({ settings, builds, presets: loadPresets(), build: builds[settings.car] ?? DEFAULT_BUILD, liveryHistory: {} })
   },
   resetBuild: () => {
     const builds = { ...get().builds, [get().settings.car]: DEFAULT_BUILD }

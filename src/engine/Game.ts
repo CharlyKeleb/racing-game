@@ -81,6 +81,7 @@ import { AssetManager } from './AssetManager'
 import { GameLoop } from './GameLoop'
 import { initRapier, PhysicsWorld } from './PhysicsWorld'
 import { Renderer } from './Renderer'
+import { CloudSave } from '../cloud/CloudSave'
 
 const TELEMETRY_HZ = 20
 /** Opacity of a tag sitting behind a nearer car's tag. */
@@ -190,6 +191,8 @@ export class Game {
   private readonly assets = new AssetManager()
   private readonly input = new InputManager()
   private readonly audio = new AudioManager()
+  /** Player account and cloud save (docs/ACCOUNTS.md). */
+  private readonly cloud = new CloudSave()
   /** Reused every frame for the audio update. */
   private readonly soundState: CarSoundState = { rpm: 0, throttle: 0, gear: 1, nitro: 0, nitroActive: false, nitroPerfect: false }
   private readonly tyreSound: TyreBrakeInput = { speed: 0, brake: 0, slip: 0, slide: 0, paved: 0, drifting: false, kerb: 0 }
@@ -1036,6 +1039,20 @@ export class Game {
     if (this.disposed || s.carSwitching || (s.phase !== 'menu' && s.phase !== 'garage')) return
     this.audio.unlock(s.settings.masterVolume)
     this.revHeld = true
+  }
+
+  /** Account dialog: redirects to Google and back. */
+  signInWithGoogle(): Promise<void> {
+    return this.cloud.signInWithGoogle()
+  }
+
+  /** Account dialog: emails a one-time sign-in link. */
+  sendSignInLink(email: string): Promise<void> {
+    return this.cloud.sendSignInLink(email)
+  }
+
+  signOut(): Promise<void> {
+    return this.cloud.signOut()
   }
 
   unlockAudio(): void {
@@ -2382,6 +2399,7 @@ export class Game {
     this.clearOpponents()
     this.input.dispose()
     this.audio.dispose()
+    this.cloud.dispose()
     this.audio.onMenuMusicState = null
     this.audio.onRaceMusicTrack = null
     this.spoiler?.dispose()

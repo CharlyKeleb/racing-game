@@ -1489,3 +1489,21 @@ html, body { overscroll-behavior: none; }
   .hub-workshop__tabs button { height: 40px; font-size: 10px; gap: 1px; }
   .hub-workshop__tabs svg { width: 16px; height: 16px; }
 }
+
+/* Account (docs/ACCOUNTS.md): menu corner chip and the sign-in dialog. */
+.account-chip { margin-left: auto; display: flex; align-items: center; gap: 8px; max-width: 220px; padding: 6px 14px 6px 6px; color: var(--ink); background: var(--glass-flat); border: 1px solid var(--line); border-radius: 999px; font: 600 14px var(--font-body); cursor: pointer; }
+.account-chip:hover, .account-chip:focus-visible { border-color: var(--accent-2); }
+.account-chip:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 2px; }
+.account-chip:disabled { opacity: .6; cursor: default; }
+.account-chip svg { width: 26px; height: 26px; padding: 3px; }
+.account-chip img, .account-chip__initial { width: 26px; height: 26px; border-radius: 50%; flex: none; }
+.account-chip__initial { display: grid; place-items: center; color: var(--accent-ink); background: var(--accent); font-weight: 800; }
+.account-chip__label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-chip--error .account-chip__initial { background: var(--danger); color: var(--ink); }
+.account-dialog .ui-panel { display: flex; flex-direction: column; gap: 14px; }
+.account-dialog__who { margin: 0; overflow-wrap: anywhere; }
+.account-dialog__google .ui-btn__label { display: inline-flex; align-items: center; gap: 8px; }
+.account-dialog__email { display: flex; flex-direction: column; gap: 10px; }
+.account-dialog__sent { margin: 0; color: var(--accent-2); }
+.account-dialog__error { margin: 0; color: var(--danger); overflow-wrap: anywhere; }
+@media (max-width: 720px) { .account-chip__label { display: none; } .account-chip { padding: 6px; } }
