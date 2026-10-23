@@ -1316,7 +1316,7 @@ export class Game {
     this.onlineRaceId = snapshot.race.id
     this.onlineOriginalBuild = gameStore.getState().build
     this.input.setTouch(RELEASED_ONLINE_INPUT)
-    onlineRaceStore.setState({ active: true, loaded: false, menuOpen: false, delayed: false, speedKmh: 0, countdown: null })
+    onlineRaceStore.setState({ resultsOpen: false, finished: false, active: true, loaded: false, menuOpen: false, delayed: false, speedKmh: 0, countdown: null })
     gameStore.getState().setPhase('online')
     this.onlinePreparing = (async () => {
       if (this.track.id !== snapshot.track) await this.switchTrack(snapshot.track)
@@ -1365,7 +1365,7 @@ export class Game {
       this.race.state = 'idle'
       this.resetCar()
       this.onlineEnding = false
-      onlineRaceStore.setState({ active: false, loaded: false, menuOpen: false })
+      onlineRaceStore.setState({ resultsOpen: false, finished: false, active: false, loaded: false, menuOpen: false })
       gameStore.getState().setPhase('menu')
       this.syncOnlineLobby()
     }).catch((error: unknown) => {
@@ -1512,10 +1512,10 @@ export class Game {
 
   private fixedUpdate(dt: number): void {
     if (this.onlineRaceId || this.onlineEnding) {
-      this.input.poll(onlineRaceStore.getState().menuOpen)
+      this.input.poll(onlineRaceStore.getState().menuOpen || onlineRaceStore.getState().resultsOpen)
       if (this.input.consume('pause')) this.togglePause()
       for (const action of ['camera', 'reset', 'restart', 'shiftUp', 'shiftDown', 'skip'] as const) this.input.consume(action)
-      const active = this.onlineScene && !onlineRaceStore.getState().menuOpen && !document.hidden && !this.onlineScene.buffer.delayed(performance.now())
+      const active = this.onlineScene && !onlineRaceStore.getState().finished && !onlineRaceStore.getState().menuOpen && !document.hidden && !this.onlineScene.buffer.delayed(performance.now())
       sendRaceInput(active ? this.input.state : RELEASED_ONLINE_INPUT)
       return
     }
@@ -2533,7 +2533,7 @@ export class Game {
     this.onlineScene?.dispose()
     if (this.onlineRaceId) void leaveLobby()
     this.onlineRaceId = null
-    onlineRaceStore.setState({ active: false, loaded: false, menuOpen: false })
+    onlineRaceStore.setState({ resultsOpen: false, finished: false, active: false, loaded: false, menuOpen: false })
     this.clearOpponents()
     this.input.dispose()
     this.audio.dispose()

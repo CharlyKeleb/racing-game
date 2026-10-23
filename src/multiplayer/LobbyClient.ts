@@ -104,6 +104,7 @@ if (import.meta.hot) import.meta.hot.dispose(() => { void leaveLobby() })
 
 /** Transport commands for the upcoming browser race adapter; no automatic local-race launch. */
 export function startLobbyRace() { room?.send('start') }
+export function returnToLobby() { room?.send('returnLobby') }
 export function cancelLobbyRace() { room?.send('cancelRace') }
 export function acknowledgeRaceLoaded(race: RaceDescriptor) {
   if (lobbyStore.getState().snapshot?.race?.id !== race.id) return

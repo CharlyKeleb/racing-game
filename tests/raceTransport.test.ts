@@ -52,7 +52,7 @@ async function connect(player: string, action: 'create' | 'join', code = '') {
 const current = (room: Room) => lobby.get(room.sessionId)!
 const ack = (room: Room) => {
   const race = current(room).race!
-  room.send('loaded', { protocol: 1, raceId: race.id, fingerprint: race.fingerprint, simulationVersion: race.simulationVersion })
+  room.send('loaded', { protocol: 2, raceId: race.id, fingerprint: race.fingerprint, simulationVersion: race.simulationVersion })
 }
 it('runs a server-authoritative two-client grid/countdown/input/snapshot lifecycle using shipped physics', async () => {
   const host = await connect('racer1', 'create')

@@ -1638,3 +1638,17 @@ html, body { overscroll-behavior: none; }
 
 .online-race__dialog { border: 0; background: transparent; color: inherit; padding: 0; width: min(430px, calc(100vw - 32px)); pointer-events: auto; }
 .online-race__dialog::backdrop { background: #0009; }
+
+.online-race__timing { position: absolute; top: 155px; left: 32px; padding: 16px 24px; display: grid; gap: 8px; background: #111923de; border-left: 2px solid #60daf8; }
+.online-race__timing span { font: 700 28px var(--font-display); font-variant-numeric: tabular-nums; }
+.online-race__timing small { opacity: .7; }
+.online-race__results { width: min(680px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow: auto; }
+.online-race__results .ui-panel { display: grid; gap: 20px; }
+.online-race__results p { font-size: 13px; line-height: 1.6; color: var(--muted); }
+.online-race__results table { width: 100%; border-collapse: collapse; font-size: 13px; text-align: left; font-variant-numeric: tabular-nums; }
+.online-race__results td, .online-race__results th { padding: 12px 6px; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+.online-race__results thead { color: var(--muted); font-size: 11px; text-transform: uppercase; }
+@media (max-width: 700px) {
+  .online-race__timing { top: 90px; left: 16px; padding: 10px 14px; font-size: 11px; max-width: 45%; }
+  .online-race__timing span { font-size: 22px; }
+}

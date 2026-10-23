@@ -48,8 +48,13 @@ export class LobbyRoom extends Room {
     })
     this.onMessage('input', (client, value: unknown) => { this.race?.input(client.sessionId, value, performance.now()) })
     this.control('cancelRace', (client) => {
-      if (this.racers.get(client.sessionId)?.id === this.hostId && this.race && this.race.phase !== 'racing') {
+      if (this.racers.get(client.sessionId)?.id === this.hostId && this.race && ['loading', 'countdown'].includes(this.race.phase)) {
         this.race.close('The host cancelled race loading.'); this.finishRace()
+      }
+    })
+    this.control('returnLobby', (client) => {
+      if (this.racers.get(client.sessionId)?.id === this.hostId && this.race?.phase === 'finished') {
+        this.race.close(''); this.finishRace()
       }
     })
     this.control('ready', (client, value: unknown) => {
@@ -118,7 +123,7 @@ export class LobbyRoom extends Room {
     if (!this.raceFactory || this.race || this.racers.get(client.sessionId)?.id !== this.hostId) return
     // Two-racer development gate; four-car capacity requires measurements first.
     if (this.racers.size !== 2 || ![...this.racers.values()].every(r => r.ready)) return
-    const race = new RaceSession([...this.racers.values()].map(r => ({ id: r.id, sessionId: r.sessionId, carId: r.carId })), this.raceFactory)
+    const race = new RaceSession([...this.racers.values()].map(r => ({ id: r.id, sessionId: r.sessionId, carId: r.carId })), this.raceFactory, this.laps)
     this.race = race
     this.lastSnapshotTick = 0
     void this.lock()
@@ -136,7 +141,7 @@ export class LobbyRoom extends Room {
     try { race.advance(dt) } catch { race.close('The race simulation stopped. Return to the lobby.') }
     if (race.phase === 'closed') { this.finishRace(); return }
     if (phase !== race.phase) this.publish()
-    if (race.tick - this.lastSnapshotTick >= 3) {
+    if (phase !== race.phase || race.tick - this.lastSnapshotTick >= 3) {
       const snapshot = race.snapshot()
       if (snapshot) { this.broadcast('race', snapshot); this.lastSnapshotTick = race.tick }
     }

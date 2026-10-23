@@ -18,7 +18,7 @@ export interface LobbySnapshot {
   maxPlayers: number
   track: 'nurburgring'
   laps: number
-  phase: 'lobby' | 'loading' | 'countdown' | 'racing'
+  phase: 'lobby' | 'loading' | 'countdown' | 'racing' | 'finished'
   raceEnabled: boolean
   race: RaceDescriptor | null
 }
@@ -26,7 +26,7 @@ export function isLobbyCar(value: unknown): value is LobbyCar {
   return typeof value === 'string' && (LOBBY_CARS as readonly string[]).includes(value)
 }
 
-export const RACE_PROTOCOL = 1
+export const RACE_PROTOCOL = 2
 
 /** Development race transport, available only when the backend has a simulation factory. */
 export interface RaceDescriptor {
@@ -66,7 +66,34 @@ export interface RaceVehicleState {
 export interface RaceSnapshot {
   raceId: string
   tick: number
-  phase: 'countdown' | 'racing'
+  phase: 'countdown' | 'racing' | 'finished'
   countdownTicks: number
+  progress?: RaceRacerProgress[]
+  result?: RaceResult
   vehicles: (RaceVehicleState & { acknowledgedSequence: number })[]
+}
+
+export interface RaceRacerProgress {
+  id: string
+  completedLaps: number
+  nextCheckpoint: number
+  lapTicks: number[]
+  finishTicks: number | null
+}
+/** Session-only practice results. No client submission or offline record promotion. */
+export interface RaceResult {
+  raceId: string
+  track: 'nurburgring'
+  laps: number
+  tickRate: 60
+  completedTick: number
+  reason: 'all-finished' | 'finish-window' | 'time-limit'
+  racers: readonly {
+    id: string
+    carId: LobbyCar
+    status: 'finished' | 'dnf'
+    rank: number | null
+    finishTicks: number | null
+    lapTicks: readonly number[]
+  }[]
 }

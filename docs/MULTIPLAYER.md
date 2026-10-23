@@ -30,7 +30,7 @@ room/page, signing out, expiry or a network drop releases it.
 
 **The deployed pilot is a lobby milestone.** Its production entrypoint does not
 launch online races. The optional [local browser practice](BROWSER_MULTIPLAYER.md)
-now exercises server simulation and two-car presentation. Reconnect grace,
+now exercises server simulation, two-car presentation and server-timed session results. Reconnect grace,
 matchmaking, public room listing, verified results, leaderboards and live ping
 measurement are still pending. The panel explains this rather than
 starting separate local races and presenting them as multiplayer. Local racing
@@ -168,9 +168,11 @@ explicitly gated behind a local simulation factory; the deployed entrypoint
 remains lobby-only. The [browser adapter](BROWSER_MULTIPLAYER.md) now supports
 local two-racer practice with server-pose interpolation.
 
-Next: full prediction/reconciliation, production-image profiling and authoritative
-checkpoints/results. Never upload
-browser lap records as verified competition data.
+Practice now includes ordered checkpoint/lap validation, a finish window, DNF
+deadlines, identical session results and host return to the lobby. Next: full
+prediction/reconciliation, production-image profiling, competitive track limits
+and idempotent result persistence. Never upload browser lap records as verified
+competition data.
 
 References: [Fly configuration](https://fly.io/docs/reference/configuration/),
 [Colyseus authentication](https://docs.colyseus.io/auth/room),

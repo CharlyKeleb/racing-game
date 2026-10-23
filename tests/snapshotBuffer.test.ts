@@ -49,3 +49,11 @@ describe('online snapshot presentation', () => {
     expect(b.delayed(4950)).toBe(false)
   })
 })
+it('keeps a finished frame at its final pose without reporting a stale connection', () => {
+  const b = new SnapshotBuffer('race', ['one', 'two']), out = emptyVehicleState('one')
+  b.push(frame(3), 50)
+  expect(b.push({ ...frame(6), phase: 'finished' }, 100)).toBe(true)
+  b.sample('one', 10_000, out)
+  expect(out.position.x).toBe(6)
+  expect(b.delayed(10_000)).toBe(false)
+})

@@ -6,10 +6,12 @@ practice**. Both browsers load the stock models/circuit and acknowledge the same
 built asset package before the shared countdown. Each browser draws both cars
 from authoritative server snapshots and sends only driving controls.
 
-This is a driving/practice milestone. Authoritative checkpoints/laps/finish,
-verified results, progression and persistence remain pending. The practice HUD
-therefore shows racers, speed/gear, nitro, countdown and connection state, without
-inventing lap times or finishing positions. The deployed Fly entrypoint still
+This is a practice milestone with server-timed ordered checkpoints, laps and
+shared session results. The HUD shows lap count, race time, next gate and finish
+status alongside speed/gear, nitro, countdown and connection state. The results
+dialog shows the same server-confirmed places, race times and best laps for both
+racers, including ties and DNF. These results are not saved to profiles or awarded
+progression; competitive validation and persistence remain pending. The deployed Fly entrypoint still
 advertises lobby-only capability; this change does not deploy or resize it.
 
 ## Run with real accounts locally
@@ -58,14 +60,15 @@ interpolation history. Invalid/foreign/out-of-order frames cannot replace it.
 
 This is **not rollback prediction**: the local car is also interpolated from
 server poses, so input response includes network/interpolation delay. There is
-no claim of deterministic reconciliation, completed online races or verified
-results. Controller state capture/replay and measured latency work remain next.
+no claim of deterministic reconciliation or persisted competitive results. Controller state capture/replay and measured latency work remain next.
 Remote engines, richer driving effects, cockpit camera and car reset/recovery
 are also follow-ups; chase/rear view, keyboard, standard gamepad and touch driving
 are supported. Online gearbox is automatic regardless of the offline preference.
 
 Esc opens a focus-trapped race menu while the server keeps racing. Driving input
-becomes neutral while it is open. Hiding the tab stops local rendering/audio and
+becomes neutral while it is open. Finished racers release driving controls while
+waiting for the result. The final results dialog supports keyboard/controller
+focus and host-only return of the crew to the lobby; either racer can leave. Hiding the tab stops local rendering/audio and
 releases controls; it never pauses the server. Leaving or losing a racer disposes
 the online view and returns the remaining seat to the lobby with readiness reset.
 Starting an offline race explicitly leaves any lobby seat first.
@@ -100,6 +103,14 @@ returned both to the menu/lobby with readiness cleared. Scene/buffer unit tests
 cover pose interpolation, bounded extrapolation, validation, return after an
 alternate selected circuit and cancellation while visuals are still loading.
 
+For a fast results UI check, start the test backend with `--scripted-results`.
+This **test-only** mode substitutes a short synthetic server route for physics;
+it exercises the normal countdown, checkpoint/lap rules, results transport and
+browser dialog without a human driving a full lap. It is not evidence of actual
+Nürburgring completion, stock-car driving, Supabase auth or physical-device
+acceptance. Browser smoke confirmed both result tables matched and host return
+restored the lobby with both readiness flags cleared.
+
 Run `npm test`, both builds and lint before review. Next: full controller-state
-prediction/reconciliation, authoritative checkpoint/finish validation and
+prediction/reconciliation, competitive track-limit validation and
 idempotent persisted results, plus staging/device/memory/network acceptance.

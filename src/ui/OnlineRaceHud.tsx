@@ -1,7 +1,8 @@
 import { useEffect, useRef } from 'react'
 import { useStore } from 'zustand'
-import { lobbyStore, leaveLobby } from '../multiplayer/LobbyClient'
+import { lobbyStore, leaveLobby, returnToLobby } from '../multiplayer/LobbyClient'
 import { onlineRaceStore } from '../multiplayer/onlineRaceStore'
+import type { RaceResult } from '../../server/src/protocol'
 import { startLightsLit } from '../racing/RaceManager'
 import { isTouchDevice } from '../engine/device'
 import { TouchControls } from './TouchControls'
@@ -10,19 +11,34 @@ import { Button, Panel } from './kit'
 const touch = isTouchDevice()
 export function OnlineRaceHud() {
   const state = useStore(onlineRaceStore)
-  const roster = useStore(lobbyStore, s => s.snapshot?.racers)
-  const race = useStore(lobbyStore, s => s.snapshot?.race)
-  const ready = state.loaded && state.countdown === null
+  const lobby = useStore(lobbyStore, s => s.snapshot)
+  const sessionId = useStore(lobbyStore, s => s.sessionId)
+  const frame = useStore(lobbyStore, s => s.raceSnapshot)
+  const roster = lobby?.racers
+  const race = lobby?.race
+  const self = roster?.find(r => r.sessionId === sessionId)
+  const progress = frame?.progress?.find(p => p.id === self?.id)
+  const result = frame?.result
+  const ready = state.loaded && state.countdown === null && !state.finished
   const lights = state.countdown !== null ? startLightsLit(state.countdown) : 0
   return <div className="online-race" aria-label="Online practice">
     <header className="online-race__header">
-      <div><span className="eyebrow">Private practice · Nürburgring GP</span><strong>Your crew. Same circuit.</strong><p>Ghost cars · Lap timing and results are coming next.</p></div>
+      <div><span className="eyebrow">Private practice · Nürburgring GP</span><strong>Your crew. Same circuit.</strong><p>Ghost cars · Server timing · Session results</p></div>
       <Button size="sm" onClick={() => onlineRaceStore.setState({ menuOpen: true })}>Race menu <kbd>Esc</kbd></Button>
     </header>
-    <aside className="online-race__roster" aria-label="Racers">{roster?.map(r => <div key={r.id}><strong>{r.displayName}</strong><span>@{r.handle}</span></div>)}</aside>
+    <aside className="online-race__roster" aria-label="Racers">{roster?.map(r => {
+      const p = frame?.progress?.find(p => p.id === r.id)
+      const label = p?.finishTicks != null ? 'Finished' : `Lap ${Math.min((p?.completedLaps ?? 0) + 1, lobby?.laps ?? 1)} / ${lobby?.laps ?? 1}`
+      return <div key={r.id}><strong>{r.displayName}</strong><span>@{r.handle} · {label}</span></div>
+    })}</aside>
     {!state.loaded && <div className="online-race__message" role="status"><strong>{race ? 'Loading your grid…' : 'Returning to the lobby…'}</strong><span>Waiting for both racers to load the circuit.</span></div>}
     {state.loaded && state.countdown !== null && <div className="start-lights" role="img" aria-label={`${lights} of 5 start lights lit`}><div className="start-lights__gantry">{Array.from({ length: 5 }, (_, i) => <span key={i} className={`start-lights__pod${i < lights ? ' is-lit' : ''}`}><i /><i /></span>)}</div></div>}
-    {state.delayed && <p className="online-race__delay" role="status">Connection delayed · Controls released</p>}
+    {progress && !result && <div className="online-race__timing" aria-label="Race timing">
+      <strong>{progress.finishTicks !== null ? 'Finished · Waiting for your rival' : `Lap ${Math.min(progress.completedLaps + 1, lobby?.laps ?? 1)} / ${lobby?.laps ?? 1}`}</strong>
+      <span>{formatTicks(progress.finishTicks ?? Math.max(0, (frame?.tick ?? 0) - (race?.countdownTicks ?? 180)))}</span>
+      <small>{progress.finishTicks !== null ? 'Your rival has up to 60 seconds to finish.' : `Next gate ${progress.nextCheckpoint === 0 ? 'Finish' : progress.nextCheckpoint}`}</small>
+    </div>}
+    {state.delayed && !result && <p className="online-race__delay" role="status">Connection delayed · Controls released</p>}
     <div className="online-race__gauges" aria-label={`${Math.round(state.speedKmh)} km/h, gear ${state.gear}`}>
       <span className="eyebrow">{Math.round(state.rpm)} rpm <b>{state.gear < 0 ? 'R' : state.gear}</b></span>
       <strong>{Math.round(state.speedKmh)}<small>km/h</small></strong>
@@ -30,7 +46,8 @@ export function OnlineRaceHud() {
     </div>
     {ready && !touch && <p className="online-race__keys">WASD drive · Space drift · Shift nitro · Hold B rear view</p>}
     {ready && touch && !state.menuOpen && <TouchControls online />}
-    {state.menuOpen && <OnlineMenu />}
+    {state.menuOpen && !result && <OnlineMenu />}
+    {result && <OnlineResults result={result} host={self?.id === lobby?.hostId} names={new Map(roster?.map(r => [r.id, r.displayName]))} />}
   </div>
 }
 
@@ -43,6 +60,28 @@ function OnlineMenu() {
       <p>The race continues while this menu is open. Your driving controls are released.</p>
       <Button variant="primary" onClick={close} autoFocus>Return to driving</Button>
       <Button variant="ghost" onClick={() => void leaveLobby()}>Leave practice</Button>
+    </Panel>
+  </dialog>
+}
+
+function formatTicks(ticks: number): string {
+  const ms = Math.round(ticks * 1000 / 60)
+  return `${Math.floor(ms / 60_000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, '0')}.${String(ms % 1000).padStart(3, '0')}`
+}
+
+function OnlineResults({ result, host, names }: { result: RaceResult; host: boolean; names: Map<string, string> }) {
+  const dialog = useRef<HTMLDialogElement>(null)
+  useEffect(() => { dialog.current?.showModal() }, [])
+  const ranked = [...result.racers].sort((a, b) => (a.rank ?? Infinity) - (b.rank ?? Infinity))
+  return <dialog ref={dialog} className="online-race__dialog online-race__results" aria-label="Practice results" onCancel={e => e.preventDefault()}>
+    <Panel title="Practice results">
+      <p>Server-confirmed · {result.laps} {result.laps === 1 ? 'lap' : 'laps'} · Nürburgring GP</p>
+      <table><thead><tr><th scope="col">Place</th><th scope="col">Racer</th><th scope="col">Time</th><th scope="col">Best lap</th></tr></thead>
+        <tbody>{ranked.map(r => <tr key={r.id}><td>{r.rank ?? '—'}</td><th scope="row">{names.get(r.id) ?? 'Racer'}</th><td>{r.finishTicks === null ? 'DNF' : formatTicks(r.finishTicks)}</td><td>{r.lapTicks.length ? formatTicks(Math.min(...r.lapTicks)) : '—'}</td></tr>)}</tbody>
+      </table>
+      <p>{result.reason === 'time-limit' ? 'The 10-minute practice limit was reached.' : result.reason === 'finish-window' ? 'The 60-second finish window ended.' : 'Everyone crossed the finish line.'} These session results are not saved to your profile.</p>
+      {host ? <Button variant="primary" onClick={returnToLobby} autoFocus>Return crew to lobby</Button> : <p role="status">Waiting for the host to return the crew to the lobby.</p>}
+      <Button variant="ghost" onClick={() => void leaveLobby()} autoFocus={!host}>Leave practice</Button>
     </Panel>
   </dialog>
 }

@@ -125,7 +125,7 @@ export class OnlineRaceScene {
       this.context.audio.setRaceMusicActive(this.buffer.latest?.phase === 'racing')
       if (now - this.publishedAt >= 50) {
         this.publishedAt = now
-        onlineRaceStore.setState({ loaded: true, delayed: this.buffer.delayed(now), speedKmh: Math.abs(state.speed) * 3.6,
+        onlineRaceStore.setState({ resultsOpen: this.buffer.latest?.phase === 'finished', finished: this.buffer.latest?.phase === 'finished' || this.buffer.latest?.progress?.find(p => p.id === state.id)?.finishTicks != null, loaded: true, delayed: this.buffer.delayed(now), speedKmh: Math.abs(state.speed) * 3.6,
           rpm: state.rpm, gear: state.gear, nitro: state.nitro,
           countdown: this.buffer.latest?.phase === 'countdown' ? this.buffer.latest.countdownTicks / 60 : null })
       }

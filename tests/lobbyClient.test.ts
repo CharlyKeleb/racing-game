@@ -65,11 +65,11 @@ it('accepts only ordered frames for the active race, sends bounded sequenced con
   vi.stubGlobal('fetch', async () => new Response(JSON.stringify({ sessionId: 'seat' })))
   await lobby.enterLobby('create', '', 'porsche911', async () => 'test-token')
   const handlers = new Map(room.onMessage.mock.calls)
-  const race = { protocol: 1, id: 'race-a', fingerprint: 'a'.repeat(64), simulationVersion: 1, tickRate: 60, snapshotRate: 20, countdownTicks: 180 }
+  const race = { protocol: 2 as const, id: 'race-a', fingerprint: 'a'.repeat(64), simulationVersion: 1, tickRate: 60, snapshotRate: 20, countdownTicks: 180 }
   const state = { protocol: 1, phase: 'loading', raceEnabled: true, race, racers: [] }
   handlers.get('lobby')!(state)
   lobby.acknowledgeRaceLoaded(race)
-  expect(room.send).toHaveBeenCalledWith('loaded', { protocol: 1, raceId: 'race-a', fingerprint: race.fingerprint, simulationVersion: 1 })
+  expect(room.send).toHaveBeenCalledWith('loaded', { protocol: 2, raceId: 'race-a', fingerprint: race.fingerprint, simulationVersion: 1 })
   const drive = { throttle: 1, brake: 0, steer: 0, handbrake: false, nitro: false }
   expect(lobby.sendRaceInput(drive)).toBeNull()
   handlers.get('lobby')!({ ...state, phase: 'racing' })

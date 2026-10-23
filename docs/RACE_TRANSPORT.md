@@ -4,7 +4,7 @@ This slice connects the shared physics spike to a server-owned room lifecycle.
 Two real SDK clients can load the same race, count down, submit driving controls
 and receive identical authoritative car snapshots. The [browser practice adapter](BROWSER_MULTIPLAYER.md)
 now draws both cars with interpolation and exposes launch on the optional local
-backend. Full prediction/reconciliation and verified finish/results remain pending.
+backend. Server-timed practice laps and shared session results are implemented; prediction/reconciliation, competitive validation and result persistence remain pending.
 
 ## Local development only
 
@@ -38,7 +38,7 @@ the existing 256 MiB machine.
 ## State and message contract
 
 The existing lobby protocol stays at version 1 for additive compatibility with
-the deployed lobby. Race descriptors have a separate `RACE_PROTOCOL` version 1,
+the deployed lobby. Race descriptors have a separate `RACE_PROTOCOL` version 2,
 `SIMULATION_VERSION`, asset fingerprint and random race ID. These are compatibility
 claims, not evidence that an untrusted browser loaded assets or ran physics.
 
@@ -47,15 +47,15 @@ claims, not evidence that an untrusted browser loaded assets or ran physics.
 | `start` | Host only, exactly two connected racers, both ready, factory configured, no active race. Freezes the roster/settings and locks admission. |
 | `loaded` | Requires this connection's seat, race ID, race protocol, simulation version and fingerprint. Both racers and the server simulation must load before countdown. |
 | `input` | Accepted only while racing. Seat ownership comes from the authenticated connection. Allows only sequence, race ID, throttle, brake, steer/source, handbrake and nitro. |
-| `cancelRace` | Host may cancel loading/countdown. A race already underway ends on disconnect, expiry, server failure or the development time limit. |
-| `race` (server) | Tick, countdown/racing phase, remaining countdown ticks, server-owned car transforms/velocities and driving telemetry, plus last applied sequence for each racer. |
+| `cancelRace` | Host may cancel loading/countdown. Only loading/countdown can be cancelled. Racing ends with a shared result or aborts on disconnect, expiry or server failure. |
+| `race` (server) | Tick, countdown/racing/finished phase, remaining countdown ticks, transforms/telemetry, applied sequences, checkpoint/lap progress, and final shared result. |
+| `returnLobby` | Host only, finished phase only. Clears session results, resets readiness and unlocks the room for another start. |
 
 Loading has a 30-second deadline. Every countdown physics tick uses held controls;
-all racers switch to racing after exactly 180 ticks. Checkpoints, laps, finish,
-recovery/reset and manual shifts are not wired into this transport. Stock cars
+all racers switch to racing after exactly 180 ticks. Ordered checkpoint crossings, laps and finishes use server physics and ticks.
+Recovery/reset and manual shifts are not wired into this transport. Stock cars
 use the existing automatic gearbox; client-supplied car builds, positions, results
-and identity fields are rejected. Host lap selection is frozen for the session
-but is not yet consumed by finish validation.
+and identity fields are rejected. Host lap selection is frozen and consumed by finish validation.
 
 Inputs use one copied latest-command mailbox per seat, not an unbounded queue.
 Sequences are nonnegative safe integers, strictly increasing, with jumps bounded
@@ -70,8 +70,8 @@ Lobby-only rooms retain the existing 10/second overall cap.
 
 A room clock advances fixed ticks, with at most five catch-up steps per callback.
 A callback stall over 250 ms or accumulated debt beyond 250 ms aborts the race;
-it never silently drops simulation debt. Snapshots are emitted no more than once
-per three advanced ticks, with no burst of obsolete intermediate frames. These
+it never silently drops simulation debt. Snapshots are emitted once
+per three advanced ticks, plus immediate phase transitions, with no burst of obsolete intermediate frames. These
 are server ticks, not client wall-clock times. Use them for interpolation and
 future clock/prediction work. The current payload does not contain all hidden
 controller state needed to restore deterministic prediction; reconciliation is a
@@ -80,13 +80,48 @@ separate implementation step.
 Disconnect/session expiry closes the race, frees the world, clears all readiness
 and unlocks the room. Loading failures, cancellation and room disposal also free
 the world, including asynchronous factories that resolve after cancellation.
-The development session has a ten-minute tick limit and inherits the lobby's
-30-minute expiry. There is no reconnect/DNF/rematch/result persistence yet.
+The development session has a ten-minute racing-tick limit and inherits the lobby's
+30-minute expiry. There is no reconnect or result persistence yet. See the practice
+result rules below; disconnect aborts rather than awarding a result.
 
 `LobbyClient` exposes start/cancel/load-ack/input commands, caps outgoing controls
 at 30 Hz and stores only the latest ordered snapshot for the active race. Race
 changes/leave/logout clear snapshot/sequence state. The browser adapter renders the shared simulation separately from offline race
 rules and never presents local results as server-verified results.
+
+## Practice timing and results
+
+`RaceProgress` is numeric server code with no render dependency. After each fixed
+physics step the adapter copies authoritative body positions into reusable scratch
+storage. Countdown positions seed each sweep without awarding gates or race time.
+Gate 1 is next after the grid; gate 0 completes a lap only after the remaining
+course gates. The frozen lobby lap count determines the finish.
+
+A swept horizontal gate-plane crossing must move forward, intersect within the
+authored radius, and be within 6 m vertically of the gate. A nonfinite position
+or movement exceeding 4 m in a single tick aborts the session through the room's
+simulation-error path; it never credits a teleport. This conservative development
+bound is not a speed-based anti-cheat verdict. Timing uses integral racing ticks
+at 60 Hz, excluding countdown; a same-tick finish shares the same rank. First-lap
+time includes the drive from the grid, while subsequent laps run line to line.
+
+Finished racers stop accepting inputs and receive held controls. The second racer
+has up to 60 racing seconds after the first finish, bounded by the overall
+10-minute racing limit. At either deadline unfinished racers are DNF with no rank
+or invented finish time. If everyone finishes, results finalize immediately. The
+server retains a single final snapshot for both seats and `sync`, and frees the
+Rapier world immediately. While results are open there are no physics ticks or
+periodic snapshots. The host can return the crew to the lobby; either player can
+leave. Leaving currently ends the room's result view for the remaining player.
+
+These are **session-only practice results**, not persisted competitive records.
+The authored eight gates do not enforce continuous track limits or rule out every
+shortcut between gates. No client result submission, profile write, reward,
+offline-record promotion, or leaderboard update is added. Competitive track limits,
+recovery policy, persisted result transactions and real-account/device acceptance
+remain separate work. Race protocol 2 prevents older practice browsers from
+silently presenting this lifecycle as the previous endless driving session; lobby
+protocol remains 1 because the deployed server is still lobby-only.
 
 ## Verification
 
@@ -102,7 +137,12 @@ npm test
 Unit tests cover exact countdown ticks, server/peer loading order, incorrect
 versions/fingerprints/identities, malformed and spoofed inputs, sequence/rate
 limits, input copying/expiry, bounded catch-up, loading timeout/failure and late
-resource disposal. The integration test uses two real Colyseus SDK connections
+resource disposal. Additional rule/result tests cover ordered swept gates, wrong
+direction/radius/height, discontinuities, multi-lap timing, ties, finished-input
+rejection and both DNF deadlines. A scripted-server SDK integration test checks
+equal results for both clients, final snapshot sync, host-only lobby return and
+one-time world disposal. This scripted test does not prove completion of a lap on
+the shipped physics. The shipped-physics integration test uses two real Colyseus SDK connections
 and the shipped Nürburgring/Porsche simulation, checks equal snapshots at the same
 tick, ownership and acknowledgements, admission/configuration lock, host permissions,
 disconnect cleanup and reuse after cancellation. Client tests check frame ordering,

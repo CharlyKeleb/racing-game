@@ -27,7 +27,7 @@ export default function App() {
   // An ended Time Trial session has no finish line cinematic: straight to its results.
   const trialEnded = useTelemetry(s => s.trialEnded)
   const phase = useGame((s) => s.phase)
-  const onlineMenu = useStore(onlineRaceStore, s => s.menuOpen)
+  const onlineMenu = useStore(onlineRaceStore, s => s.menuOpen || s.resultsOpen)
   const error = useGame((s) => s.error)
   const progress = useGame((s) => s.loadProgress)
   const trackName = useGame((s) => s.trackName)

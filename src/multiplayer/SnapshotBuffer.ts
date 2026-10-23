@@ -22,7 +22,7 @@ export class SnapshotBuffer {
   push(frame: RaceSnapshot, now: number): boolean {
     const last = this.frames.at(-1)
     if (frame.raceId !== this.raceId || !Number.isSafeInteger(frame.tick) || frame.tick < 0 || (last && frame.tick <= last.tick)
-      || !Number.isFinite(now) || now < this.receivedAt || !['countdown', 'racing'].includes(frame.phase)
+      || !Number.isFinite(now) || now < this.receivedAt || !['countdown', 'racing', 'finished'].includes(frame.phase)
       || !Number.isFinite(frame.countdownTicks) || frame.countdownTicks < 0 || frame.vehicles.length !== this.racerIds.length) return false
     const seen = new Set<string>()
     for (const v of frame.vehicles) {
@@ -41,7 +41,7 @@ export class SnapshotBuffer {
   }
 
   get latest(): RaceSnapshot | undefined { return this.frames.at(-1) }
-  delayed(now: number): boolean { return !this.latest || now - this.receivedAt > 500 }
+  delayed(now: number): boolean { return !this.latest || (this.latest.phase !== 'finished' && now - this.receivedAt > 500) }
   resync(): void { this.frames.splice(0, Math.max(0, this.frames.length - 1)); this.playhead = -Infinity }
 
   sample(id: string, now: number, out: RaceVehicleState): boolean {
@@ -54,6 +54,7 @@ export class SnapshotBuffer {
       if (frame.tick <= this.playhead) before = frame
       if (frame.tick >= this.playhead) { after = frame; break }
     }
+    if (latest.phase === 'finished') { before = latest; after = latest }
     let index = -1, afterIndex = -1
     for (let i = 0; i < before.vehicles.length; i++) if (before.vehicles[i].id === id) index = i
     for (let i = 0; i < after.vehicles.length; i++) if (after.vehicles[i].id === id) afterIndex = i
@@ -77,7 +78,7 @@ export class SnapshotBuffer {
     } else out.wheelOffsets = undefined
     out.nitroIntensity = (a.nitroIntensity ?? 0) + ((b.nitroIntensity ?? 0) - (a.nitroIntensity ?? 0)) * t
     out.braking = (a.braking ?? 0) + ((b.braking ?? 0) - (a.braking ?? 0)) * t
-    if (this.playhead > latest.tick) {
+    if (latest.phase !== 'finished' && this.playhead > latest.tick) {
       const dt = Math.min(MAX_EXTRAPOLATION_TICKS, this.playhead - latest.tick) / 60
       out.position.x += b.velocity.x * dt; out.position.y += b.velocity.y * dt; out.position.z += b.velocity.z * dt
     }

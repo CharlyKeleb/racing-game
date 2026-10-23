@@ -20,6 +20,7 @@ export function createRaceFactory(bundle: SimulationBundle): RaceFactory {
   }))
   let active = false
   return {
+    checkpoints: bundle.track.checkpoints,
     fingerprint: bundle.fingerprint,
     simulationVersion: SIMULATION_VERSION,
     async create(seats) {
@@ -40,6 +41,10 @@ export function createRaceFactory(bundle: SimulationBundle): RaceFactory {
         let disposed = false
         const adapter: ServerRaceSimulation = {
           step: () => world.step(),
+          position: (id, out) => {
+            const p = world.vehicles.get(id)!.body.translation()
+            out.x = p.x; out.y = p.y; out.z = p.z
+          },
           setInput: (id, input) => world.setInput(id, input),
           states: () => {
             const states: RaceVehicleState[] = []
