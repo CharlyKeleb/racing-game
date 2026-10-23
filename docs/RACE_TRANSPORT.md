@@ -4,7 +4,7 @@ This slice connects the shared physics spike to a server-owned room lifecycle.
 Two real SDK clients can load the same race, count down, submit driving controls
 and receive identical authoritative car snapshots. The [browser practice adapter](BROWSER_MULTIPLAYER.md)
 now draws both cars with interpolation and exposes launch on the optional local
-backend. Server-timed practice laps and shared session results are implemented; prediction/reconciliation, competitive validation and result persistence remain pending.
+backend. Server-timed practice laps and shared session results are implemented; prediction/reconciliation, competitive validation and hosted acceptance remain pending. An optional [durable result writer and owner history](ONLINE_PRACTICE_HISTORY.md) are now implemented.
 
 ## Local development only
 
@@ -81,7 +81,7 @@ Disconnect/session expiry closes the race, frees the world, clears all readiness
 and unlocks the room. Loading failures, cancellation and room disposal also free
 the world, including asynchronous factories that resolve after cancellation.
 The development session has a ten-minute racing-tick limit and inherits the lobby's
-30-minute expiry. There is no reconnect or result persistence yet. See the practice
+30-minute expiry. There is no reconnect yet. Optional result persistence requires explicit local runner configuration. See the practice
 result rules below; disconnect aborts rather than awarding a result.
 
 `LobbyClient` exposes start/cancel/load-ack/input commands, caps outgoing controls
@@ -114,11 +114,10 @@ Rapier world immediately. While results are open there are no physics ticks or
 periodic snapshots. The host can return the crew to the lobby; either player can
 leave. Leaving currently ends the room's result view for the remaining player.
 
-These are **session-only practice results**, not persisted competitive records.
+These are **practice results**, not competitive records. Optional [durable persistence](ONLINE_PRACTICE_HISTORY.md) saves them to private owner history; without a configured writer they remain session-only.
 The authored eight gates do not enforce continuous track limits or rule out every
-shortcut between gates. No client result submission, profile write, reward,
-offline-record promotion, or leaderboard update is added. Competitive track limits,
-recovery policy, persisted result transactions and real-account/device acceptance
+shortcut between gates. No client result submission, reward, offline-record promotion or leaderboard update is added. Competitive track limits,
+recovery policy and real-account/device/hosted-storage acceptance
 remain separate work. Race protocol 2 prevents older practice browsers from
 silently presenting this lifecycle as the previous endless driving session; lobby
 protocol remains 1 because the deployed server is still lobby-only.

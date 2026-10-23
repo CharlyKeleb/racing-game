@@ -1,9 +1,11 @@
+import { resultRecord } from './ResultRecord.js'
+import type { ResultPersistenceService } from './ResultOutbox.js'
 import { randomInt } from 'node:crypto'
 import { performance } from 'node:perf_hooks'
 import { RaceSession, SERVER_TICK_MS, type RaceFactory } from './RaceSession.js'
 import { Room, ServerError, type Client } from '@colyseus/core'
 import type { Authenticate, VerifiedRacer } from './auth.js'
-import { isLobbyCar, LOBBY_PROTOCOL, type LobbyRacer, type LobbySnapshot } from './protocol.js'
+import { isLobbyCar, LOBBY_PROTOCOL, type LobbyRacer, type LobbySnapshot, type ResultPersistence } from './protocol.js'
 
 export const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 export const lobbyDirectory = new Map<string, LobbyRoom>()
@@ -21,14 +23,18 @@ export class LobbyRoom extends Room {
   hostId = ''
   laps = 3
   private raceFactory?: RaceFactory
+  private resultWriter?: ResultPersistenceService
+  private resultPersistence?: ResultPersistence
+  private disposed = false
   private race: RaceSession | null = null
   private lastSnapshotTick = 0
   private readonly controlRates = new Map<string, { at: number; count: number }>()
   private expiry = new Map<string, ReturnType<typeof setTimeout>>()
   /** All HTTP SDK matchmake methods are denied. Only our verified /rooms endpoint reserves seats. */
   static async onAuth(): Promise<never> { throw new ServerError(403, 'Use private room admission.') }
-  onCreate(options: { raceFactory?: RaceFactory } = {}) {
+  onCreate(options: { raceFactory?: RaceFactory; resultPersistence?: ResultPersistenceService } = {}) {
     this.raceFactory = options.raceFactory
+    this.resultWriter = options.resultPersistence
     this.maxClients = 4
     this.maxMessagesPerSecond = this.raceFactory ? 80 : 10
     if (this.raceFactory) this.setSimulationInterval((dt) => this.advanceRace(dt), SERVER_TICK_MS)
@@ -105,6 +111,7 @@ export class LobbyRoom extends Room {
     this.publish()
   }
   onDispose() {
+    this.disposed = true
     this.race?.close('The room closed.')
     this.race = null
     this.controlRates.clear()
@@ -117,14 +124,16 @@ export class LobbyRoom extends Room {
     this.expiry.set(client.sessionId, setTimeout(() => client.leave(4001, 'Your session expired. Rejoin the lobby.'), Math.min(expiresAt - Date.now(), 2_147_483_647)))
   }
   snapshot(): LobbySnapshot {
-    return { protocol: LOBBY_PROTOCOL, code: this.code, hostId: this.hostId, racers: [...this.racers.values()].map((r) => ({ ...r })), maxPlayers: 4, track: 'nurburgring', laps: this.laps, phase: this.race && this.race.phase !== 'closed' ? this.race.phase : 'lobby', raceEnabled: !!this.raceFactory, race: this.race?.descriptor ?? null }
+    return { protocol: LOBBY_PROTOCOL, code: this.code, hostId: this.hostId, racers: [...this.racers.values()].map((r) => ({ ...r })), maxPlayers: 4, track: 'nurburgring', laps: this.laps, phase: this.race && this.race.phase !== 'closed' ? this.race.phase : 'lobby', raceEnabled: !!this.raceFactory, race: this.race?.descriptor ?? null, resultPersistence: this.resultPersistence }
   }
   private startRace(client: Client): void {
     if (!this.raceFactory || this.race || this.racers.get(client.sessionId)?.id !== this.hostId) return
+    if (this.resultWriter && !this.resultWriter.available) { client.send('notice', 'Result storage is full. Try again later.'); return }
     // Two-racer development gate; four-car capacity requires measurements first.
     if (this.racers.size !== 2 || ![...this.racers.values()].every(r => r.ready)) return
     const race = new RaceSession([...this.racers.values()].map(r => ({ id: r.id, sessionId: r.sessionId, carId: r.carId })), this.raceFactory, this.laps)
     this.race = race
+    this.resultPersistence = { raceId: race.descriptor.id, state: 'disabled' }
     this.lastSnapshotTick = 0
     void this.lock()
     this.publish()
@@ -140,15 +149,29 @@ export class LobbyRoom extends Room {
     const phase = race.phase
     try { race.advance(dt) } catch { race.close('The race simulation stopped. Return to the lobby.') }
     if (race.phase === 'closed') { this.finishRace(); return }
+    if (phase !== race.phase && race.phase === 'finished') this.persistResult(race)
     if (phase !== race.phase) this.publish()
     if (phase !== race.phase || race.tick - this.lastSnapshotTick >= 3) {
       const snapshot = race.snapshot()
       if (snapshot) { this.broadcast('race', snapshot); this.lastSnapshotTick = race.tick }
     }
   }
+  private persistResult(race: RaceSession): void {
+    const writer = this.resultWriter
+    if (!writer) return
+    const update = (state: ResultPersistence) => {
+      if (!this.disposed && this.race === race && state.raceId === race.descriptor.id) { this.resultPersistence = state; this.publish() }
+    }
+    update({ raceId: race.descriptor.id, state: 'saving' })
+    try {
+      const record = resultRecord(race.descriptor, race.snapshot()!.result!)
+      void writer.enqueue(record, update).catch(() => update({ raceId: race.descriptor.id, state: 'failed' }))
+    } catch { update({ raceId: race.descriptor.id, state: 'failed' }) }
+  }
   private finishRace(): void {
     const reason = this.race?.reason
     this.race = null
+    this.resultPersistence = undefined
     for (const racer of this.racers.values()) racer.ready = false
     void this.unlock()
     if (reason) this.broadcast('notice', reason)

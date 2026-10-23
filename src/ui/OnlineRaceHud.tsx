@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import { useStore } from 'zustand'
 import { lobbyStore, leaveLobby, returnToLobby } from '../multiplayer/LobbyClient'
 import { onlineRaceStore } from '../multiplayer/onlineRaceStore'
-import type { RaceResult } from '../../server/src/protocol'
+import type { RaceResult, ResultPersistence } from '../../server/src/protocol'
 import { startLightsLit } from '../racing/RaceManager'
 import { isTouchDevice } from '../engine/device'
 import { TouchControls } from './TouchControls'
@@ -47,7 +47,7 @@ export function OnlineRaceHud() {
     {ready && !touch && <p className="online-race__keys">WASD drive · Space drift · Shift nitro · Hold B rear view</p>}
     {ready && touch && !state.menuOpen && <TouchControls online />}
     {state.menuOpen && !result && <OnlineMenu />}
-    {result && <OnlineResults result={result} host={self?.id === lobby?.hostId} names={new Map(roster?.map(r => [r.id, r.displayName]))} />}
+    {result && <OnlineResults result={result} persistence={lobby?.resultPersistence?.raceId === result.raceId ? lobby.resultPersistence : undefined} host={self?.id === lobby?.hostId} names={new Map(roster?.map(r => [r.id, r.displayName]))} />}
   </div>
 }
 
@@ -69,7 +69,7 @@ function formatTicks(ticks: number): string {
   return `${Math.floor(ms / 60_000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, '0')}.${String(ms % 1000).padStart(3, '0')}`
 }
 
-function OnlineResults({ result, host, names }: { result: RaceResult; host: boolean; names: Map<string, string> }) {
+function OnlineResults({ result, persistence, host, names }: { result: RaceResult; persistence?: ResultPersistence; host: boolean; names: Map<string, string> }) {
   const dialog = useRef<HTMLDialogElement>(null)
   useEffect(() => { dialog.current?.showModal() }, [])
   const ranked = [...result.racers].sort((a, b) => (a.rank ?? Infinity) - (b.rank ?? Infinity))
@@ -79,7 +79,8 @@ function OnlineResults({ result, host, names }: { result: RaceResult; host: bool
       <table><thead><tr><th scope="col">Place</th><th scope="col">Racer</th><th scope="col">Time</th><th scope="col">Best lap</th></tr></thead>
         <tbody>{ranked.map(r => <tr key={r.id}><td>{r.rank ?? '—'}</td><th scope="row">{names.get(r.id) ?? 'Racer'}</th><td>{r.finishTicks === null ? 'DNF' : formatTicks(r.finishTicks)}</td><td>{r.lapTicks.length ? formatTicks(Math.min(...r.lapTicks)) : '—'}</td></tr>)}</tbody>
       </table>
-      <p>{result.reason === 'time-limit' ? 'The 10-minute practice limit was reached.' : result.reason === 'finish-window' ? 'The 60-second finish window ended.' : 'Everyone crossed the finish line.'} These session results are not saved to your profile.</p>
+      <p>{result.reason === 'time-limit' ? 'The 10-minute practice limit was reached.' : result.reason === 'finish-window' ? 'The 60-second finish window ended.' : 'Everyone crossed the finish line.'}</p>
+      <p role="status">{persistence?.state === 'saved' ? 'Saved to your profile as online practice.' : persistence?.state === 'saving' ? 'Saving your practice result…' : persistence?.state === 'pending' ? 'Save pending · The server has kept your result and will retry.' : persistence?.state === 'failed' ? 'This result could not be saved. It is still shown here for this session.' : 'These session results are not saved to your profile.'}</p>
       {host ? <Button variant="primary" onClick={returnToLobby} autoFocus>Return crew to lobby</Button> : <p role="status">Waiting for the host to return the crew to the lobby.</p>}
       <Button variant="ghost" onClick={() => void leaveLobby()} autoFocus={!host}>Leave practice</Button>
     </Panel>

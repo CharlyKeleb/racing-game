@@ -1,3 +1,4 @@
+import { PracticeHistory } from './PracticeHistoryLoader'
 import { validateRacer, profileError } from './racerIdentity'
 import type { Session, SupabaseClient } from '@supabase/supabase-js'
 import { accountStore, type Player } from '../stores/accountStore'
@@ -33,6 +34,7 @@ const message = (err: unknown) => (err instanceof Error ? err.message : typeof e
 export class CloudSave {
   private readonly client: Promise<SupabaseClient | null>
   private playerId: string | null = null
+  private readonly practiceHistory = new PracticeHistory(() => this.client, () => this.playerId)
   /** False until this player's cloud save has merged in; uploads wait for it. */
   private merged = false
   private pendingMerge = false
@@ -112,6 +114,8 @@ export class CloudSave {
     return data.session.access_token
   }
 
+  loadPracticeHistory(more = false): Promise<void> { return this.practiceHistory.load(more) }
+
   async loadProfile(): Promise<void> {
     const client = await this.client
     const playerId = this.playerId
@@ -145,6 +149,7 @@ export class CloudSave {
   }
 
   dispose(): void {
+    this.practiceHistory.dispose()
     this.disposed = true
     if (this.uploadTimer) clearTimeout(this.uploadTimer)
     for (const off of this.cleanup) off()

@@ -1652,3 +1652,19 @@ html, body { overscroll-behavior: none; }
   .online-race__timing { top: 90px; left: 16px; padding: 10px 14px; font-size: 11px; max-width: 45%; }
   .online-race__timing span { font-size: 22px; }
 }
+
+.account-tabs { display: flex; gap: 8px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+.account-tabs button { padding: 10px 14px; border: 1px solid var(--line); color: var(--muted); background: transparent; font: inherit; cursor: pointer; }
+.account-tabs button[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); background: #ffd2000a; }
+.practice-history { display: grid; gap: 16px; padding: 20px 0; }
+.practice-history header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.practice-history h3 { font: italic 800 24px var(--font-display); text-transform: uppercase; margin: 6px 0 0; }
+.practice-history__scroll { overflow-x: auto; }
+.practice-history table { width: 100%; border-collapse: collapse; text-align: left; font-size: 12px; font-variant-numeric: tabular-nums; }
+.practice-history caption { text-align: left; color: var(--muted); padding-bottom: 8px; }
+.practice-history td, .practice-history th { padding: 14px 8px; border-bottom: 1px solid var(--line); }
+.practice-history td { white-space: nowrap; }
+.practice-history thead { font-size: 10px; text-transform: uppercase; color: var(--muted); }
+.practice-history tbody th { min-width: 160px; }
+.practice-history tbody span, .practice-history tbody small { display: block; margin-top: 5px; color: var(--muted); font-size: 11px; font-weight: 400; }
+.practice-history__empty { padding: 24px 16px; border: 1px dashed var(--line); color: var(--muted); text-align: center; line-height: 1.6; }

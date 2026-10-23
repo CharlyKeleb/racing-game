@@ -5,10 +5,11 @@ import { Server, matchMaker } from '@colyseus/core'
 import { WebSocketTransport } from '@colyseus/ws-transport'
 import { AdmissionError, type Authenticate } from './auth.js'
 import { activePlayers, LobbyRoom, lobbyDirectory } from './LobbyRoom.js'
+import type { ResultPersistenceService } from './ResultOutbox.js'
 import type { RaceFactory } from './RaceSession.js'
 import { isLobbyCar, LOBBY_PROTOCOL } from './protocol.js'
 
-export interface BackendOptions { authenticate: Authenticate; origins: string[]; maxRooms?: number; raceFactory?: RaceFactory }
+export interface BackendOptions { authenticate: Authenticate; origins: string[]; maxRooms?: number; raceFactory?: RaceFactory; resultPersistence?: ResultPersistenceService }
 export function createBackend(options: BackendOptions) {
   const origins = new Set(options.origins)
   if (!origins.size || origins.has('*')) throw new Error('Set explicit allowed frontend origins.')
@@ -44,7 +45,7 @@ export function createBackend(options: BackendOptions) {
     },
   })
   const gameServer = new Server({ transport, greet: false, gracefullyShutdown: false })
-  gameServer.define('private_lobby', LobbyRoom, { raceFactory: options.raceFactory })
+  gameServer.define('private_lobby', LobbyRoom, { raceFactory: options.raceFactory, resultPersistence: options.resultPersistence })
   app.post('/rooms', async (req, res) => {
     let playerId: string | null = null
     let reserved = false

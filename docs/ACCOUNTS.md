@@ -106,3 +106,14 @@ Rollback: revert the frontend first; retain profile/history tables to preserve
 claimed identities. If removing the schema is necessary, back it up before
 explicitly dropping the RPC and three new tables. Existing `player_saves` and
 Auth users are independent and should be retained.
+
+
+## Online practice history
+
+`Your racer → Race history` reads private server-authored practice results through
+`my_online_practice_history`, with owner RLS, bounded keyset pages and immediate
+clearing on account changes. It is separate from the editable offline cloud save.
+Apply migration 0003 before enabling this path. The optional local backend can
+write results with a server-only secret and persistent retry directory; this does
+not enable racing on the deployed lobby pilot. See [storage, setup and acceptance
+limits](ONLINE_PRACTICE_HISTORY.md).

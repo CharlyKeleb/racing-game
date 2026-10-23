@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { PracticeHistoryPanel } from './PracticeHistoryPanel'
 import { accountStore } from '../stores/accountStore'
 import { validateRacer } from '../cloud/racerIdentity'
 import { FcGoogle } from 'react-icons/fc'
@@ -34,6 +35,7 @@ export function AccountDialog({ onClose }: { onClose(): void }) {
   const game = useGameInstance()
   const { status, player, sync, lastSyncedAt, error, linkSentTo, providers } = useAccount((s) => s)
   const { profile, profileStatus, profileError } = useAccount((s) => s)
+  const [tab, setTab] = useState<'racer' | 'history'>('racer')
   const [email, setEmail] = useState('')
   const [busy, setBusy] = useState(false)
   useEffect(() => { dialog.current?.showModal() }, [])
@@ -58,7 +60,11 @@ export function AccountDialog({ onClose }: { onClose(): void }) {
           <button className="racer-close" type="button" aria-label="Close account" onClick={() => dialog.current?.close()}>×</button>
         </header>
         {status === 'signedIn' && player ? <>
-          <RacerForm key={`${player.id}:${profile?.handle ?? 'new'}`} onSaved={() => dialog.current?.close()} />
+          {profile && <div className="account-tabs" role="group" aria-label="Racer profile">
+            <button aria-pressed={tab === 'racer'} onClick={() => setTab('racer')}>Your racer</button>
+            <button aria-pressed={tab === 'history'} onClick={() => setTab('history')}>Race history</button>
+          </div>}
+          {tab === 'history' && profile ? <PracticeHistoryPanel /> : <RacerForm key={`${player.id}:${profile?.handle ?? 'new'}`} onSaved={() => dialog.current?.close()} />}
           {profileStatus === 'loading' && <p role="status">Loading your racer…</p>}
           {profileStatus === 'error' && <><p className="account-dialog__error" role="alert">{profileError}</p><Button variant="secondary" onClick={() => run(() => game?.loadRacerProfile())}>Retry racer profile</Button></>}
           <details className="account-details">

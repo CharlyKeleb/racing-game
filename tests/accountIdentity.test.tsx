@@ -32,3 +32,9 @@ it('offers retry when the profile cannot load', () => {
   accountStore.setState({ status: 'signedIn', player, profileStatus: 'error', profileError: 'Could not load your racer.' })
   expect(renderToStaticMarkup(<AccountDialog onClose={() => {}} />)).toContain('Retry racer profile')
 })
+it('offers private race history for an existing racer', () => {
+  accountStore.setState({ status: 'signedIn', player, profileStatus: 'ready', profile: { id: player.id, handle: 'nightshift_7', display_name: 'Night Shift', handle_changed_at: new Date().toISOString() } })
+  const dialog = renderToStaticMarkup(<AccountDialog onClose={() => {}} />)
+  expect(dialog).toContain('Race history')
+  expect(dialog).toContain('Your racer')
+})

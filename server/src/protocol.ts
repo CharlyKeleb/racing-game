@@ -21,6 +21,7 @@ export interface LobbySnapshot {
   phase: 'lobby' | 'loading' | 'countdown' | 'racing' | 'finished'
   raceEnabled: boolean
   race: RaceDescriptor | null
+  resultPersistence?: ResultPersistence
 }
 export function isLobbyCar(value: unknown): value is LobbyCar {
   return typeof value === 'string' && (LOBBY_CARS as readonly string[]).includes(value)
@@ -96,4 +97,10 @@ export interface RaceResult {
     finishTicks: number | null
     lapTicks: readonly number[]
   }[]
+}
+
+export interface ResultPersistence {
+  raceId: string
+  state: 'disabled' | 'saving' | 'pending' | 'saved' | 'failed'
+  savedAt?: string
 }

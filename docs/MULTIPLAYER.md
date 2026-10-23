@@ -171,7 +171,7 @@ local two-racer practice with server-pose interpolation.
 Practice now includes ordered checkpoint/lap validation, a finish window, DNF
 deadlines, identical session results and host return to the lobby. Next: full
 prediction/reconciliation, production-image profiling, competitive track limits
-and idempotent result persistence. Never upload browser lap records as verified
+and hosted persistence verification. Optional server-owned [practice history](ONLINE_PRACTICE_HISTORY.md) now includes atomic writes, durable retry and private owner reads. Never upload browser lap records as verified
 competition data.
 
 References: [Fly configuration](https://fly.io/docs/reference/configuration/),

@@ -10,8 +10,9 @@ This is a practice milestone with server-timed ordered checkpoints, laps and
 shared session results. The HUD shows lap count, race time, next gate and finish
 status alongside speed/gear, nitro, countdown and connection state. The results
 dialog shows the same server-confirmed places, race times and best laps for both
-racers, including ties and DNF. These results are not saved to profiles or awarded
-progression; competitive validation and persistence remain pending. The deployed Fly entrypoint still
+racers, including ties and DNF. The optional [result storage path](ONLINE_PRACTICE_HISTORY.md) can save them to
+private profile history after server-only storage is configured; otherwise they
+remain session-only. Competitive validation and progression remain pending. The deployed Fly entrypoint still
 advertises lobby-only capability; this change does not deploy or resize it.
 
 ## Run with real accounts locally
@@ -113,4 +114,4 @@ restored the lobby with both readiness flags cleared.
 
 Run `npm test`, both builds and lint before review. Next: full controller-state
 prediction/reconciliation, competitive track-limit validation and
-idempotent persisted results, plus staging/device/memory/network acceptance.
+staging/device/memory/network acceptance and hosted persistence verification.

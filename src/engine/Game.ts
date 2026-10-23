@@ -1075,6 +1075,8 @@ export class Game {
     return this.cloud.multiplayerToken()
   }
 
+  loadPracticeHistory(more = false): Promise<void> { return this.cloud.loadPracticeHistory(more) }
+
   loadRacerProfile(): Promise<void> {
     return this.cloud.loadProfile()
   }
