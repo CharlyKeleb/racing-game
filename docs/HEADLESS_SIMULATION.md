@@ -88,8 +88,9 @@ network and serialization overhead, test latency/jitter on two real devices and
 record sustained tick misses. Do not select snapshot rates, increase paid
 capacity or claim measured production race capacity from this local spike.
 
-Next code delivery: server-owned loading/grid/countdown phases, bounded sequenced
-inputs, authoritative simulation snapshots and client prediction/interpolation.
+The [local race transport](RACE_TRANSPORT.md) adds server-owned loading/countdown,
+bounded sequenced inputs and authoritative snapshots. Browser prediction,
+interpolation and race presentation remain the next code delivery.
 Then validate checkpoint/lap/finish rules and persist idempotent verified results.
 The two-device lobby acceptance gate and production frontend environment/release
 from the epic remain outstanding.
