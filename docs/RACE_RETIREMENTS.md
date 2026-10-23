@@ -55,5 +55,5 @@ while the remaining driver continued at 46 km/h in first gear; no browser warnin
 or errors appeared.
 
 These local tests do not establish production race capacity, real-device latency,
-physical network recovery or the real-account two-device acceptance gate. Rematch
-voting and deterministic local prediction remain separate chunks.
+physical network recovery or the real-account two-device acceptance gate. [Rematch voting](RACE_REMATCH.md) is now implemented as a separate chunk;
+deterministic local prediction remains pending.

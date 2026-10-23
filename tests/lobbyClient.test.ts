@@ -166,3 +166,21 @@ it('does not reconnect against lobby-only servers or after explicit session reje
   expect(sdk.reconnect).not.toHaveBeenCalled()
   expect(lobby.lobbyStore.getState().status).toBe('idle')
 })
+it('binds rematch consent to the active finished race and suppresses it offline', async () => {
+  const room = fakeRoom(); sdk.consume.mockResolvedValue(room)
+  vi.stubGlobal('fetch', async () => new Response(JSON.stringify({ sessionId: 'seat' })))
+  await lobby.enterLobby('create', '', 'porsche911', async () => 'test-token')
+  const state = { phase: 'racing', race: { id: 'first' } }
+  const receive = new Map(room.onMessage.mock.calls).get('lobby')!
+  receive(state); room.send.mockClear()
+  lobby.setRematchReady(true); expect(room.send).not.toHaveBeenCalled()
+  receive({ ...state, phase: 'finished' }); lobby.setRematchReady(true)
+  expect(room.send).toHaveBeenLastCalledWith('rematch', { raceId: 'first', ready: true })
+  lobby.setRematchReady(false)
+  expect(room.send).toHaveBeenLastCalledWith('rematch', { raceId: 'first', ready: false })
+  room.send.mockClear(); room.connection.isOpen = false
+  lobby.setRematchReady(true); expect(room.send).not.toHaveBeenCalled()
+  room.connection.isOpen = true
+  receive({ ...state, phase: 'loading', race: { id: 'second' } }); lobby.setRematchReady(true)
+  expect(room.send).not.toHaveBeenCalled()
+})

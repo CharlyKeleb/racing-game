@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useStore } from 'zustand'
-import { lobbyStore, leaveLobby, returnToLobby } from '../multiplayer/LobbyClient'
+import { lobbyStore, leaveLobby, returnToLobby, setRematchReady } from '../multiplayer/LobbyClient'
 import { onlineRaceStore } from '../multiplayer/onlineRaceStore'
 import type { RaceResult, ResultPersistence } from '../../server/src/protocol'
 import { startLightsLit } from '../racing/RaceManager'
@@ -73,6 +73,12 @@ function formatTicks(ticks: number): string {
 function OnlineResults({ result, persistence, host, names, recovering }: { recovering: boolean; result: RaceResult; persistence?: ResultPersistence; host: boolean; names: Map<string, string> }) {
   const dialog = useRef<HTMLDialogElement>(null)
   useEffect(() => { dialog.current?.showModal() }, [])
+  const lobby = useStore(lobbyStore, s => s.snapshot)
+  const sessionId = useStore(lobbyStore, s => s.sessionId)
+  const self = lobby?.racers.find(r => r.sessionId === sessionId)
+  const canRematch = lobby?.rematchEnabled === true && !recovering && lobby?.racers.length === 2 && lobby.raceRacers?.length === 2
+    && lobby.raceRacers.every(r => lobby.racers.some(current => current.id === r.id && current.connected !== false))
+  const voted = !!self && !!lobby?.rematchVotes?.includes(self.id)
   const ranked = [...result.racers].sort((a, b) => (a.rank ?? Infinity) - (b.rank ?? Infinity))
   return <dialog ref={dialog} className="online-race__dialog online-race__results" aria-label="Practice results" onCancel={e => e.preventDefault()}>
     <Panel title="Practice results">
@@ -83,6 +89,8 @@ function OnlineResults({ result, persistence, host, names, recovering }: { recov
       <p>{result.reason === 'all-resolved' ? 'Every racer has finished or retired.' : result.reason === 'time-limit' ? 'The 10-minute practice limit was reached.' : result.reason === 'finish-window' ? 'The 60-second finish window ended.' : 'Everyone crossed the finish line.'}</p>
       {recovering && <p role="status">Reconnecting to your crew…</p>}
       <p role="status">{persistence?.state === 'saved' ? 'Saved to your profile as online practice.' : persistence?.state === 'saving' ? 'Saving your practice result…' : persistence?.state === 'pending' ? 'Save pending · The server has kept your result and will retry.' : persistence?.state === 'failed' ? 'This result could not be saved. It is still shown here for this session.' : 'These session results are not saved to your profile.'}</p>
+      {canRematch && <><Button variant="primary" onClick={() => setRematchReady(!voted)}>{voted ? 'Cancel rematch vote' : 'Race again'}</Button>
+        <p role="status">{voted ? 'Waiting for your rival. Votes expire after 60 seconds.' : lobby?.rematchVotes?.length ? 'Your rival wants a rematch. Race again with the same cars and laps.' : 'Both racers must agree to race again with the same cars and laps.'}</p></>}
       {host ? <Button variant="primary" onClick={returnToLobby} disabled={recovering} autoFocus>Return crew to lobby</Button> : <p role="status">Waiting for the host to return the crew to the lobby.</p>}
       <Button variant="ghost" onClick={() => void leaveLobby()} autoFocus={!host}>Leave practice</Button>
     </Panel>

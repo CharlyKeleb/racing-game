@@ -182,3 +182,5 @@ References: [Fly configuration](https://fly.io/docs/reference/configuration/),
 The optional local race backend now supports [15-second authenticated reconnect](RACE_RECONNECT.md)
 while preserving simulation state. The deployed lobby pilot remains unchanged;
 reload recovery, disconnect DNF and hosted acceptance remain separate gates.
+
+Post-race [rematch voting](RACE_REMATCH.md) requires fresh consent from both original racers.

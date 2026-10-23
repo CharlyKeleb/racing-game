@@ -1315,6 +1315,8 @@ export class Game {
       if (raceSnapshot) this.onlineScene?.push(raceSnapshot, performance.now())
       return
     }
+    // A rematch is a new lifecycle: dispose the previous scene before loading it.
+    if (this.onlineRaceId) { this.endOnlineRace(); return }
     const self = snapshot.racers.find(r => r.sessionId === sessionId)
     if (!self || gameStore.getState().carSwitching || gameStore.getState().trackSwitching || !['menu', 'garage'].includes(gameStore.getState().phase)) {
       void leaveLobby()

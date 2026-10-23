@@ -81,7 +81,8 @@ sessionStorage, share URL or application log stores them. Page reload, browser
 restart, app termination, server restart/redeploy and cross-device seat takeover
 are **not supported recovery paths**. A reloaded page must wait for the old held
 seat to expire, then join normally. Reconnect does not implement rollback
-prediction, reset/recovery, rematch voting or competitive validation.
+prediction, reset/recovery or competitive validation. Post-race
+[rematch voting](RACE_REMATCH.md) is implemented separately.
 
 ## Verification
 

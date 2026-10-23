@@ -22,6 +22,9 @@ export interface LobbySnapshot {
   phase: 'lobby' | 'loading' | 'countdown' | 'racing' | 'finished'
   raceEnabled: boolean
   reconnectGraceSeconds?: number
+  rematchEnabled?: boolean
+  rematchVotes?: string[]
+  rematchExpiresAt?: number
   raceRacers?: LobbyRacer[]
   race: RaceDescriptor | null
   resultPersistence?: ResultPersistence

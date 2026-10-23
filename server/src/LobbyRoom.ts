@@ -28,6 +28,9 @@ export class LobbyRoom extends Room {
   private resultPersistence?: ResultPersistence
   private disposed = false
   private race: RaceSession | null = null
+  private readonly rematchVotes = new Set<string>()
+  private rematchTimer: ReturnType<typeof setTimeout> | undefined
+  private rematchExpiresAt: number | undefined
   private raceRacers: LobbyRacer[] | undefined
   private lastSnapshotTick = 0
   private readonly controlRates = new Map<string, { at: number; count: number }>()
@@ -68,6 +71,7 @@ export class LobbyRoom extends Room {
         this.race.close(''); this.finishRace()
       }
     })
+    this.control('rematch', (client, value: unknown) => this.voteRematch(client, value))
     this.control('ready', (client, value: unknown) => {
       const racer = this.racers.get(client.sessionId)
       if (!this.race && racer && typeof value === 'boolean') { racer.ready = value; this.publish() }
@@ -127,6 +131,7 @@ export class LobbyRoom extends Room {
     if (!this.raceFactory || !racer || !lease || ![1001, 1005, 1006, 4010].includes(code ?? 1006) || lease.expiresAt <= Date.now()) return
     lease.recoverUntil ??= Date.now() + RECONNECT_GRACE_SECONDS * 1000
     if (lease.recoverUntil <= Date.now()) return
+    this.clearRematch()
     racer.connected = false
     this.controlRates.delete(client.sessionId)
     if (!this.race) racer.ready = false
@@ -147,6 +152,7 @@ export class LobbyRoom extends Room {
     const racer = this.racers.get(client.sessionId)
     if (!racer) return
     const authExpired = (this.leases.get(client.sessionId)?.expiresAt ?? Infinity) <= Date.now()
+    this.clearRematch()
     activePlayers.delete(racer.id)
     this.racers.delete(client.sessionId)
     this.controlRates.delete(client.sessionId)
@@ -170,6 +176,7 @@ export class LobbyRoom extends Room {
   }
   onDispose() {
     this.disposed = true
+    this.clearRematch()
     this.race?.close('The room closed.')
     this.race = null
     this.controlRates.clear()
@@ -191,25 +198,65 @@ export class LobbyRoom extends Room {
     }, Math.max(0, Math.min(due - Date.now(), 2_147_483_647))))
   }
   snapshot(): LobbySnapshot {
-    return { protocol: LOBBY_PROTOCOL, code: this.code, hostId: this.hostId, racers: [...this.racers.values()].map((r) => ({ ...r })), maxPlayers: 4, track: 'nurburgring', laps: this.laps, phase: this.race && this.race.phase !== 'closed' ? this.race.phase : 'lobby', raceEnabled: !!this.raceFactory, ...(this.raceFactory ? { reconnectGraceSeconds: RECONNECT_GRACE_SECONDS } : {}), race: this.race?.descriptor ?? null, raceRacers: this.raceRacers, resultPersistence: this.resultPersistence }
+    return { protocol: LOBBY_PROTOCOL, code: this.code, hostId: this.hostId, racers: [...this.racers.values()].map((r) => ({ ...r })), maxPlayers: 4, track: 'nurburgring', laps: this.laps, phase: this.race && this.race.phase !== 'closed' ? this.race.phase : 'lobby', raceEnabled: !!this.raceFactory, ...(this.raceFactory ? { reconnectGraceSeconds: RECONNECT_GRACE_SECONDS, rematchEnabled: true } : {}), race: this.race?.descriptor ?? null, raceRacers: this.raceRacers, rematchVotes: [...this.rematchVotes], rematchExpiresAt: this.rematchExpiresAt, resultPersistence: this.resultPersistence }
   }
   private startRace(client: Client): void {
     if (!this.raceFactory || this.race || this.racers.get(client.sessionId)?.id !== this.hostId) return
     if (this.resultWriter && !this.resultWriter.available) { client.send('notice', 'Result storage is full. Try again later.'); return }
     // Two-racer development gate; four-car capacity requires measurements first.
     if (this.racers.size !== 2 || ![...this.racers.values()].every(r => r.ready && r.connected !== false)) return
-    const race = new RaceSession([...this.racers.values()].map(r => ({ id: r.id, sessionId: r.sessionId, carId: r.carId })), this.raceFactory, this.laps)
+    this.launchRace()
+  }
+  private launchRace(): void {
+    this.clearRematch()
+    this.race?.close('')
+    const race = new RaceSession([...this.racers.values()].map(r => ({ id: r.id, sessionId: r.sessionId, carId: r.carId })), this.raceFactory!, this.laps)
     this.race = race
     this.raceRacers = [...this.racers.values()].map(r => ({ ...r }))
     this.resultPersistence = { raceId: race.descriptor.id, state: 'disabled' }
     this.lastSnapshotTick = 0
     void this.lock()
     this.publish()
-    void race.load(this.raceFactory).then(() => {
+    void race.load(this.raceFactory!).then(() => {
       if (this.race !== race) return
       if (race.phase === 'closed') this.finishRace()
       else this.publish()
     })
+  }
+  private clearRematch(): void {
+    clearTimeout(this.rematchTimer)
+    this.rematchTimer = undefined
+    this.rematchExpiresAt = undefined
+    this.rematchVotes.clear()
+  }
+  private voteRematch(client: Client, value: unknown): void {
+    if (!this.raceFactory || this.race?.phase !== 'finished' || !value || typeof value !== 'object') return
+    const vote = value as { raceId?: unknown; ready?: unknown }
+    if (Object.keys(vote).some(k => k !== 'raceId' && k !== 'ready') || vote.raceId !== this.race.descriptor.id || typeof vote.ready !== 'boolean') return
+    const eligible = this.racers.size === 2 && this.race.racers.every(r => {
+      const member = this.racers.get(r.sessionId), lease = this.leases.get(r.sessionId)
+      return member?.id === r.id && member.connected !== false && lease && lease.expiresAt > Date.now() && lease.recoverUntil === null
+    })
+    const self = this.racers.get(client.sessionId)
+    if (!eligible || !self) return
+    if (this.rematchExpiresAt !== undefined && Date.now() >= this.rematchExpiresAt) this.clearRematch()
+    if (vote.ready) {
+      this.rematchVotes.add(self.id)
+      if (this.rematchExpiresAt === undefined) {
+        this.rematchExpiresAt = Date.now() + 60_000
+        this.rematchTimer = setTimeout(() => { this.clearRematch(); this.publish() }, 60_000)
+      }
+    } else {
+      this.rematchVotes.delete(self.id)
+      if (!this.rematchVotes.size) this.clearRematch()
+    }
+    if (this.rematchVotes.size === 2) {
+      if (this.resultWriter && !this.resultWriter.available) {
+        this.clearRematch()
+        this.broadcast('notice', 'Result storage is full. Try a rematch later.')
+      } else { this.launchRace(); return }
+    }
+    this.publish()
   }
   private advanceRace(dt: number): void {
     const race = this.race
@@ -237,6 +284,7 @@ export class LobbyRoom extends Room {
     } catch { update({ raceId: race.descriptor.id, state: 'failed' }) }
   }
   private finishRace(): void {
+    this.clearRematch()
     const reason = this.race?.reason
     this.race = null
     this.resultPersistence = undefined

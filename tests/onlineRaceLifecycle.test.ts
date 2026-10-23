@@ -68,3 +68,20 @@ it('resynchronizes the retained scene after recovery without reloading cars or r
   expect(f.scene.dispose).not.toHaveBeenCalled()
   expect(gameStore.getState().settings.track).toBe('drift-park')
 })
+
+it('disposes finished presentation before a fresh rematch and preserves saved settings', async () => {
+  const f = fixture(), nextScene = { dispose: vi.fn(), push: vi.fn() }
+  const saved = gameStore.getState().settings
+  vi.spyOn(OnlineRaceScene, 'load').mockResolvedValueOnce(f.scene as never).mockResolvedValueOnce(nextScene as never)
+  f.game.syncOnlineLobby(); await f.game.onlinePreparing
+  lobbyStore.setState({ snapshot: { ...lobby, race: { ...lobby.race, id: 'rematch' } } as never })
+  f.game.syncOnlineLobby()
+  await vi.waitFor(() => expect(OnlineRaceScene.load).toHaveBeenCalledTimes(2))
+  await f.game.onlinePreparing
+  expect(f.scene.dispose).toHaveBeenCalledTimes(1)
+  expect(f.game.onlineScene).toBe(nextScene)
+  expect(f.game.onlineRaceId).toBe('rematch')
+  expect(gameStore.getState().phase).toBe('online')
+  expect(gameStore.getState().settings).toBe(saved)
+  expect(f.game.race.state).toBe('idle')
+})

@@ -160,6 +160,9 @@ if (import.meta.hot) import.meta.hot.dispose(() => { void leaveLobby() })
 
 /** Transport commands for the upcoming browser race adapter; no automatic local-race launch. */
 export function startLobbyRace() { sendControl('start') }
+export function setRematchReady(ready: boolean) {
+  if (inputRaceId && lobbyStore.getState().snapshot?.phase === 'finished') sendControl('rematch', { raceId: inputRaceId, ready })
+}
 export function returnToLobby() { sendControl('returnLobby') }
 export function cancelLobbyRace() { sendControl('cancelRace') }
 export function acknowledgeRaceLoaded(race: RaceDescriptor) {
