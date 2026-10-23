@@ -19,7 +19,10 @@
     "audit:delivery": "node scripts/performance/audit-delivery.mjs",
     "server:dev": "npm --prefix server run dev",
     "server:build": "npm --prefix server run build",
-    "test:multiplayer": "vitest run tests/multiplayer.test.ts tests/multiplayerAuth.test.ts tests/lobbyClient.test.ts"
+    "test:multiplayer": "vitest run tests/multiplayer.test.ts tests/multiplayerAuth.test.ts tests/lobbyClient.test.ts",
+    "build:simulation": "node scripts/multiplayer/build-simulation-assets.mjs",
+    "benchmark:simulation": "npm run build:simulation && server/node_modules/.bin/tsx scripts/multiplayer/benchmark.ts",
+    "test:simulation": "vitest run tests/headlessSimulation.test.ts tests/handling.test.ts"
   },
   "dependencies": {
     "@colyseus/sdk": "0.18.6",

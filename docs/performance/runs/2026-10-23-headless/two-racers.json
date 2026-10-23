@@ -1,0 +1,27 @@
+{
+  "simulationVersion": 1,
+  "fingerprint": "06faacf3260ecfdd6bfc5afd0389811f6bafc552aa4cc3d0c95ae34d6fed49b9",
+  "environment": {
+    "node": "v24.7.0",
+    "platform": "darwin",
+    "arch": "arm64",
+    "cpu": "Apple M1 Pro"
+  },
+  "racers": 2,
+  "simulatedSeconds": 180,
+  "measuredTicks": 10800,
+  "elapsedMs": 1236.828833,
+  "cpuMs": 2232.181,
+  "tickMs": {
+    "p50": 0.0935829999998532,
+    "p95": 0.22904200000016317,
+    "p99": 0.3910840000000917,
+    "max": 2.9235419999999976
+  },
+  "rssMiB": 489.84375,
+  "distanceMetres": [
+    5024,
+    5018
+  ],
+  "scope": "Local unpaced AI-driven physics spike; no networking, persistence, renderer, finish validation or Fly capacity claim."
+}

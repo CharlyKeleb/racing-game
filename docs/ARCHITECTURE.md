@@ -90,6 +90,13 @@ flowchart TB
 6. **Assets are data-driven.** A car is a GLB plus a `vehicle-config.json`. Adding
    a car needs no code beyond a registry row (see [Asset pipeline](ASSET_PIPELINE.md)).
 
+### Shared online simulation prerequisite
+
+`VehiclePhysics` owns the browser and headless chassis/controller/reset boundary.
+`simulation/HeadlessSimulation` runs trusted stock cars and track collision data
+without presentation. The lobby backend does not yet run it. See
+[the simulation spike and measurement gates](HEADLESS_SIMULATION.md).
+
 ## Frame lifecycle
 
 ```mermaid
