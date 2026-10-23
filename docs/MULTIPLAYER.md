@@ -178,3 +178,7 @@ References: [Fly configuration](https://fly.io/docs/reference/configuration/),
 [Colyseus authentication](https://docs.colyseus.io/auth/room),
 [Colyseus WebSocket transport](https://docs.colyseus.io/server/transport/ws),
 [Supabase JWTs](https://supabase.com/docs/guides/auth/jwts).
+
+The optional local race backend now supports [15-second authenticated reconnect](RACE_RECONNECT.md)
+while preserving simulation state. The deployed lobby pilot remains unchanged;
+reload recovery, disconnect DNF and hosted acceptance remain separate gates.

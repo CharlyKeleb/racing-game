@@ -54,3 +54,17 @@ it('disposes a late-loaded online scene after cancellation and never installs it
   expect(f.game.track.id).toBe('drift-park')
   expect(onlineRaceStore.getState().active).toBe(false)
 })
+
+it('resynchronizes the retained scene after recovery without reloading cars or resetting local settings', async () => {
+  const f = fixture()
+  const buffer = { resync: vi.fn() }
+  Object.assign(f.scene, { buffer })
+  vi.spyOn(OnlineRaceScene, 'load').mockResolvedValue(f.scene as never)
+  f.game.syncOnlineLobby(); await f.game.onlinePreparing
+  lobbyStore.setState(s => ({ connectionEpoch: s.connectionEpoch + 1 }))
+  f.game.syncOnlineLobby()
+  expect(buffer.resync).toHaveBeenCalledTimes(1)
+  expect(OnlineRaceScene.load).toHaveBeenCalledTimes(1)
+  expect(f.scene.dispose).not.toHaveBeenCalled()
+  expect(gameStore.getState().settings.track).toBe('drift-park')
+})

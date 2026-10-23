@@ -38,7 +38,7 @@ export function createBackend(options: BackendOptions) {
   }))
   // Never accept arbitrary profile UUIDs/handles from the client.
   LobbyRoom.authenticate = options.authenticate
-  const transport = new WebSocketTransport({ server: http, maxPayload: 10_240, pingInterval: 6000, pingMaxRetries: 3,
+  const transport = new WebSocketTransport({ server: http, maxPayload: 10_240, pingInterval: options.raceFactory ? 1000 : 6000, pingMaxRetries: 3,
     beforeUpgrade: (request) => {
       const origin = request.headers.get('origin')
       if (draining || (origin && !origins.has(origin))) return new Response(null, { status: draining ? 503 : 403 })

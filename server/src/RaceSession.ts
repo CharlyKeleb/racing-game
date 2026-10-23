@@ -23,6 +23,7 @@ export interface RaceFactory {
   create(seats: readonly RaceSeat[]): Promise<ServerRaceSimulation>
 }
 interface SeatInput {
+  connected: boolean
   received: number
   applied: number
   tick: number
@@ -64,7 +65,7 @@ export class RaceSession {
     if (racers.length !== 2 || new Set(racers.map(r => r.id)).size !== 2 || new Set(racers.map(r => r.sessionId)).size !== 2) throw new Error('A race needs two distinct authenticated seats')
     for (const r of racers) this.progress.set(r.id, new RaceProgress(factory.checkpoints, laps))
     this.descriptor = { protocol: RACE_PROTOCOL, id: randomUUID(), fingerprint: factory.fingerprint, simulationVersion: factory.simulationVersion, tickRate: 60, snapshotRate: 20, countdownTicks: 180 }
-    for (const r of racers) this.seats.set(r.sessionId, { received: -1, applied: -1, tick: -Infinity, command: { ...NEUTRAL }, rateAt: -Infinity, rateCount: 0 })
+    for (const r of racers) this.seats.set(r.sessionId, { connected: true, received: -1, applied: -1, tick: -Infinity, command: { ...NEUTRAL }, rateAt: -Infinity, rateCount: 0 })
   }
 
   /** A late-loading simulation is freed even when the room was cancelled/disposed meanwhile. */
@@ -79,7 +80,7 @@ export class RaceSession {
   }
 
   acknowledge(sessionId: string, value: unknown): boolean {
-    if (this.phase !== 'loading' || !this.seats.has(sessionId) || !value || typeof value !== 'object') return false
+    if (this.phase !== 'loading' || !this.seats.get(sessionId)?.connected || !value || typeof value !== 'object') return false
     const v = value as { raceId?: unknown; fingerprint?: unknown; simulationVersion?: unknown; protocol?: unknown }
     if (v.protocol !== RACE_PROTOCOL || v.raceId !== this.descriptor.id || v.fingerprint !== this.descriptor.fingerprint || v.simulationVersion !== this.descriptor.simulationVersion) return false
     this.loaded.add(sessionId)
@@ -88,12 +89,24 @@ export class RaceSession {
   }
 
   private tryCountdown(): void {
-    if (this.phase === 'loading' && this.loadingResolved && this.loaded.size === this.seats.size) this.phase = 'countdown'
+    if (this.phase === 'loading' && this.loadingResolved && this.loaded.size === this.seats.size && [...this.seats.values()].every(s => s.connected)) this.phase = 'countdown'
   }
+
+  /** Transport recovery never resets physics, progress, nitro or accepted sequence history. */
+  setConnected(sessionId: string, connected: boolean): void {
+    const seat = this.seats.get(sessionId)
+    if (!seat) return
+    seat.connected = connected
+    seat.tick = -Infinity
+    seat.command = { ...NEUTRAL }
+    if (!connected && this.phase === 'loading') this.loaded.delete(sessionId)
+  }
+
+  nextInputSequence(sessionId: string): number { return (this.seats.get(sessionId)?.received ?? -1) + 1 }
 
   input(sessionId: string, value: unknown, nowMs: number): boolean {
     const seat = this.seats.get(sessionId)
-    if (this.phase !== 'racing' || !seat || this.progress.get(this.racers.find(r => r.sessionId === sessionId)!.id)!.finishTicks !== null || !isInput(value, this.descriptor.id)) return false
+    if (this.phase !== 'racing' || !seat || !seat.connected || this.progress.get(this.racers.find(r => r.sessionId === sessionId)!.id)!.finishTicks !== null || !isInput(value, this.descriptor.id)) return false
     // A latest-input mailbox: never build a queue from client traffic. Bound jumps and message rate.
     if (value.sequence <= seat.received || value.sequence > seat.received + 120) return false
     if (nowMs - seat.rateAt >= 1000) { seat.rateAt = nowMs; seat.rateCount = 0 }
@@ -121,7 +134,7 @@ export class RaceSession {
       for (const r of this.racers) {
         const seat = this.seats.get(r.sessionId)!
         const driving = racing && this.progress.get(r.id)!.finishTicks === null
-        const fresh = driving && this.tick - seat.tick < INPUT_TIMEOUT_TICKS
+        const fresh = driving && seat.connected && this.tick - seat.tick < INPUT_TIMEOUT_TICKS
         this.simulation!.setInput(r.id, driving ? fresh ? seat.command : NEUTRAL : HOLD)
         if (fresh) seat.applied = seat.received
       }

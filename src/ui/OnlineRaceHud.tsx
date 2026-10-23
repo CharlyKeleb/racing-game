@@ -11,6 +11,7 @@ import { Button, Panel } from './kit'
 const touch = isTouchDevice()
 export function OnlineRaceHud() {
   const state = useStore(onlineRaceStore)
+  const recovering = useStore(lobbyStore, s => s.status === 'reconnecting')
   const lobby = useStore(lobbyStore, s => s.snapshot)
   const sessionId = useStore(lobbyStore, s => s.sessionId)
   const frame = useStore(lobbyStore, s => s.raceSnapshot)
@@ -19,7 +20,7 @@ export function OnlineRaceHud() {
   const self = roster?.find(r => r.sessionId === sessionId)
   const progress = frame?.progress?.find(p => p.id === self?.id)
   const result = frame?.result
-  const ready = state.loaded && state.countdown === null && !state.finished
+  const ready = state.loaded && state.countdown === null && !state.finished && !recovering
   const lights = state.countdown !== null ? startLightsLit(state.countdown) : 0
   return <div className="online-race" aria-label="Online practice">
     <header className="online-race__header">
@@ -28,7 +29,7 @@ export function OnlineRaceHud() {
     </header>
     <aside className="online-race__roster" aria-label="Racers">{roster?.map(r => {
       const p = frame?.progress?.find(p => p.id === r.id)
-      const label = p?.finishTicks != null ? 'Finished' : `Lap ${Math.min((p?.completedLaps ?? 0) + 1, lobby?.laps ?? 1)} / ${lobby?.laps ?? 1}`
+      const label = r.connected === false ? 'Reconnecting…' : p?.finishTicks != null ? 'Finished' : `Lap ${Math.min((p?.completedLaps ?? 0) + 1, lobby?.laps ?? 1)} / ${lobby?.laps ?? 1}`
       return <div key={r.id}><strong>{r.displayName}</strong><span>@{r.handle} · {label}</span></div>
     })}</aside>
     {!state.loaded && <div className="online-race__message" role="status"><strong>{race ? 'Loading your grid…' : 'Returning to the lobby…'}</strong><span>Waiting for both racers to load the circuit.</span></div>}
@@ -38,7 +39,7 @@ export function OnlineRaceHud() {
       <span>{formatTicks(progress.finishTicks ?? Math.max(0, (frame?.tick ?? 0) - (race?.countdownTicks ?? 180)))}</span>
       <small>{progress.finishTicks !== null ? 'Your rival has up to 60 seconds to finish.' : `Next gate ${progress.nextCheckpoint === 0 ? 'Finish' : progress.nextCheckpoint}`}</small>
     </div>}
-    {state.delayed && !result && <p className="online-race__delay" role="status">Connection delayed · Controls released</p>}
+    {(state.delayed || recovering) && !result && <p className="online-race__delay" role="status">{recovering ? 'Reconnecting · Your race continues · Controls released' : 'Connection delayed · Controls released'}</p>}
     <div className="online-race__gauges" aria-label={`${Math.round(state.speedKmh)} km/h, gear ${state.gear}`}>
       <span className="eyebrow">{Math.round(state.rpm)} rpm <b>{state.gear < 0 ? 'R' : state.gear}</b></span>
       <strong>{Math.round(state.speedKmh)}<small>km/h</small></strong>
@@ -47,7 +48,7 @@ export function OnlineRaceHud() {
     {ready && !touch && <p className="online-race__keys">WASD drive · Space drift · Shift nitro · Hold B rear view</p>}
     {ready && touch && !state.menuOpen && <TouchControls online />}
     {state.menuOpen && !result && <OnlineMenu />}
-    {result && <OnlineResults result={result} persistence={lobby?.resultPersistence?.raceId === result.raceId ? lobby.resultPersistence : undefined} host={self?.id === lobby?.hostId} names={new Map(roster?.map(r => [r.id, r.displayName]))} />}
+    {result && <OnlineResults result={result} recovering={recovering} persistence={lobby?.resultPersistence?.raceId === result.raceId ? lobby.resultPersistence : undefined} host={self?.id === lobby?.hostId} names={new Map(roster?.map(r => [r.id, r.displayName]))} />}
   </div>
 }
 
@@ -69,7 +70,7 @@ function formatTicks(ticks: number): string {
   return `${Math.floor(ms / 60_000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, '0')}.${String(ms % 1000).padStart(3, '0')}`
 }
 
-function OnlineResults({ result, persistence, host, names }: { result: RaceResult; persistence?: ResultPersistence; host: boolean; names: Map<string, string> }) {
+function OnlineResults({ result, persistence, host, names, recovering }: { recovering: boolean; result: RaceResult; persistence?: ResultPersistence; host: boolean; names: Map<string, string> }) {
   const dialog = useRef<HTMLDialogElement>(null)
   useEffect(() => { dialog.current?.showModal() }, [])
   const ranked = [...result.racers].sort((a, b) => (a.rank ?? Infinity) - (b.rank ?? Infinity))
@@ -80,8 +81,9 @@ function OnlineResults({ result, persistence, host, names }: { result: RaceResul
         <tbody>{ranked.map(r => <tr key={r.id}><td>{r.rank ?? '—'}</td><th scope="row">{names.get(r.id) ?? 'Racer'}</th><td>{r.finishTicks === null ? 'DNF' : formatTicks(r.finishTicks)}</td><td>{r.lapTicks.length ? formatTicks(Math.min(...r.lapTicks)) : '—'}</td></tr>)}</tbody>
       </table>
       <p>{result.reason === 'time-limit' ? 'The 10-minute practice limit was reached.' : result.reason === 'finish-window' ? 'The 60-second finish window ended.' : 'Everyone crossed the finish line.'}</p>
+      {recovering && <p role="status">Reconnecting to your crew…</p>}
       <p role="status">{persistence?.state === 'saved' ? 'Saved to your profile as online practice.' : persistence?.state === 'saving' ? 'Saving your practice result…' : persistence?.state === 'pending' ? 'Save pending · The server has kept your result and will retry.' : persistence?.state === 'failed' ? 'This result could not be saved. It is still shown here for this session.' : 'These session results are not saved to your profile.'}</p>
-      {host ? <Button variant="primary" onClick={returnToLobby} autoFocus>Return crew to lobby</Button> : <p role="status">Waiting for the host to return the crew to the lobby.</p>}
+      {host ? <Button variant="primary" onClick={returnToLobby} disabled={recovering} autoFocus>Return crew to lobby</Button> : <p role="status">Waiting for the host to return the crew to the lobby.</p>}
       <Button variant="ghost" onClick={() => void leaveLobby()} autoFocus={!host}>Leave practice</Button>
     </Panel>
   </dialog>

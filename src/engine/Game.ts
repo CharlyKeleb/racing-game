@@ -357,6 +357,7 @@ export class Game {
   private readonly unsubscribeLobby: () => void
   private onlineScene: OnlineRaceScene | null = null
   private onlineRaceId: string | null = null
+  private onlineConnectionEpoch = 0
   private onlineToken = 0
   private onlinePreparing: Promise<void> | null = null
   private onlineEnding = false
@@ -1299,13 +1300,18 @@ export class Game {
   /** Online presentation has its own commands/clock; offline race rules never run here. */
   private syncOnlineLobby(): void {
     if (this.disposed || !this.vehicle || !this.track) return
-    const { snapshot, sessionId, raceSnapshot } = lobbyStore.getState()
+    const { snapshot, sessionId, raceSnapshot, connectionEpoch } = lobbyStore.getState()
     if (!snapshot?.race || snapshot.phase === 'lobby') {
       if (this.onlineRaceId) this.endOnlineRace()
       return
     }
     if (this.onlineEnding) return
     if (snapshot.race.id === this.onlineRaceId) {
+      if (this.onlineConnectionEpoch !== connectionEpoch) {
+        this.onlineConnectionEpoch = connectionEpoch
+        this.onlineScene?.buffer.resync()
+        if (this.onlineScene && snapshot.phase === 'loading') acknowledgeRaceLoaded(snapshot.race)
+      }
       if (raceSnapshot) this.onlineScene?.push(raceSnapshot, performance.now())
       return
     }
@@ -1316,6 +1322,7 @@ export class Game {
     }
     const token = ++this.onlineToken
     this.onlineRaceId = snapshot.race.id
+    this.onlineConnectionEpoch = connectionEpoch
     this.onlineOriginalBuild = gameStore.getState().build
     this.input.setTouch(RELEASED_ONLINE_INPUT)
     onlineRaceStore.setState({ resultsOpen: false, finished: false, active: true, loaded: false, menuOpen: false, delayed: false, speedKmh: 0, countdown: null })

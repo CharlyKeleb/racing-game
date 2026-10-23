@@ -70,8 +70,11 @@ Esc opens a focus-trapped race menu while the server keeps racing. Driving input
 becomes neutral while it is open. Finished racers release driving controls while
 waiting for the result. The final results dialog supports keyboard/controller
 focus and host-only return of the crew to the lobby; either racer can leave. Hiding the tab stops local rendering/audio and
-releases controls; it never pauses the server. Leaving or losing a racer disposes
-the online view and returns the remaining seat to the lobby with readiness reset.
+releases controls; it never pauses the server. Explicit leave disposes the online view and returns the remaining seat to the
+lobby with readiness reset. Unexpected drops on the optional local backend now
+get [bounded authenticated recovery](RACE_RECONNECT.md): the scene remains,
+controls are released and the server clock keeps running. Final timeout still
+aborts the race.
 Starting an offline race explicitly leaves any lobby seat first.
 
 ## Browser smoke fixture
@@ -115,3 +118,7 @@ restored the lobby with both readiness flags cleared.
 Run `npm test`, both builds and lint before review. Next: full controller-state
 prediction/reconciliation, competitive track-limit validation and
 staging/device/memory/network acceptance and hosted persistence verification.
+
+The smoke fixture also has **Drop test connection** for inspecting bounded recovery
+with a synthetic offline event and a three-second synthetic token delay. This is
+not real network-loss or hosted-auth acceptance. See [reconnect rules](RACE_RECONNECT.md).

@@ -99,3 +99,38 @@ describe('server-owned race session', () => {
     expect(failed.race.reason).not.toContain('private details')
   })
 })
+
+it('neutralizes transport loss immediately and preserves accepted sequence history through recovery', async () => {
+  const f = fixture(); await f.start()
+  expect(f.race.input('a', f.drive(5, { nitro: true }), 0)).toBe(true)
+  f.race.advance(SERVER_TICK_MS)
+  const before = f.race.snapshot()!
+  f.race.setConnected('a', false)
+  expect(f.race.input('a', f.drive(6), 10)).toBe(false)
+  f.race.advance(SERVER_TICK_MS)
+  expect(f.inputs.get('one')).toMatchObject({ throttle: 0, nitro: false })
+  f.race.setConnected('a', true)
+  f.race.advance(SERVER_TICK_MS)
+  expect(f.inputs.get('one')).toMatchObject({ throttle: 0, nitro: false })
+  expect(f.race.nextInputSequence('a')).toBe(6)
+  expect(f.race.input('a', f.drive(5), 20)).toBe(false)
+  expect(f.race.input('a', f.drive(6), 20)).toBe(true)
+  expect(f.race.snapshot()?.progress).toEqual(before.progress)
+  expect(f.race.tick).toBe(before.tick + 2)
+  expect(f.simulation.dispose).not.toHaveBeenCalled()
+  f.race.close('done')
+})
+it('requires a fresh loading acknowledgement after recovery and never starts for a disconnected seat', async () => {
+  let resolve!: (sim: ServerRaceSimulation) => void
+  const f = fixture(() => new Promise(r => { resolve = r }))
+  const pending = f.race.load(f.factory)
+  f.ack('a'); f.ack('b'); f.race.setConnected('b', false)
+  resolve(f.simulation); await pending
+  expect(f.race.phase).toBe('loading')
+  expect(f.ack('b')).toBe(false)
+  f.race.setConnected('b', true)
+  expect(f.race.phase).toBe('loading')
+  expect(f.ack('b')).toBe(true)
+  expect(f.race.phase).toBe('countdown')
+  f.race.close('done')
+})

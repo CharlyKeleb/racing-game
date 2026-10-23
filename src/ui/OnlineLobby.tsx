@@ -20,9 +20,9 @@ export function OnlineLobby({ onClose, onAccount }: { onClose(): void; onAccount
   useEffect(() => { dialog.current?.showModal() }, [])
   const self = snapshot?.racers.find((r) => r.sessionId === sessionId)
   const host = self && snapshot?.hostId === self.id
-  const busy = status === 'connecting'
-  const connected = status === 'connected'
-  const canLaunch = !preparing && !!host && snapshot?.racers.length === 2 && snapshot.racers.every(r => r.ready)
+  const busy = status === 'connecting' || status === 'reconnecting'
+  const connected = status === 'connected' || status === 'reconnecting'
+  const canLaunch = !busy && !preparing && !!host && snapshot?.racers.length === 2 && snapshot.racers.every(r => r.ready && r.connected !== false)
   const enter = (action: 'create' | 'join') => {
     if (game) void enterLobby(action, code, isLobbyCar(selectedCar) ? selectedCar : 'porsche911', () => game.multiplayerToken())
   }
@@ -51,21 +51,22 @@ export function OnlineLobby({ onClose, onAccount }: { onClose(): void; onAccount
         <div className="online-room-code"><div><span className="eyebrow">Invite your rivals</span><strong>{snapshot.code}</strong></div><Button size="sm" onClick={() => {
           void navigator.clipboard.writeText(snapshot.code).then(() => setCopied(true)).catch(() => setCopied(false))
         }}>{copied ? 'Copied' : 'Copy code'}</Button></div>
-        <div className="online-settings"><span>Nürburgring GP <small>Ghost collisions</small></span><label>Laps <select className="ui-input" aria-label="Lobby laps" disabled={!host} value={snapshot.laps} onChange={(e) => setLobbyLaps(Number(e.target.value))}>{Array.from({ length: 10 }, (_, i) => <option key={i} value={i + 1}>{i + 1}</option>)}</select></label></div>
+        <div className="online-settings"><span>Nürburgring GP <small>Ghost collisions</small></span><label>Laps <select className="ui-input" aria-label="Lobby laps" disabled={!host || busy} value={snapshot.laps} onChange={(e) => setLobbyLaps(Number(e.target.value))}>{Array.from({ length: 10 }, (_, i) => <option key={i} value={i + 1}>{i + 1}</option>)}</select></label></div>
         <div className="online-roster" aria-label="Racers">
           {snapshot.racers.map((r) => <article className="online-racer" key={r.sessionId}>
             <span className="online-racer__initial" aria-hidden>{[...r.displayName][0]}</span>
             <div><strong>{r.displayName} {r.id === snapshot.hostId && <small>Host</small>}{r.sessionId === sessionId && <small>You</small>}</strong><span>@{r.handle} · {getCar(r.carId).name}</span></div>
-            <span className={`online-ready ${r.ready ? 'on' : ''}`}>{r.ready ? 'Ready' : 'Not ready'}</span>
+            <span className={`online-ready ${r.ready ? 'on' : ''}`}>{r.connected === false ? 'Reconnecting…' : r.ready ? 'Ready' : 'Not ready'}</span>
           </article>)}
           {Array.from({ length: snapshot.maxPlayers - snapshot.racers.length }, (_, i) => <div className="online-empty" key={i}>Waiting for a rival…</div>)}
         </div>
-        {self && <label className="ui-field"><span className="ui-field__label">Your car · Stock builds</span><select className="ui-input" value={self.carId} onChange={(e) => { if (isLobbyCar(e.target.value)) setLobbyCar(e.target.value) }}>{LOBBY_CARS.map((id) => <option key={id} value={id}>{getCar(id).name}</option>)}</select></label>}
-        <Button variant={self?.ready ? 'secondary' : 'primary'} disabled={preparing} onClick={() => { game?.unlockAudio(); setLobbyReady(!self?.ready) }}>{self?.ready ? 'Cancel ready' : 'Ready up'}</Button>
+        {self && <label className="ui-field"><span className="ui-field__label">Your car · Stock builds</span><select className="ui-input" disabled={busy} value={self.carId} onChange={(e) => { if (isLobbyCar(e.target.value)) setLobbyCar(e.target.value) }}>{LOBBY_CARS.map((id) => <option key={id} value={id}>{getCar(id).name}</option>)}</select></label>}
+        <Button variant={self?.ready ? 'secondary' : 'primary'} disabled={preparing || busy} onClick={() => { game?.unlockAudio(); setLobbyReady(!self?.ready) }}>{self?.ready ? 'Cancel ready' : 'Ready up'}</Button>
         {snapshot.raceEnabled && host && <Button variant="primary" disabled={!canLaunch} onClick={() => { game?.unlockAudio(); startLobbyRace() }}>Launch practice</Button>}
-        <p className="racer-hint" role="status">{snapshot.raceEnabled ? snapshot.racers.length !== 2 ? 'Practice needs exactly two racers.' : canLaunch ? 'Both racers are ready. Launch when you are.' : snapshot.racers.every(r => r.ready) ? 'Waiting for the host to launch practice.' : 'Waiting for both racers to ready up.' : snapshot.racers.length < 2 ? 'Share the code to invite another racer.' : snapshot.racers.every((r) => r.ready) ? 'Everyone is ready. Race launches arrive in the next milestone.' : 'Waiting for everyone to ready up.'}</p>
+        <p className="racer-hint" role="status">{snapshot.raceEnabled ? snapshot.racers.length !== 2 ? 'Practice needs exactly two racers.' : canLaunch ? 'Both racers are ready. Launch when you are.' : snapshot.racers.every(r => r.ready && r.connected !== false) ? 'Waiting for the host to launch practice.' : 'Waiting for both racers to ready up.' : snapshot.racers.length < 2 ? 'Share the code to invite another racer.' : snapshot.racers.every((r) => r.ready) ? 'Everyone is ready. Race launches arrive in the next milestone.' : 'Waiting for everyone to ready up.'}</p>
         <Button variant="ghost" onClick={() => void leaveLobby()}>Leave lobby</Button>
       </> : <p role="status">Loading the grid…</p>}
+      {status === 'reconnecting' && <p role="status">Reconnecting to your crew… Your seat is held for up to 15 seconds.</p>}
       {error && <p className="racer-error" role="alert">{error}</p>}
       {connected && <p className="racer-hint">You can close this panel and return to your lobby. Leaving the page ends your seat.</p>}
     </Panel>

@@ -9,6 +9,7 @@ export interface LobbyRacer {
   displayName: string
   carId: LobbyCar
   ready: boolean
+  connected?: boolean
 }
 export interface LobbySnapshot {
   protocol: number
@@ -20,6 +21,7 @@ export interface LobbySnapshot {
   laps: number
   phase: 'lobby' | 'loading' | 'countdown' | 'racing' | 'finished'
   raceEnabled: boolean
+  reconnectGraceSeconds?: number
   race: RaceDescriptor | null
   resultPersistence?: ResultPersistence
 }
@@ -103,4 +105,9 @@ export interface ResultPersistence {
   raceId: string
   state: 'disabled' | 'saving' | 'pending' | 'saved' | 'failed'
   savedAt?: string
+}
+
+export interface RaceResume {
+  raceId: string | null
+  nextInputSequence: number
 }

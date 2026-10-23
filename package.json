@@ -24,6 +24,7 @@
     "benchmark:simulation": "npm run build:simulation && server/node_modules/.bin/tsx scripts/multiplayer/benchmark.ts",
     "test:simulation": "vitest run tests/headlessSimulation.test.ts tests/handling.test.ts",
     "server:race-dev": "npm run build:simulation && node --env-file=server/.env.local --import ./server/node_modules/tsx/dist/loader.mjs scripts/multiplayer/dev-race-server.ts",
+    "test:race-reconnect": "vitest run tests/raceReconnect.test.ts tests/raceSession.test.ts tests/lobbyClient.test.ts tests/onlineRaceLifecycle.test.ts",
     "test:result-storage": "vitest run tests/practiceDatabase.test.ts tests/resultOutbox.test.ts tests/supabaseResultWriter.test.ts tests/practiceHistory.test.ts tests/raceResultsTransport.test.ts",
     "test:race-transport": "vitest run tests/raceProgress.test.ts tests/raceResults.test.ts tests/raceSession.test.ts tests/raceTransport.test.ts tests/raceResultsTransport.test.ts tests/lobbyClient.test.ts",
     "predev": "npm run build:simulation",

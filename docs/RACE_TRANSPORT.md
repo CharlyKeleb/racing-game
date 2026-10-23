@@ -77,11 +77,13 @@ future clock/prediction work. The current payload does not contain all hidden
 controller state needed to restore deterministic prediction; reconciliation is a
 separate implementation step.
 
-Disconnect/session expiry closes the race, frees the world, clears all readiness
-and unlocks the room. Loading failures, cancellation and room disposal also free
+Explicit leave/session expiry closes the race, frees the world, clears all readiness
+and unlocks the room. Local race-backed rooms now hold unexpected drops for up to
+15 seconds and require fresh authenticated recovery before input resumes; see
+[reconnect details](RACE_RECONNECT.md). Final recovery timeout still aborts the race. Loading failures, cancellation and room disposal also free
 the world, including asynchronous factories that resolve after cancellation.
 The development session has a ten-minute racing-tick limit and inherits the lobby's
-30-minute expiry. There is no reconnect yet. Optional result persistence requires explicit local runner configuration. See the practice
+30-minute expiry. Bounded same-browser reconnect is now supported locally. Optional result persistence requires explicit local runner configuration. See the practice
 result rules below; disconnect aborts rather than awarding a result.
 
 `LobbyClient` exposes start/cancel/load-ack/input commands, caps outgoing controls
