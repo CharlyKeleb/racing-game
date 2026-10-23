@@ -22,6 +22,7 @@ export interface LobbySnapshot {
   phase: 'lobby' | 'loading' | 'countdown' | 'racing' | 'finished'
   raceEnabled: boolean
   reconnectGraceSeconds?: number
+  raceRacers?: LobbyRacer[]
   race: RaceDescriptor | null
   resultPersistence?: ResultPersistence
 }
@@ -29,7 +30,7 @@ export function isLobbyCar(value: unknown): value is LobbyCar {
   return typeof value === 'string' && (LOBBY_CARS as readonly string[]).includes(value)
 }
 
-export const RACE_PROTOCOL = 2
+export const RACE_PROTOCOL = 3
 
 /** Development race transport, available only when the backend has a simulation factory. */
 export interface RaceDescriptor {
@@ -82,6 +83,8 @@ export interface RaceRacerProgress {
   nextCheckpoint: number
   lapTicks: number[]
   finishTicks: number | null
+  retiredTicks?: number
+  dnfReason?: RetirementReason
 }
 /** Session-only practice results. No client submission or offline record promotion. */
 export interface RaceResult {
@@ -90,13 +93,15 @@ export interface RaceResult {
   laps: number
   tickRate: 60
   completedTick: number
-  reason: 'all-finished' | 'finish-window' | 'time-limit'
+  reason: 'all-finished' | 'finish-window' | 'time-limit' | 'all-resolved'
   racers: readonly {
     id: string
     carId: LobbyCar
     status: 'finished' | 'dnf'
     rank: number | null
     finishTicks: number | null
+    retiredTicks?: number
+    dnfReason?: RetirementReason
     lapTicks: readonly number[]
   }[]
 }
@@ -111,3 +116,5 @@ export interface RaceResume {
   raceId: string | null
   nextInputSequence: number
 }
+
+export type RetirementReason = 'left' | 'connection-lost' | 'auth-expired'

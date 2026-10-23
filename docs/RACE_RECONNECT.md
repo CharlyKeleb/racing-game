@@ -41,9 +41,9 @@ never resets accepted sequences, controller state, charge or progress.
 A held or reauthenticating seat expires at the earlier of auth expiry and the
 grace deadline. Timers locate the current socket by session ID rather than closing
 a stale client reference. Final departure releases admission ownership, transfers
-host if needed and resets readiness. An unfinished race still **aborts for the
-whole crew** on final departure. There is no disconnect-to-DNF record or invented
-winner here. Already accepted durable result writes remain independent of room
+host if needed. Final departures during racing now produce a terminal DNF for
+that racer while the rival continues. Loading/countdown departures still abort
+without a result. See [retirement rules](RACE_RETIREMENTS.md). Already accepted durable result writes remain independent of room
 lifetime, as described in [practice history](ONLINE_PRACTICE_HISTORY.md).
 
 Local race transport uses one-second WebSocket heartbeat intervals and three
@@ -94,7 +94,7 @@ Real SDK tests use the shipped Nürburgring/Porsche physics and cover:
 - Rejection of input before fresh Auth, a different user's token even with the
   valid seat secret, old-secret replay, and duplicate ordinary admission.
 - Original auth expiry, lobby readiness clearing and new admission after expiry.
-- A full 15-second timeout aborting the unfinished race and freeing its world.
+- A full 15-second timeout retiring one racer while the rival keeps the same world.
 
 Unit tests cover loading acknowledgement loss, preserved sequence history, client
 queue suppression, snapshot retention, fresh-auth gating, logout cancellation,

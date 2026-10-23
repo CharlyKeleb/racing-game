@@ -47,7 +47,7 @@ claims, not evidence that an untrusted browser loaded assets or ran physics.
 | `start` | Host only, exactly two connected racers, both ready, factory configured, no active race. Freezes the roster/settings and locks admission. |
 | `loaded` | Requires this connection's seat, race ID, race protocol, simulation version and fingerprint. Both racers and the server simulation must load before countdown. |
 | `input` | Accepted only while racing. Seat ownership comes from the authenticated connection. Allows only sequence, race ID, throttle, brake, steer/source, handbrake and nitro. |
-| `cancelRace` | Host may cancel loading/countdown. Only loading/countdown can be cancelled. Racing ends with a shared result or aborts on disconnect, expiry or server failure. |
+| `cancelRace` | Host may cancel loading/countdown. Only loading/countdown can be cancelled. Racing ends with a shared result; final departures retire that racer. Server failure aborts. |
 | `race` (server) | Tick, countdown/racing/finished phase, remaining countdown ticks, transforms/telemetry, applied sequences, checkpoint/lap progress, and final shared result. |
 | `returnLobby` | Host only, finished phase only. Clears session results, resets readiness and unlocks the room for another start. |
 
@@ -77,14 +77,14 @@ future clock/prediction work. The current payload does not contain all hidden
 controller state needed to restore deterministic prediction; reconciliation is a
 separate implementation step.
 
-Explicit leave/session expiry closes the race, frees the world, clears all readiness
-and unlocks the room. Local race-backed rooms now hold unexpected drops for up to
-15 seconds and require fresh authenticated recovery before input resumes; see
-[reconnect details](RACE_RECONNECT.md). Final recovery timeout still aborts the race. Loading failures, cancellation and room disposal also free
-the world, including asynchronous factories that resolve after cancellation.
-The development session has a ten-minute racing-tick limit and inherits the lobby's
-30-minute expiry. Bounded same-browser reconnect is now supported locally. Optional result persistence requires explicit local runner configuration. See the practice
-result rules below; disconnect aborts rather than awarding a result.
+Final departure/session expiry during racing retires that racer with no finish time
+or rank while the rival continues. Loading/countdown departure aborts without a
+result. Local race-backed rooms hold unexpected drops for up to 15 seconds and
+require fresh authenticated recovery; see [reconnect details](RACE_RECONNECT.md)
+and [retirement rules](RACE_RETIREMENTS.md). Loading failures, cancellation and room
+disposal free the world, including late asynchronous factories. The ten-minute
+racing limit and 30-minute room lifetime remain. Optional result persistence needs
+explicit runner configuration.
 
 `LobbyClient` exposes start/cancel/load-ack/input commands, caps outgoing controls
 at 30 Hz and stores only the latest ordered snapshot for the active race. Race
@@ -114,14 +114,14 @@ or invented finish time. If everyone finishes, results finalize immediately. The
 server retains a single final snapshot for both seats and `sync`, and frees the
 Rapier world immediately. While results are open there are no physics ticks or
 periodic snapshots. The host can return the crew to the lobby; either player can
-leave. Leaving currently ends the room's result view for the remaining player.
+leave. Leaving preserves the remaining player's results and transfers host control.
 
 These are **practice results**, not competitive records. Optional [durable persistence](ONLINE_PRACTICE_HISTORY.md) saves them to private owner history; without a configured writer they remain session-only.
 The authored eight gates do not enforce continuous track limits or rule out every
 shortcut between gates. No client result submission, reward, offline-record promotion or leaderboard update is added. Competitive track limits,
 recovery policy and real-account/device/hosted-storage acceptance
-remain separate work. Race protocol 2 prevents older practice browsers from
-silently presenting this lifecycle as the previous endless driving session; lobby
+remain separate work. Race protocol 3 prevents older practice browsers from
+misrepresenting retirements; lobby
 protocol remains 1 because the deployed server is still lobby-only.
 
 ## Verification

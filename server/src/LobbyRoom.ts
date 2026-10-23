@@ -28,6 +28,7 @@ export class LobbyRoom extends Room {
   private resultPersistence?: ResultPersistence
   private disposed = false
   private race: RaceSession | null = null
+  private raceRacers: LobbyRacer[] | undefined
   private lastSnapshotTick = 0
   private readonly controlRates = new Map<string, { at: number; count: number }>()
   private readonly refreshing = new Map<string, Client>()
@@ -142,16 +143,26 @@ export class LobbyRoom extends Room {
     // The seat secret restores only the socket. Fresh verified Auth restores controls.
     this.armExpiry(client.sessionId)
   }
-  onLeave(client: Client) {
+  onLeave(client: Client, code?: number) {
     const racer = this.racers.get(client.sessionId)
     if (!racer) return
+    const authExpired = (this.leases.get(client.sessionId)?.expiresAt ?? Infinity) <= Date.now()
     activePlayers.delete(racer.id)
     this.racers.delete(client.sessionId)
     this.controlRates.delete(client.sessionId)
     this.leases.delete(client.sessionId)
     this.refreshing.delete(client.sessionId)
     this.recoveries.delete(client.sessionId)
-    if (this.race) { this.race.close('A racer left. Return to the lobby to prepare another race.'); this.finishRace() }
+    if (this.race) {
+      const wasFinished = this.race.phase === 'finished'
+      const reason = code === 4001 || authExpired ? 'auth-expired' : code === 4000 ? 'left' : 'connection-lost'
+      if (!this.race.retire(client.sessionId, reason)) {
+        this.race.close('A racer left before the start. Return to the lobby to prepare another race.'); this.finishRace()
+      } else if (!wasFinished && this.race.phase === 'finished') {
+        this.persistResult(this.race)
+        this.broadcast('race', this.race.snapshot())
+      }
+    }
     clearTimeout(this.expiry.get(client.sessionId))
     this.expiry.delete(client.sessionId)
     if (racer.id === this.hostId) this.hostId = this.racers.values().next().value?.id ?? ''
@@ -180,7 +191,7 @@ export class LobbyRoom extends Room {
     }, Math.max(0, Math.min(due - Date.now(), 2_147_483_647))))
   }
   snapshot(): LobbySnapshot {
-    return { protocol: LOBBY_PROTOCOL, code: this.code, hostId: this.hostId, racers: [...this.racers.values()].map((r) => ({ ...r })), maxPlayers: 4, track: 'nurburgring', laps: this.laps, phase: this.race && this.race.phase !== 'closed' ? this.race.phase : 'lobby', raceEnabled: !!this.raceFactory, ...(this.raceFactory ? { reconnectGraceSeconds: RECONNECT_GRACE_SECONDS } : {}), race: this.race?.descriptor ?? null, resultPersistence: this.resultPersistence }
+    return { protocol: LOBBY_PROTOCOL, code: this.code, hostId: this.hostId, racers: [...this.racers.values()].map((r) => ({ ...r })), maxPlayers: 4, track: 'nurburgring', laps: this.laps, phase: this.race && this.race.phase !== 'closed' ? this.race.phase : 'lobby', raceEnabled: !!this.raceFactory, ...(this.raceFactory ? { reconnectGraceSeconds: RECONNECT_GRACE_SECONDS } : {}), race: this.race?.descriptor ?? null, raceRacers: this.raceRacers, resultPersistence: this.resultPersistence }
   }
   private startRace(client: Client): void {
     if (!this.raceFactory || this.race || this.racers.get(client.sessionId)?.id !== this.hostId) return
@@ -189,6 +200,7 @@ export class LobbyRoom extends Room {
     if (this.racers.size !== 2 || ![...this.racers.values()].every(r => r.ready && r.connected !== false)) return
     const race = new RaceSession([...this.racers.values()].map(r => ({ id: r.id, sessionId: r.sessionId, carId: r.carId })), this.raceFactory, this.laps)
     this.race = race
+    this.raceRacers = [...this.racers.values()].map(r => ({ ...r }))
     this.resultPersistence = { raceId: race.descriptor.id, state: 'disabled' }
     this.lastSnapshotTick = 0
     void this.lock()
@@ -228,6 +240,7 @@ export class LobbyRoom extends Room {
     const reason = this.race?.reason
     this.race = null
     this.resultPersistence = undefined
+    this.raceRacers = undefined
     for (const racer of this.racers.values()) racer.ready = false
     void this.unlock()
     if (reason) this.broadcast('notice', reason)

@@ -8,7 +8,7 @@ function fixture(create?: RaceFactory['create']) {
     states: () => racers.map(r => ({ id: r.id, position: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0, w: 1 }, velocity: { x: 0, y: 0, z: 0 }, angularVelocity: { x: 0, y: 0, z: 0 }, speed: 0, steer: 0, rpm: 900, gear: 1, nitro: 0 })) }
   const factory: RaceFactory = { checkpoints: [{ index: 0, position: [0, 0, 0], tangent: [0, 0, 1], radius: 10 }, { index: 1, position: [0, 0, 10], tangent: [0, 0, 1], radius: 10 }], fingerprint: 'a'.repeat(64), simulationVersion: 1, create: create ?? (async () => simulation) }
   const race = new RaceSession(racers, factory)
-  const ack = (sessionId: string) => race.acknowledge(sessionId, { protocol: 2, raceId: race.descriptor.id, fingerprint: factory.fingerprint, simulationVersion: 1 })
+  const ack = (sessionId: string) => race.acknowledge(sessionId, { protocol: 3, raceId: race.descriptor.id, fingerprint: factory.fingerprint, simulationVersion: 1 })
   const drive = (sequence: number, extra = {}): RaceInput => ({ raceId: race.descriptor.id, sequence, throttle: 1, brake: 0, steer: .3, handbrake: false, nitro: false, ...extra })
   const start = async () => { await race.load(factory); ack('a'); ack('b'); for (let i = 0; i < 180; i++) race.advance(SERVER_TICK_MS) }
   return { race, factory, simulation, inputs, ack, drive, start }
@@ -34,7 +34,7 @@ describe('server-owned race session', () => {
   })
   it('rejects wrong identities, assets, races, transforms, invalid controls and stale or extreme sequences', async () => {
     const f = fixture()
-    expect(f.race.acknowledge('a', { protocol: 2, raceId: f.race.descriptor.id, fingerprint: 'wrong', simulationVersion: 1 })).toBe(false)
+    expect(f.race.acknowledge('a', { protocol: 3, raceId: f.race.descriptor.id, fingerprint: 'wrong', simulationVersion: 1 })).toBe(false)
     expect(f.race.acknowledge('a', { protocol: 999, raceId: f.race.descriptor.id, fingerprint: f.factory.fingerprint, simulationVersion: 1 })).toBe(false)
     expect(f.race.acknowledge('a', { protocol: 1, raceId: f.race.descriptor.id, fingerprint: f.factory.fingerprint, simulationVersion: 1 })).toBe(false)
     expect(f.ack('other')).toBe(false)

@@ -67,3 +67,42 @@ it('cancels without a result when the server stalls', async () => {
   expect(f.race.snapshot()).toBeNull()
   expect(f.disposed).toHaveBeenCalledTimes(1)
 })
+
+it('freezes a retired racer while the remaining driver completes the required lap', async () => {
+  const f = fixture(); await f.start(); f.advance(3)
+  expect(f.race.retire('b', 'connection-lost')).toBe(true)
+  expect(f.race.snapshot()?.progress?.[1]).toMatchObject({ retiredTicks: 3, dnfReason: 'connection-lost', finishTicks: null })
+  f.advance(5)
+  expect(f.race.snapshot()?.result).toMatchObject({ reason: 'all-resolved', completedTick: 188, racers: [
+    { status: 'finished', rank: 1, finishTicks: 8 }, { status: 'dnf', rank: null, finishTicks: null, retiredTicks: 3 },
+  ] })
+  expect(f.inputs.get('two')).toMatchObject({ throttle: 0, handbrake: true })
+  expect(f.disposed).toHaveBeenCalledTimes(1)
+})
+it('retains an earned finish when that driver leaves, without inventing a rival finish', async () => {
+  const f = fixture({ guestDelay: 100 }); await f.start(); f.advance(8)
+  f.race.retire('a', 'left'); f.advance(10)
+  expect(f.race.phase).toBe('racing')
+  f.race.retire('b', 'auth-expired')
+  expect(f.race.snapshot()?.result).toMatchObject({ reason: 'all-resolved', racers: [
+    { status: 'finished', finishTicks: 8 }, { status: 'dnf', dnfReason: 'auth-expired', retiredTicks: 18 },
+  ] })
+})
+it('resolves both departures immediately and idempotently without a winner', async () => {
+  const f = fixture({ stationary: true }); await f.start(); f.advance(3)
+  expect(f.race.retire('unknown', 'left')).toBe(false)
+  f.race.retire('a', 'left'); f.race.retire('a', 'auth-expired')
+  expect(f.race.phase).toBe('racing')
+  f.race.retire('b', 'left')
+  expect(f.race.snapshot()?.result).toMatchObject({ completedTick: 183, reason: 'all-resolved', racers: [
+    { status: 'dnf', rank: null, finishTicks: null, retiredTicks: 3, dnfReason: 'left' },
+    { status: 'dnf', rank: null, finishTicks: null, retiredTicks: 3, dnfReason: 'left' },
+  ] })
+  expect(f.disposed).toHaveBeenCalledTimes(1)
+})
+it('establishes a racing tick for departures at green and rejects pre-start retirements', async () => {
+  const f = fixture(); expect(f.race.retire('a', 'left')).toBe(false)
+  await f.start(); f.race.retire('a', 'left'); f.race.retire('b', 'left')
+  expect(f.race.snapshot()?.result).toMatchObject({ completedTick: 181, reason: 'all-resolved' })
+  expect(f.disposed).toHaveBeenCalledTimes(1)
+})

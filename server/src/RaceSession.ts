@@ -1,6 +1,6 @@
 import { RaceProgress, type RaceGate, type RacePosition } from './RaceProgress.js'
 import { randomUUID } from 'node:crypto'
-import { RACE_PROTOCOL, type LobbyCar, type RaceDescriptor, type RaceInput, type RaceSnapshot, type RaceVehicleState, type RaceResult } from './protocol.js'
+import { RACE_PROTOCOL, type LobbyCar, type RaceDescriptor, type RaceInput, type RaceSnapshot, type RaceVehicleState, type RaceResult, type RetirementReason } from './protocol.js'
 
 export const SERVER_TICK_MS = 1000 / 60
 export const INPUT_TIMEOUT_TICKS = 15
@@ -23,6 +23,7 @@ export interface RaceFactory {
   create(seats: readonly RaceSeat[]): Promise<ServerRaceSimulation>
 }
 interface SeatInput {
+  id: string
   connected: boolean
   received: number
   applied: number
@@ -51,6 +52,7 @@ export class RaceSession {
   tick = 0
   private simulation: ServerRaceSimulation | null = null
   private readonly seats = new Map<string, SeatInput>()
+  private readonly retirements = new Map<string, { retiredTicks: number; dnfReason: RetirementReason }>()
   private readonly loaded = new Set<string>()
   private loadingMs = 0
   private accumulator = 0
@@ -65,7 +67,7 @@ export class RaceSession {
     if (racers.length !== 2 || new Set(racers.map(r => r.id)).size !== 2 || new Set(racers.map(r => r.sessionId)).size !== 2) throw new Error('A race needs two distinct authenticated seats')
     for (const r of racers) this.progress.set(r.id, new RaceProgress(factory.checkpoints, laps))
     this.descriptor = { protocol: RACE_PROTOCOL, id: randomUUID(), fingerprint: factory.fingerprint, simulationVersion: factory.simulationVersion, tickRate: 60, snapshotRate: 20, countdownTicks: 180 }
-    for (const r of racers) this.seats.set(r.sessionId, { connected: true, received: -1, applied: -1, tick: -Infinity, command: { ...NEUTRAL }, rateAt: -Infinity, rateCount: 0 })
+    for (const r of racers) this.seats.set(r.sessionId, { id: r.id, connected: true, received: -1, applied: -1, tick: -Infinity, command: { ...NEUTRAL }, rateAt: -Infinity, rateCount: 0 })
   }
 
   /** A late-loading simulation is freed even when the room was cancelled/disposed meanwhile. */
@@ -102,11 +104,27 @@ export class RaceSession {
     if (!connected && this.phase === 'loading') this.loaded.delete(sessionId)
   }
 
+  /** Final departure after racing starts is terminal; reconnect never invokes this. */
+  retire(sessionId: string, reason: RetirementReason): boolean {
+    if (this.phase !== 'racing' && this.phase !== 'finished') return false
+    const racer = this.racers.find(r => r.sessionId === sessionId)
+    if (!racer) return false
+    this.setConnected(sessionId, false)
+    if (this.phase === 'finished' || this.progress.get(racer.id)!.finishTicks !== null || this.retirements.has(racer.id)) return true
+    // The first racing tick establishes a positive result time, even for an immediate exit.
+    this.retirements.set(racer.id, { retiredTicks: Math.max(1, this.tick - this.descriptor.countdownTicks), dnfReason: reason })
+    if (this.racers.every(r => this.retirements.has(r.id) || this.progress.get(r.id)!.finishTicks !== null)) {
+      if (this.tick === this.descriptor.countdownTicks) this.advance(SERVER_TICK_MS)
+      else this.finish('all-resolved')
+    }
+    return true
+  }
+
   nextInputSequence(sessionId: string): number { return (this.seats.get(sessionId)?.received ?? -1) + 1 }
 
   input(sessionId: string, value: unknown, nowMs: number): boolean {
     const seat = this.seats.get(sessionId)
-    if (this.phase !== 'racing' || !seat || !seat.connected || this.progress.get(this.racers.find(r => r.sessionId === sessionId)!.id)!.finishTicks !== null || !isInput(value, this.descriptor.id)) return false
+    if (this.phase !== 'racing' || !seat || !seat.connected || this.retirements.has(seat.id) || this.progress.get(seat.id)!.finishTicks !== null || !isInput(value, this.descriptor.id)) return false
     // A latest-input mailbox: never build a queue from client traffic. Bound jumps and message rate.
     if (value.sequence <= seat.received || value.sequence > seat.received + 120) return false
     if (nowMs - seat.rateAt >= 1000) { seat.rateAt = nowMs; seat.rateCount = 0 }
@@ -133,7 +151,7 @@ export class RaceSession {
       const racing = this.phase === 'racing'
       for (const r of this.racers) {
         const seat = this.seats.get(r.sessionId)!
-        const driving = racing && this.progress.get(r.id)!.finishTicks === null
+        const driving = racing && !this.retirements.has(r.id) && this.progress.get(r.id)!.finishTicks === null
         const fresh = driving && seat.connected && this.tick - seat.tick < INPUT_TIMEOUT_TICKS
         this.simulation!.setInput(r.id, driving ? fresh ? seat.command : NEUTRAL : HOLD)
         if (fresh) seat.applied = seat.received
@@ -145,13 +163,13 @@ export class RaceSession {
       for (const racer of this.racers) {
         const progress = this.progress.get(racer.id)!
         this.simulation!.position(racer.id, this.position)
-        if (racing) progress.update(this.position, elapsed)
-        else progress.seed(this.position)
-        if (progress.finishTicks === null) allFinished = false
-        else this.firstFinishTick ??= elapsed
+        if (racing && !this.retirements.has(racer.id)) progress.update(this.position, elapsed)
+        else if (!racing) progress.seed(this.position)
+        if (progress.finishTicks === null && !this.retirements.has(racer.id)) allFinished = false
+        if (progress.finishTicks !== null) this.firstFinishTick ??= elapsed
       }
       if (this.phase === 'countdown' && elapsed >= 0) this.phase = 'racing'
-      if (allFinished) { this.finish('all-finished'); return }
+      if (racing && allFinished) { this.finish(this.retirements.size ? 'all-resolved' : 'all-finished'); return }
       if (this.firstFinishTick !== null && elapsed - this.firstFinishTick >= 60 * 60) { this.finish('finish-window'); return }
       if (elapsed >= 60 * 600) { this.finish('time-limit'); return }
     }
@@ -166,7 +184,7 @@ export class RaceSession {
       countdownTicks: Math.max(0, this.descriptor.countdownTicks - this.tick),
       progress: this.racers.map(r => {
         const p = this.progress.get(r.id)!
-        return { id: r.id, completedLaps: p.lapTicks.length, nextCheckpoint: p.nextCheckpoint, lapTicks: [...p.lapTicks], finishTicks: p.finishTicks }
+        return { id: r.id, completedLaps: p.lapTicks.length, nextCheckpoint: p.nextCheckpoint, lapTicks: [...p.lapTicks], finishTicks: p.finishTicks, ...this.retirements.get(r.id) }
       }),
       vehicles: this.simulation.states().map(v => {
         const racer = this.racers.find(r => r.id === v.id)!
@@ -181,7 +199,7 @@ export class RaceSession {
       let rank = 1
       for (const other of this.progress.values()) if (other.finishTicks !== null && p.finishTicks !== null && other.finishTicks < p.finishTicks) rank++
       return { id: r.id, carId: r.carId, status: p.finishTicks === null ? 'dnf' : 'finished',
-        rank: p.finishTicks === null ? null : rank, finishTicks: p.finishTicks, lapTicks: Object.freeze([...p.lapTicks]) }
+        rank: p.finishTicks === null ? null : rank, finishTicks: p.finishTicks, ...this.retirements.get(r.id), lapTicks: Object.freeze([...p.lapTicks]) }
     })
     for (const r of racers) Object.freeze(r)
     const result: RaceResult = Object.freeze({ raceId: this.descriptor.id, track: 'nurburgring', laps: this.laps,

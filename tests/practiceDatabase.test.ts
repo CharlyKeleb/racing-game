@@ -90,3 +90,29 @@ it('paginates same-timestamp results by race UUID without skips or duplicate row
     expect(rest).toHaveLength(6)
   })
 })
+
+it('stores v2 retirement metadata atomically and preserves v1 replay receipts', async () => {
+  const v2 = structuredClone(savedRace('20000000-0000-4000-8000-000000000050'))
+  v2.protocol = 3; v2.ruleset = 'online-practice-v2'; v2.result.reason = 'all-resolved'
+  v2.result.completedTick = 380
+  v2.result.racers[1] = { ...v2.result.racers[1], status: 'dnf', rank: null, finishTicks: null,
+    lapTicks: [], retiredTicks: 100, dnfReason: 'connection-lost' }
+  await role('service_role', async () => {
+    const receipt = await write(v2)
+    expect((await write(v2)).rows).toEqual(receipt.rows)
+    expect((await write(record)).rows[0].saved.raceId).toBe(record.result.raceId)
+  })
+  const rows = (await db.query('select * from public.online_practice_history where race_id=$1 order by player_id', [v2.result.raceId])).rows
+  expect(rows[1]).toMatchObject({ status: 'dnf', retired_ticks: 100, dnf_reason: 'connection-lost', race_protocol: 3, ruleset: 'online-practice-v2', leaderboard_eligible: false })
+  for (const change of [
+    (r: typeof v2) => { r.protocol = 2 },
+    (r: typeof v2) => { r.result.racers[1].retiredTicks = 201 },
+    (r: typeof v2) => { r.result.racers[1].dnfReason = 'winner' as never },
+    (r: typeof v2) => { r.result.racers[1].lapTicks = [101] },
+    (r: typeof v2) => { r.result.racers[1].retiredTicks = undefined },
+    (r: typeof v2) => { r.result.completedTick = 400 },
+  ]) {
+    const bad = structuredClone(v2); bad.result.raceId = '20000000-0000-4000-8000-000000000051'; change(bad)
+    await role('service_role', async () => { await expect(write(bad)).rejects.toMatchObject({ code: '22023' }) })
+  }
+})

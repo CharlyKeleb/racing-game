@@ -9,7 +9,8 @@ used to create these rows.
 
 ## Schema and authority
 
-Apply `supabase/migrations/0003_online_practice_history.sql` after migrations 0001
+Apply `supabase/migrations/0003_online_practice_history.sql` and then
+`0004_online_practice_retirements.sql` before a protocol-3 backend, after migrations 0001
 and 0002. It introduces two tables and two RPCs, without changing existing saves
 or identities:
 
@@ -29,7 +30,7 @@ or identities:
 
 The server builds records from its final session result and frozen descriptor,
 including race UUID, stock cars, protocol/physics versions, fingerprint and the
-`online-practice-v1` ruleset. Both the outbox and SQL validate bounds, distinct
+`online-practice-v2` ruleset (protocol 3), while retaining v1/protocol-2 replay. Both the outbox and SQL validate bounds, distinct
 racer UUIDs, lap sums, finish/rank/tie/DNF consistency and finish reason. SQL writes
 the race and both participant rows in one transaction. A missing profile rolls
 back the entire result instead of saving half a race.

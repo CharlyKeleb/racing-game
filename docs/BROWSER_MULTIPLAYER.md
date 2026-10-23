@@ -70,11 +70,10 @@ Esc opens a focus-trapped race menu while the server keeps racing. Driving input
 becomes neutral while it is open. Finished racers release driving controls while
 waiting for the result. The final results dialog supports keyboard/controller
 focus and host-only return of the crew to the lobby; either racer can leave. Hiding the tab stops local rendering/audio and
-releases controls; it never pauses the server. Explicit leave disposes the online view and returns the remaining seat to the
-lobby with readiness reset. Unexpected drops on the optional local backend now
+releases controls; it never pauses the server. Explicit leave disposes that browser’s online view. During racing, the remaining
+seat continues against a retired DNF; during loading/countdown the session aborts. Unexpected drops on the optional local backend now
 get [bounded authenticated recovery](RACE_RECONNECT.md): the scene remains,
-controls are released and the server clock keeps running. Final timeout still
-aborts the race.
+controls are released and the server clock keeps running. Final timeout retires the dropped racer; see [departure rules](RACE_RETIREMENTS.md).
 Starting an offline race explicitly leaves any lobby seat first.
 
 ## Browser smoke fixture

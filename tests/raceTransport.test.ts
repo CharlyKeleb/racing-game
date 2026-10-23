@@ -52,7 +52,7 @@ async function connect(player: string, action: 'create' | 'join', code = '') {
 const current = (room: Room) => lobby.get(room.sessionId)!
 const ack = (room: Room) => {
   const race = current(room).race!
-  room.send('loaded', { protocol: 2, raceId: race.id, fingerprint: race.fingerprint, simulationVersion: race.simulationVersion })
+  room.send('loaded', { protocol: 3, raceId: race.id, fingerprint: race.fingerprint, simulationVersion: race.simulationVersion })
 }
 it('runs a server-authoritative two-client grid/countdown/input/snapshot lifecycle using shipped physics', async () => {
   const host = await connect('racer1', 'create')
@@ -104,16 +104,19 @@ it('runs a server-authoritative two-client grid/countdown/input/snapshot lifecyc
   host.send('cancelRace'); host.send('sync')
   await vi.waitFor(() => expect(current(host).phase).toBe('racing'))
   await guest.leave()
-  await vi.waitFor(() => expect(current(host)).toMatchObject({ phase: 'lobby', race: null }))
-  expect(current(host).racers.every(r => !r.ready)).toBe(true)
-  expect(disposed).toHaveBeenCalledTimes(1)
-  // The next session can acquire the sole development world after disposal.
-  const replacement = await connect('racer3', 'join', code)
-  host.send('ready', true); replacement.send('ready', true)
-  await vi.waitFor(() => expect(current(host).racers.every(r => r.ready)).toBe(true))
-  host.send('start')
-  await vi.waitFor(() => expect(current(host).phase).toBe('loading'))
-  host.send('cancelRace')
-  await vi.waitFor(() => expect(current(host)).toMatchObject({ phase: 'lobby', race: null }))
+  await vi.waitFor(() => expect(current(host).racers).toHaveLength(1))
+  expect(current(host)).toMatchObject({ phase: 'racing', race: { id: raceId } })
+  expect(disposed).not.toHaveBeenCalled()
+  await host.leave()
+  await vi.waitFor(() => expect(disposed).toHaveBeenCalledTimes(1))
+  // A new room can acquire the sole world after both participants retire.
+  const nextHost = await connect('racer1', 'create')
+  const replacement = await connect('racer3', 'join', current(nextHost).code)
+  nextHost.send('ready', true); replacement.send('ready', true)
+  await vi.waitFor(() => expect(current(nextHost).racers.every(r => r.ready)).toBe(true))
+  nextHost.send('start')
+  await vi.waitFor(() => expect(current(nextHost).phase).toBe('loading'))
+  nextHost.send('cancelRace')
+  await vi.waitFor(() => expect(current(nextHost)).toMatchObject({ phase: 'lobby', race: null }))
   expect(disposed).toHaveBeenCalledTimes(2)
 }, 15_000)

@@ -18,7 +18,7 @@ export async function practiceDatabase() {
     $$;
     grant usage on schema auth to anon, authenticated, service_role;
   `)
-  for (const file of ['0001_player_saves.sql', '0002_racer_profiles.sql', '0003_online_practice_history.sql']) {
+  for (const file of ['0001_player_saves.sql', '0002_racer_profiles.sql', '0003_online_practice_history.sql', '0004_online_practice_retirements.sql']) {
     await db.exec(await readFile(new URL(`../../supabase/migrations/${file}`, import.meta.url), 'utf8'))
   }
   for (let i = 0; i < resultPlayers.length; i++) {

@@ -15,7 +15,7 @@ export function OnlineRaceHud() {
   const lobby = useStore(lobbyStore, s => s.snapshot)
   const sessionId = useStore(lobbyStore, s => s.sessionId)
   const frame = useStore(lobbyStore, s => s.raceSnapshot)
-  const roster = lobby?.racers
+  const roster = (lobby?.raceRacers ?? lobby?.racers)?.map(r => ({ ...r, connected: lobby?.racers.find(current => current.id === r.id)?.connected ?? false }))
   const race = lobby?.race
   const self = roster?.find(r => r.sessionId === sessionId)
   const progress = frame?.progress?.find(p => p.id === self?.id)
@@ -29,7 +29,7 @@ export function OnlineRaceHud() {
     </header>
     <aside className="online-race__roster" aria-label="Racers">{roster?.map(r => {
       const p = frame?.progress?.find(p => p.id === r.id)
-      const label = r.connected === false ? 'Reconnecting…' : p?.finishTicks != null ? 'Finished' : `Lap ${Math.min((p?.completedLaps ?? 0) + 1, lobby?.laps ?? 1)} / ${lobby?.laps ?? 1}`
+      const label = p?.retiredTicks !== undefined ? 'DNF' : r.connected === false ? 'Reconnecting…' : p?.finishTicks != null ? 'Finished' : `Lap ${Math.min((p?.completedLaps ?? 0) + 1, lobby?.laps ?? 1)} / ${lobby?.laps ?? 1}`
       return <div key={r.id}><strong>{r.displayName}</strong><span>@{r.handle} · {label}</span></div>
     })}</aside>
     {!state.loaded && <div className="online-race__message" role="status"><strong>{race ? 'Loading your grid…' : 'Returning to the lobby…'}</strong><span>Waiting for both racers to load the circuit.</span></div>}
@@ -80,7 +80,7 @@ function OnlineResults({ result, persistence, host, names, recovering }: { recov
       <table><thead><tr><th scope="col">Place</th><th scope="col">Racer</th><th scope="col">Time</th><th scope="col">Best lap</th></tr></thead>
         <tbody>{ranked.map(r => <tr key={r.id}><td>{r.rank ?? '—'}</td><th scope="row">{names.get(r.id) ?? 'Racer'}</th><td>{r.finishTicks === null ? 'DNF' : formatTicks(r.finishTicks)}</td><td>{r.lapTicks.length ? formatTicks(Math.min(...r.lapTicks)) : '—'}</td></tr>)}</tbody>
       </table>
-      <p>{result.reason === 'time-limit' ? 'The 10-minute practice limit was reached.' : result.reason === 'finish-window' ? 'The 60-second finish window ended.' : 'Everyone crossed the finish line.'}</p>
+      <p>{result.reason === 'all-resolved' ? 'Every racer has finished or retired.' : result.reason === 'time-limit' ? 'The 10-minute practice limit was reached.' : result.reason === 'finish-window' ? 'The 60-second finish window ended.' : 'Everyone crossed the finish line.'}</p>
       {recovering && <p role="status">Reconnecting to your crew…</p>}
       <p role="status">{persistence?.state === 'saved' ? 'Saved to your profile as online practice.' : persistence?.state === 'saving' ? 'Saving your practice result…' : persistence?.state === 'pending' ? 'Save pending · The server has kept your result and will retry.' : persistence?.state === 'failed' ? 'This result could not be saved. It is still shown here for this session.' : 'These session results are not saved to your profile.'}</p>
       {host ? <Button variant="primary" onClick={returnToLobby} disabled={recovering} autoFocus>Return crew to lobby</Button> : <p role="status">Waiting for the host to return the crew to the lobby.</p>}
