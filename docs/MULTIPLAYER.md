@@ -186,3 +186,5 @@ reload recovery, disconnect DNF and hosted acceptance remain separate gates.
 Post-race [rematch voting](RACE_REMATCH.md) requires fresh consent from both original racers.
 
 [Draining and shutdown](MULTIPLAYER_SHUTDOWN.md) stops new races and bounds in-flight finish/durable enqueue work.
+
+[Private identity audit](RACER_IDENTITY_AUDIT.md) records every actual profile rename while preserving no-cooldown owned-handle reuse.
