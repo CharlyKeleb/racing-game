@@ -5,9 +5,10 @@ import { Server, matchMaker } from '@colyseus/core'
 import { WebSocketTransport } from '@colyseus/ws-transport'
 import { AdmissionError, type Authenticate } from './auth.js'
 import { activePlayers, LobbyRoom, lobbyDirectory } from './LobbyRoom.js'
+import type { RaceFactory } from './RaceSession.js'
 import { isLobbyCar, LOBBY_PROTOCOL } from './protocol.js'
 
-export interface BackendOptions { authenticate: Authenticate; origins: string[]; maxRooms?: number }
+export interface BackendOptions { authenticate: Authenticate; origins: string[]; maxRooms?: number; raceFactory?: RaceFactory }
 export function createBackend(options: BackendOptions) {
   const origins = new Set(options.origins)
   if (!origins.size || origins.has('*')) throw new Error('Set explicit allowed frontend origins.')
@@ -43,7 +44,7 @@ export function createBackend(options: BackendOptions) {
     },
   })
   const gameServer = new Server({ transport, greet: false, gracefullyShutdown: false })
-  gameServer.define('private_lobby', LobbyRoom)
+  gameServer.define('private_lobby', LobbyRoom, { raceFactory: options.raceFactory })
   app.post('/rooms', async (req, res) => {
     let playerId: string | null = null
     let reserved = false
@@ -71,6 +72,7 @@ export function createBackend(options: BackendOptions) {
         const code = typeof req.body.code === 'string' ? req.body.code.trim().toUpperCase() : ''
         if (!/^[A-HJ-NP-Z2-9]{8}$/.test(code)) throw new AdmissionError(400, 'Enter the 8-character room code.')
         const room = lobbyDirectory.get(code)
+        if (room && room.snapshot().phase !== 'lobby') throw new AdmissionError(409, 'This race has already started. Wait for the next lobby.')
         if (!room) throw new AdmissionError(404, 'Room not found or full. Check the code with your host.')
         cache = await matchMaker.getRoomById(room.roomId)
       }

@@ -7,4 +7,6 @@ See [the multiplayer setup and deployment guide](../docs/MULTIPLAYER.md).
 - `npm run dev` — local watch mode with `.env.local`
 - `npm run build` / `npm start` — compile / run production server
 
-No online physics or verified results are implemented in this milestone.
+The production entrypoint remains lobby-only. The optional
+[local race transport](../docs/RACE_TRANSPORT.md) injects shared physics from the
+repository root; browser networked racing and verified results remain pending.

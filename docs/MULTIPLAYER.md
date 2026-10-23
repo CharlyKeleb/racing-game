@@ -160,8 +160,13 @@ The [headless simulation spike](HEADLESS_SIMULATION.md) extracts the shared chas
 and provides a versioned track/stock-car export, two-car ghost simulation tests
 and a local CPU/memory benchmark. It is not wired into deployed lobbies.
 
-Next: measure the production simulation package, then implement loading/countdown,
-networked inputs/snapshots and authoritative checkpoints/results. Never upload
+The [local race transport](RACE_TRANSPORT.md) now exercises loading/countdown,
+sequenced inputs and authoritative snapshots through two SDK clients. It is
+explicitly gated behind a local simulation factory; the deployed entrypoint
+remains lobby-only and the browser race adapter is pending.
+
+Next: browser prediction/interpolation and race presentation, production-image
+profiling, then authoritative checkpoints/results. Never upload
 browser lap records as verified competition data.
 
 References: [Fly configuration](https://fly.io/docs/reference/configuration/),

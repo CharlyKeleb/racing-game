@@ -22,7 +22,9 @@
     "test:multiplayer": "vitest run tests/multiplayer.test.ts tests/multiplayerAuth.test.ts tests/lobbyClient.test.ts",
     "build:simulation": "node scripts/multiplayer/build-simulation-assets.mjs",
     "benchmark:simulation": "npm run build:simulation && server/node_modules/.bin/tsx scripts/multiplayer/benchmark.ts",
-    "test:simulation": "vitest run tests/headlessSimulation.test.ts tests/handling.test.ts"
+    "test:simulation": "vitest run tests/headlessSimulation.test.ts tests/handling.test.ts",
+    "server:race-dev": "npm run build:simulation && node --env-file=server/.env.local --import ./server/node_modules/tsx/dist/loader.mjs scripts/multiplayer/dev-race-server.ts",
+    "test:race-transport": "vitest run tests/raceSession.test.ts tests/raceTransport.test.ts tests/lobbyClient.test.ts"
   },
   "dependencies": {
     "@colyseus/sdk": "0.18.6",
