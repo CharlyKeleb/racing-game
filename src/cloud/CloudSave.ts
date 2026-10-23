@@ -104,6 +104,14 @@ export class CloudSave {
     if (error) accountStore.setState({ error: message(error) })
   }
 
+  async multiplayerToken(): Promise<string | null> {
+    const client = await this.client
+    if (!client || !this.playerId) return null
+    const { data, error } = await client.auth.getSession()
+    if (error || data.session?.user.id !== this.playerId) return null
+    return data.session.access_token
+  }
+
   async loadProfile(): Promise<void> {
     const client = await this.client
     const playerId = this.playerId

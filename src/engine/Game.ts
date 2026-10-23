@@ -1055,6 +1055,10 @@ export class Game {
     return this.cloud.saveRacerProfile(handle, displayName)
   }
 
+  multiplayerToken(): Promise<string | null> {
+    return this.cloud.multiplayerToken()
+  }
+
   loadRacerProfile(): Promise<void> {
     return this.cloud.loadProfile()
   }

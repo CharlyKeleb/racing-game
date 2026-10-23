@@ -21,6 +21,8 @@ import { RevButton } from './RevButton'
 import { MenuMusicBar } from './MenuMusicBar'
 import { TIME_PRESETS } from '../world/timeOfDay'
 
+const OnlineLobby = lazy(() => import('./OnlineLobby').then(module => ({ default: module.OnlineLobby })))
+
 const SettingsDialog = lazy(() => import('./Settings').then(module => ({ default: module.SettingsDialog })))
 const GarageWorkshop = lazy(() => import('./Garage').then(module => ({ default: module.GarageWorkshop })))
 
@@ -41,7 +43,7 @@ export function MainMenu() {
   const [picked, setPicked] = useState<Exclude<Tab, 'garage'>>('play')
   const tab: Tab = phase === 'garage' ? 'garage' : picked
   // A sign-in link that failed opens the account dialog, to say why.
-  const [dialog, setDialog] = useState<'settings' | 'setup' | 'tracks' | 'account' | null>(() => accountStore.getState().returnError ? 'account' : null)
+  const [dialog, setDialog] = useState<'settings' | 'setup' | 'tracks' | 'account' | 'online' | null>(() => accountStore.getState().returnError ? 'account' : null)
   useEffect(() => {
     const check = () => {
       const s = accountStore.getState()
@@ -131,7 +133,7 @@ export function MainMenu() {
       </aside>}
 
       <section className={`hub-panel${tab === 'garage' ? ' hub-panel--left' : ''}`} key={tab} aria-label={tab === 'play' ? 'Events' : tab === 'cars' ? 'Cars' : 'Garage'}>
-        {tab === 'play' && <PlayMosaic onSetup={() => setDialog('setup')} onTracks={() => setDialog('tracks')} />}
+        {tab === 'play' && <PlayMosaic onOnline={() => setDialog('online')} onSetup={() => setDialog('setup')} onTracks={() => setDialog('tracks')} />}
         {tab === 'cars' && <CarList />}
         {tab === 'garage' && <Suspense fallback={<div className="hub-loading" role="status">Opening the garage…</div>}><GarageWorkshop /></Suspense>}
       </section>
@@ -147,6 +149,7 @@ export function MainMenu() {
       {dialog === 'setup' && <RaceSetup onClose={() => setDialog(null)} />}
       {dialog === 'tracks' && <TrackSelection onClose={() => setDialog(null)} />}
       {dialog === 'account' && <AccountDialog onClose={() => setDialog(null)} />}
+      {dialog === 'online' && <Suspense fallback={<div role="status">Opening online lobby…</div>}><OnlineLobby onClose={() => setDialog(null)} onAccount={() => setDialog('account')} /></Suspense>}
       {dialog === 'settings' && <Suspense fallback={<div role="status">Loading settings…</div>}><SettingsDialog onClose={() => setDialog(null)} /></Suspense>}
     </div>
   )
@@ -167,7 +170,7 @@ function setupLabel(mode: GameModeId, event: Parameters<typeof driftEvent>[0], l
  * circuit's aerial, with the start button; the other modes are colour-coded
  * tiles that select it; circuit and setup tiles open their dialogs.
  */
-function PlayMosaic({ onSetup, onTracks }: { onSetup(): void; onTracks(): void }) {
+function PlayMosaic({ onSetup, onTracks, onOnline }: { onSetup(): void; onTracks(): void; onOnline(): void }) {
   const game = useGameInstance()
   const settings = useGame((s) => s.settings)
   const build = useGame((s) => s.build)
@@ -198,6 +201,10 @@ function PlayMosaic({ onSetup, onTracks }: { onSetup(): void; onTracks(): void }
           </button>
         </div>
       </article>
+
+      <button className="online-entry" onClick={onOnline}>
+        <span><GiCheckeredFlag aria-hidden /><strong>Online lobby</strong></span><small>Private rooms · Up to 4 racers</small><b aria-hidden>↗</b>
+      </button>
 
       <div className="hub-modes" role="radiogroup" aria-label="Game mode">
         {GAME_MODES.filter((m) => m.id !== mode.id).map((m) => {

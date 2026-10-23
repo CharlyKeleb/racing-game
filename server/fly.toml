@@ -1,0 +1,37 @@
+# Lobby pilot deployed to Charly (charly-27), one always-on machine.
+app = "charly-racing-multiplayer"
+primary_region = "jnb"
+kill_signal = "SIGTERM"
+kill_timeout = "25s"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  NODE_ENV = "production"
+  PORT = "2567"
+
+[http_service]
+  internal_port = 2567
+  force_https = true
+  # One always-on process: do not auto-stop active/in-memory lobbies.
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [http_service.concurrency]
+    type = "connections"
+    soft_limit = 80
+    hard_limit = 100
+
+  [[http_service.checks]]
+    interval = "15s"
+    timeout = "3s"
+    grace_period = "10s"
+    method = "GET"
+    path = "/readyz"
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory = "256mb"
