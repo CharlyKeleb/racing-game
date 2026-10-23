@@ -1,4 +1,6 @@
 import { driftEvent } from '../racing/driftEvents'
+import { AccountButton, AccountDialog } from './Account'
+import { accountStore } from '../stores/accountStore'
 import { GiCheckeredFlag, GiStopwatch, GiRaceCar, GiRoad, GiHomeGarage, GiGears, GiSteeringWheel, GiPathDistance } from 'react-icons/gi'
 import { lazy, Suspense, useEffect, useState, type ComponentType } from 'react'
 import { buildStats, carClass, DEFAULT_BUILD, performanceRank } from '../vehicles/CarBuild'
@@ -38,7 +40,8 @@ export function MainMenu() {
   const phase = useGame((s) => s.phase)
   const [picked, setPicked] = useState<Exclude<Tab, 'garage'>>('play')
   const tab: Tab = phase === 'garage' ? 'garage' : picked
-  const [dialog, setDialog] = useState<'settings' | 'setup' | 'tracks' | null>(null)
+  // A sign-in link that failed opens the account dialog, to say why.
+  const [dialog, setDialog] = useState<'settings' | 'setup' | 'tracks' | 'account' | null>(() => accountStore.getState().returnError ? 'account' : null)
   const switching = useGame((s) => s.carSwitching || s.trackSwitching)
   const carName = useGame((s) => s.carName)
   const carId = useGame((s) => s.settings.car)
@@ -106,6 +109,7 @@ export function MainMenu() {
           ))}
           <kbd className="hub-key" aria-hidden="true">E</kbd>
         </nav>
+        <AccountButton onOpen={() => setDialog('account')} />
       </header>
 
       {/* In the garage the workshop takes this rail, so nothing covers the car being inspected. */}
@@ -134,6 +138,7 @@ export function MainMenu() {
 
       {dialog === 'setup' && <RaceSetup onClose={() => setDialog(null)} />}
       {dialog === 'tracks' && <TrackSelection onClose={() => setDialog(null)} />}
+      {dialog === 'account' && <AccountDialog onClose={() => setDialog(null)} />}
       {dialog === 'settings' && <Suspense fallback={<div role="status">Loading settings…</div>}><SettingsDialog onClose={() => setDialog(null)} /></Suspense>}
     </div>
   )

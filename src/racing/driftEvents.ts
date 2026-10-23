@@ -1,3 +1,4 @@
+import { noteLocalSave } from '../stores/accountStore'
 /** Scored course events. Finish every gate; no countdown timer ends a run. */
 export type DriftEventId = 'flow' | 'sprint' | 'endurance'
 export interface DriftEvent {id:DriftEventId;name:string;description:string;laps:number;minSpeed:number;targets:readonly [number,number,number]}
@@ -19,5 +20,5 @@ export function readDriftRecord(track:string,event:DriftEventId='flow'): DriftRe
   } catch { return {score:0,chain:0} }
 }
 export function saveDriftRecord(track:string,record:DriftRecord,event:DriftEventId='flow'): void {
-  try { localStorage.setItem(`racing-game:drift:${track}:${event}:course-v1`,JSON.stringify(record)) } catch { /* Private browsing: the run still finishes. */ }
+  try { localStorage.setItem(`racing-game:drift:${track}:${event}:course-v1`,JSON.stringify(record)); noteLocalSave() } catch { /* Private browsing: the run still finishes. */ }
 }

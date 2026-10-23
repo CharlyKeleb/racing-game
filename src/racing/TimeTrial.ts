@@ -1,4 +1,5 @@
 import type { CarBuild } from '../vehicles/CarBuild'
+import { noteLocalSave } from '../stores/accountStore'
 
 /**
  * Time Trial timing (#31): checkpoint splits against your best valid lap, lap
@@ -129,6 +130,7 @@ export function readTrialRecord(track: string, car: string, buildKey: string): T
 export function saveTrialRecord(track: string, car: string, buildKey: string, lap: TrialLap): void {
   try {
     localStorage.setItem(storageKey(track, car, buildKey), JSON.stringify(lap))
+    noteLocalSave()
   } catch {
     // Private browsing: the session still runs, the best just won't persist.
   }
