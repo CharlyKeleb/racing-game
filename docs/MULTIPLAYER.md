@@ -156,8 +156,13 @@ room creation, cross-device code join, readiness, logout/token refresh, host
 exit, offline/network drop and redeploy. Latency, memory and four-racer load must
 be measured on the actual chosen Fly machine before public launch.
 
-Next: headless simulation boundary and two-player ghost racing with authoritative
-checkpoints/results. Never upload browser lap records as verified competition data.
+The [headless simulation spike](HEADLESS_SIMULATION.md) extracts the shared chassis
+and provides a versioned track/stock-car export, two-car ghost simulation tests
+and a local CPU/memory benchmark. It is not wired into deployed lobbies.
+
+Next: measure the production simulation package, then implement loading/countdown,
+networked inputs/snapshots and authoritative checkpoints/results. Never upload
+browser lap records as verified competition data.
 
 References: [Fly configuration](https://fly.io/docs/reference/configuration/),
 [Colyseus authentication](https://docs.colyseus.io/auth/room),

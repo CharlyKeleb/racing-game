@@ -6,7 +6,8 @@ import RAPIER from '@dimforge/rapier3d-compat'
 import * as THREE from 'three'
 import type { InputState } from '../input/InputManager'
 import type { CarModel } from './CarModel'
-import { VehicleController } from './VehicleController'
+import type { VehicleController } from './VehicleController'
+import { VehiclePhysics } from './VehiclePhysics'
 import type { VehicleConfig } from './VehicleConfig'
 
 /** Fixed tick length the vehicle is stepped at (matches GameLoop.FIXED_DT). */
@@ -75,6 +76,7 @@ export class Vehicle {
   readonly body: RAPIER.RigidBody
   /** The chassis box: only touches things in a hit (the wheels are raycasts). */
   readonly chassis: RAPIER.Collider
+  private readonly physics: VehiclePhysics
   readonly massKg: number
   /**
    * Physics ticks left in which hits are ignored: a respawn drops the car onto
@@ -119,35 +121,12 @@ export class Vehicle {
     this.pivotHeight = config.wheels.reduce((sum, w) => sum + w.radius, 0) / config.wheels.length
     this.model = model
 
-    const [hx, hy, hz] = config.chassisHalfExtents
-    const m = config.massKg
-    // Box inertia from the collision hull; COM comes from config (kept low).
-    const inertia = {
-      x: (m / 3) * (hy * hy + hz * hz),
-      y: (m / 3) * (hx * hx + hz * hz),
-      z: (m / 3) * (hx * hx + hy * hy),
-    }
-    const [comX, comY, comZ] = config.centerOfMass
-    const bodyDesc = RAPIER.RigidBodyDesc.dynamic()
-      .setAdditionalMassProperties(m, { x: comX, y: comY, z: comZ }, inertia, { x: 0, y: 0, z: 0, w: 1 })
-      .setLinearDamping(0) // air drag and rolling resistance are modelled in VehicleController
-      .setAngularDamping(0.6)
-      .setCcdEnabled(true)
-    this.body = world.createRigidBody(bodyDesc)
+    this.physics = new VehiclePhysics(config, world, spawn)
+    this.body = this.physics.body
+    this.chassis = this.physics.chassis
+    this.controller = this.physics.controller
+    this.massKg = config.massKg
 
-    const [cx, cy, cz] = config.chassisCenter
-    // The wheels are raycasts, so this box only touches things in a real hit
-    // (another car, a wall, the ground when bottoming out): it reports the
-    // contact force for the crash sounds. 1.5 g filters out brushing contacts.
-    this.chassis = world.createCollider(
-      RAPIER.ColliderDesc.cuboid(hx, hy, hz).setTranslation(cx, cy, cz).setDensity(0).setFriction(0.2).setRestitution(0.1)
-        .setActiveEvents(RAPIER.ActiveEvents.CONTACT_FORCE_EVENTS)
-        .setContactForceEventThreshold(m * 9.81 * 1.5),
-      this.body,
-    )
-    this.massKg = m
-
-    this.controller = new VehicleController(config, this.body, world)
     model.root.traverse((o) => {
       const mesh = o as THREE.Mesh
       if (!mesh.isMesh) return
@@ -195,7 +174,7 @@ export class Vehicle {
 
   fixedUpdate(input: InputState, dt: number): void {
     if (this.quietTicks > 0) this.quietTicks--
-    this.controller.update(input, dt)
+    this.physics.fixedUpdate(input, dt)
   }
 
   /** Call after the physics step to record the new tick's transform. */
@@ -316,12 +295,8 @@ export class Vehicle {
 
   respawn(spawn: SpawnPoint): void {
     this.quietTicks = 30
-    const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), spawn.heading)
-    this.body.setTranslation(spawn.position, true)
-    this.body.setRotation(q, true)
-    this.body.setLinvel({ x: 0, y: 0, z: 0 }, true)
-    this.body.setAngvel({ x: 0, y: 0, z: 0 }, true)
-    this.controller.reset()
+    this.physics.respawn(spawn)
+    const q = this.body.rotation()
     // A respawn (race start, restart, checkpoint reset) puts the car back with cold discs.
     this.brakeHeat.reset()
     this.discGlow?.update(0, 0)

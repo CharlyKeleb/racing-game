@@ -130,11 +130,13 @@ export class VehicleController {
   private readonly cfg: VehicleConfig
   private readonly body: RAPIER.RigidBody
   private readonly world: RAPIER.World
+  private readonly ghost: boolean
 
-  constructor(cfg: VehicleConfig, body: RAPIER.RigidBody, world: RAPIER.World) {
+  constructor(cfg: VehicleConfig, body: RAPIER.RigidBody, world: RAPIER.World, ghost = false) {
     this.cfg = cfg
     this.body = body
     this.world = world
+    this.ghost = ghost
     this.drivetrain = new Drivetrain(cfg.engine)
     this.nitro = new Nitro(cfg.nitro)
     const [hx, , hz] = cfg.chassisHalfExtents
@@ -320,7 +322,8 @@ export class VehicleController {
       _ray.origin = { x: _mount.x, y: _mount.y, z: _mount.z }
       _ray.dir = { x: -_up.x, y: -_up.y, z: -_up.z }
       const maxDist = cfg.suspension.restLength + wc.radius
-      const contact = this.world.castRayAndGetNormal(_ray, maxDist, true, undefined, undefined, undefined, body)
+      const contact = this.world.castRayAndGetNormal(_ray, maxDist, true,
+        this.ghost ? RAPIER.QueryFilterFlags.EXCLUDE_DYNAMIC : undefined, undefined, undefined, body)
       const hit = contact && contact.normal.x * _up.x + contact.normal.y * _up.y + contact.normal.z * _up.z > .35 ? contact : null
 
       const load = w.suspension.update(hit ? hit.timeOfImpact : null, wc.radius, dt)
