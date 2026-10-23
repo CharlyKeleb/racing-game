@@ -1,3 +1,4 @@
+import type { MultiplayerMetrics } from './MultiplayerMetrics.js'
 import { resultRecord } from './ResultRecord.js'
 import type { ResultPersistenceService } from './ResultOutbox.js'
 import { randomInt } from 'node:crypto'
@@ -26,6 +27,8 @@ export class LobbyRoom extends Room {
   private raceFactory?: RaceFactory
   private resultWriter?: ResultPersistenceService
   private resultPersistence?: ResultPersistence
+  private metrics?: MultiplayerMetrics
+  private lastMetricTick = -Infinity
   private disposed = false
   private closing = false
   private isDraining: () => boolean = () => false
@@ -42,7 +45,8 @@ export class LobbyRoom extends Room {
   private expiry = new Map<string, ReturnType<typeof setTimeout>>()
   /** All HTTP SDK matchmake methods are denied. Only our verified /rooms endpoint reserves seats. */
   static async onAuth(): Promise<never> { throw new ServerError(403, 'Use private room admission.') }
-  onCreate(options: { raceFactory?: RaceFactory; resultPersistence?: ResultPersistenceService; isDraining?: () => boolean } = {}) {
+  onCreate(options: { raceFactory?: RaceFactory; resultPersistence?: ResultPersistenceService; isDraining?: () => boolean; metrics?: MultiplayerMetrics } = {}) {
+    this.metrics = options.metrics
     this.isDraining = options.isDraining ?? (() => false)
     this.raceFactory = options.raceFactory
     this.resultWriter = options.resultPersistence
@@ -63,7 +67,10 @@ export class LobbyRoom extends Room {
     this.control('loaded', (client, value: unknown) => {
       if (this.race?.acknowledge(client.sessionId, value)) this.publish()
     })
-    this.onMessage('input', (client, value: unknown) => { if (this.racers.get(client.sessionId)?.connected !== false) this.race?.input(client.sessionId, value, performance.now()) })
+    this.onMessage('input', (client, value: unknown) => {
+      const accepted = this.racers.get(client.sessionId)?.connected !== false && this.race?.input(client.sessionId, value, performance.now())
+      this.metrics?.count(accepted ? 'input_accepted' : 'input_rejected')
+    })
     this.control('cancelRace', (client) => {
       if (this.racers.get(client.sessionId)?.id === this.hostId && this.race && ['loading', 'countdown'].includes(this.race.phase)) {
         this.race.close('The host cancelled race loading.'); this.finishRace()
@@ -108,6 +115,7 @@ export class LobbyRoom extends Room {
         this.armExpiry(client.sessionId)
         client.send('refreshed')
         if (recovering) {
+          this.metrics?.count('reconnect_succeeded')
           this.publish()
           client.send('lobby', this.snapshot())
           const frame = this.race?.snapshot()
@@ -135,6 +143,7 @@ export class LobbyRoom extends Room {
     if (!this.raceFactory || !racer || !lease || ![1001, 1005, 1006, 4010].includes(code ?? 1006) || lease.expiresAt <= Date.now()) return
     lease.recoverUntil ??= Date.now() + RECONNECT_GRACE_SECONDS * 1000
     if (lease.recoverUntil <= Date.now()) return
+    this.metrics?.count('reconnect_started')
     this.clearRematch()
     racer.connected = false
     this.controlRates.delete(client.sessionId)
@@ -155,6 +164,7 @@ export class LobbyRoom extends Room {
   onLeave(client: Client, code?: number) {
     const racer = this.racers.get(client.sessionId)
     if (!racer) return
+    if (this.leases.get(client.sessionId)?.recoverUntil != null && !this.closing) this.metrics?.count('reconnect_failed')
     const authExpired = (this.leases.get(client.sessionId)?.expiresAt ?? Infinity) <= Date.now()
     this.clearRematch()
     activePlayers.delete(racer.id)
@@ -183,7 +193,7 @@ export class LobbyRoom extends Room {
     this.broadcast('notice', 'The server is restarting. Active races have a limited window to finish.')
     this.publish()
   }
-  hasActiveRace(): boolean { return !!this.race && ['loading', 'countdown', 'racing'].includes(this.race.phase) }
+  hasActiveRace(): boolean { return !!this.race && this.race.phase !== 'finished' && this.race.phase !== 'closed' }
   override onBeforeShutdown(): void { void this.disconnect(ROOM_CLOSED_CODE).catch(() => {}) }
   override disconnect(closeCode = ROOM_CLOSED_CODE): Promise<unknown> {
     // Whole-room failure/expiry is never a pair of individual retirements.
@@ -198,6 +208,7 @@ export class LobbyRoom extends Room {
   onDispose() {
     this.disposed = true
     this.clearRematch()
+    if (this.hasActiveRace()) this.metrics?.count('race_aborted')
     this.race?.close('The room closed.')
     this.race = null
     this.controlRates.clear()
@@ -232,6 +243,8 @@ export class LobbyRoom extends Room {
     this.clearRematch()
     this.race?.close('')
     const race = new RaceSession([...this.racers.values()].map(r => ({ id: r.id, sessionId: r.sessionId, carId: r.carId })), this.raceFactory!, this.laps)
+    this.metrics?.count('race_started')
+    this.lastMetricTick = -Infinity
     this.race = race
     this.raceRacers = [...this.racers.values()].map(r => ({ ...r }))
     this.resultPersistence = { raceId: race.descriptor.id, state: 'disabled' }
@@ -281,21 +294,44 @@ export class LobbyRoom extends Room {
   }
   private advanceRace(dt: number): void {
     const race = this.race
-    if (!race) return
-    const phase = race.phase
-    try { race.advance(dt) } catch { race.close('The race simulation stopped. Return to the lobby.') }
-    if (race.phase === 'closed') { this.finishRace(); return }
-    if (phase !== race.phase && race.phase === 'finished') this.persistResult(race)
-    if (phase !== race.phase) this.publish()
-    if (phase !== race.phase || race.tick - this.lastSnapshotTick >= 3) {
-      const snapshot = race.snapshot()
-      if (snapshot) { this.broadcast('race', snapshot); this.lastSnapshotTick = race.tick }
-    }
+    if (!race || !this.hasActiveRace()) return
+    const started = this.metrics ? performance.now() : 0
+    try {
+      const phase = race.phase
+      try { race.advance(dt) } catch { race.close('The race simulation stopped. Return to the lobby.') }
+      if (race.phase === 'closed') { this.finishRace(); return }
+      if (phase !== race.phase && race.phase === 'finished') this.persistResult(race)
+      if (phase !== race.phase) this.publish()
+      if (phase !== race.phase || race.tick - this.lastSnapshotTick >= 3) {
+        const snapshot = race.snapshot()
+        if (snapshot) {
+          this.broadcast('race', snapshot); this.lastSnapshotTick = race.tick
+          // One size/age sample per simulated second, never stringify on every tick.
+          if (this.metrics && race.tick - this.lastMetricTick >= 60) {
+            this.lastMetricTick = race.tick
+            try { this.metrics.sampledSnapshot(Buffer.byteLength(JSON.stringify(snapshot)), race.maximumInputAge()) } catch { /* diagnostics cannot interrupt a race */ }
+          }
+        }
+      }
+    } finally { this.metrics?.advanced(dt, performance.now() - started) }
   }
   private persistResult(race: RaceSession): void {
+    this.metrics?.count('race_finished')
     const writer = this.resultWriter
     if (!writer) return
+    const started = this.metrics ? performance.now() : 0
+    let previous: ResultPersistence['state'] | undefined
+    let measured = false
     const update = (state: ResultPersistence) => {
+      if (state.raceId !== race.descriptor.id) return
+      if (state.state !== previous) {
+        previous = state.state
+        if (state.state === 'pending') this.metrics?.count('result_pending')
+        if (state.state === 'saved' || state.state === 'failed') {
+          this.metrics?.count(state.state === 'saved' ? 'result_saved' : 'result_failed')
+          if (!measured) { this.metrics?.finalized(performance.now() - started); measured = true }
+        }
+      }
       if (!this.disposed && this.race === race && state.raceId === race.descriptor.id) { this.resultPersistence = state; this.publish() }
     }
     update({ raceId: race.descriptor.id, state: 'saving' })
@@ -307,6 +343,7 @@ export class LobbyRoom extends Room {
   private finishRace(): void {
     this.clearRematch()
     const reason = this.race?.reason
+    if (reason) this.metrics?.count('race_aborted')
     this.race = null
     this.resultPersistence = undefined
     this.raceRacers = undefined

@@ -1,3 +1,4 @@
+import { MultiplayerMetrics, type MetricsOptions } from './MultiplayerMetrics.js'
 import { createServer } from 'node:http'
 import express from 'express'
 import { rateLimit, ipKeyGenerator } from 'express-rate-limit'
@@ -10,7 +11,7 @@ import type { RaceFactory } from './RaceSession.js'
 import { isLobbyCar, LOBBY_PROTOCOL } from './protocol.js'
 
 export interface ShutdownReport { abortedRaces: number; pendingResultWrites: number }
-export interface BackendOptions { authenticate: Authenticate; origins: string[]; maxRooms?: number; raceFactory?: RaceFactory; resultPersistence?: ResultPersistenceService }
+export interface BackendOptions { authenticate: Authenticate; origins: string[]; maxRooms?: number; raceFactory?: RaceFactory; resultPersistence?: ResultPersistenceService; metrics?: MetricsOptions }
 export function createBackend(options: BackendOptions) {
   const origins = new Set(options.origins)
   if (!origins.size || origins.has('*')) throw new Error('Set explicit allowed frontend origins.')
@@ -20,6 +21,9 @@ export function createBackend(options: BackendOptions) {
   let creating = 0
   let shutdownPromise: Promise<ShutdownReport> | undefined
   const admissionClaims = new Map<string, { lease: symbol; timer?: ReturnType<typeof setTimeout> }>()
+  const metrics = options.metrics ? new MultiplayerMetrics() : undefined
+  const metricInterval = options.metrics?.intervalMs ?? 60_000
+  if (options.metrics && (!Number.isInteger(metricInterval) || metricInterval < 1000 || metricInterval > 300_000)) throw new Error('Metrics interval must be between one and three hundred seconds')
   const pendingWrites = new Set<Promise<void>>()
   const writer = options.resultPersistence
   const trackedWriter: ResultPersistenceService | undefined = writer && {
@@ -54,7 +58,7 @@ export function createBackend(options: BackendOptions) {
   app.use(express.json({ limit: '2kb' }))
   app.use('/rooms', rateLimit({ windowMs: 60_000, limit: 20, standardHeaders: 'draft-8', legacyHeaders: false,
     keyGenerator: (req) => ipKeyGenerator((process.env.FLY_APP_NAME ? req.get('fly-client-ip') : undefined) || req.ip || 'unknown'),
-    message: { error: 'Too many attempts. Wait a minute and try again.' },
+    handler: (_req, res) => { metrics?.count('admission_rate_limited'); res.status(429).json({ error: 'Too many attempts. Wait a minute and try again.' }) },
   }))
   // Never accept arbitrary profile UUIDs/handles from the client.
   LobbyRoom.authenticate = options.authenticate
@@ -67,7 +71,7 @@ export function createBackend(options: BackendOptions) {
     },
   })
   const gameServer = new Server({ transport, greet: false, gracefullyShutdown: false })
-  gameServer.define('private_lobby', LobbyRoom, { raceFactory: options.raceFactory, resultPersistence: trackedWriter, isDraining: () => draining })
+  gameServer.define('private_lobby', LobbyRoom, { raceFactory: options.raceFactory, resultPersistence: trackedWriter, isDraining: () => draining, metrics })
   app.post('/rooms', async (req, res) => {
     let playerId: string | null = null
     let lease: symbol | undefined
@@ -111,8 +115,10 @@ export function createBackend(options: BackendOptions) {
         if (admissionClaims.get(racer.id) === claim) admissionClaims.delete(racer.id)
       }, 16_000)
       claim.timer.unref()
+      metrics?.count('admission_ok')
       res.json(seat)
     } catch (error) {
+      metrics?.count('admission_rejected')
       if (lease && playerId) {
         if (activePlayers.get(playerId) === lease) activePlayers.delete(playerId)
         if (admissionClaims.get(playerId)?.lease === lease) admissionClaims.delete(playerId)
@@ -126,6 +132,27 @@ export function createBackend(options: BackendOptions) {
   app.use((error: { status?: number }, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
     res.status(error.status === 413 ? 413 : 400).json({ error: 'Invalid request.' })
   })
+  const getMetrics = () => {
+    if (!metrics) return null
+    let racers = 0, heldSeats = 0, activeRaces = 0
+    for (const room of lobbyDirectory.values()) {
+      racers += room.racers.size
+      if (room.hasActiveRace()) activeRaces++
+      for (const racer of room.racers.values()) if (racer.connected === false) heldSeats++
+    }
+    const memory = process.memoryUsage()
+    return metrics.snapshot({ rooms: lobbyDirectory.size, racers, heldSeats, activeRaces,
+      admissionClaims: admissionClaims.size, pendingResultWrites: pendingWrites.size,
+      rssMiB: memory.rss / 1024 / 1024, heapUsedMiB: memory.heapUsed / 1024 / 1024 })
+  }
+  const reportMetrics = () => {
+    const report = getMetrics()
+    // Diagnostics must never affect simulation, admission or shutdown correctness.
+    if (report) try { options.metrics!.report(report) } catch { /* reporter is non-authoritative */ }
+  }
+  const metricsTimer = metrics ? setInterval(reportMetrics, metricInterval) : undefined
+  metricsTimer?.unref()
+  gameServer.onShutdown(() => { clearInterval(metricsTimer); reportMetrics() })
   const shutdown = (graceMs = 15_000): Promise<ShutdownReport> => {
     if (!Number.isFinite(graceMs) || graceMs < 0 || graceMs > 60_000) throw new Error('Shutdown grace must be between zero and sixty seconds')
     if (shutdownPromise) return shutdownPromise
@@ -146,5 +173,5 @@ export function createBackend(options: BackendOptions) {
     })()
     return shutdownPromise
   }
-  return { gameServer, drain, shutdown, listen: (port: number, host = '0.0.0.0') => gameServer.listen(port, host) }
+  return { gameServer, drain, shutdown, getMetrics, listen: (port: number, host = '0.0.0.0') => gameServer.listen(port, host) }
 }

@@ -120,6 +120,16 @@ export class RaceSession {
     return true
   }
 
+  /** Age of the latest accepted mailbox command, not a network RTT measurement. */
+  maximumInputAge(): number | null {
+    let maximum: number | null = null
+    for (const seat of this.seats.values()) {
+      if (!seat.connected || !Number.isFinite(seat.tick) || this.retirements.has(seat.id) || this.progress.get(seat.id)!.finishTicks !== null) continue
+      maximum = Math.max(maximum ?? 0, this.tick - seat.tick)
+    }
+    return maximum
+  }
+
   nextInputSequence(sessionId: string): number { return (this.seats.get(sessionId)?.received ?? -1) + 1 }
 
   input(sessionId: string, value: unknown, nowMs: number): boolean {

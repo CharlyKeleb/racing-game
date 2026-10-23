@@ -1,3 +1,4 @@
+import { consoleMetrics } from '../../server/src/MultiplayerMetrics'
 // Explicit local-only runner. Production server/src/index.ts remains lobby-only.
 import { ResultOutbox } from '../../server/src/ResultOutbox'
 import { supabaseResultWriter } from '../../server/src/supabaseResultWriter'
@@ -16,7 +17,7 @@ const resultPersistence = SUPABASE_RESULT_SECRET_KEY && RESULT_OUTBOX_DIR
   ? await ResultOutbox.open(RESULT_OUTBOX_DIR, supabaseResultWriter(SUPABASE_URL, SUPABASE_RESULT_SECRET_KEY)) : undefined
 await initRapier()
 const bundle = JSON.parse(await readFile(new URL('../../.cache/multiplayer/simulation-assets.json', import.meta.url), 'utf8')) as SimulationBundle
-const backend = createBackend({ authenticate: supabaseAuthenticator(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY),
+const backend = createBackend({ metrics: consoleMetrics(process.env.MULTIPLAYER_METRICS), authenticate: supabaseAuthenticator(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY),
   origins: ALLOWED_ORIGINS.split(',').map(s => s.trim()).filter(Boolean), raceFactory: createRaceFactory(bundle), resultPersistence, maxRooms: 5 })
 await backend.listen(2568, '127.0.0.1')
 let stopping = false

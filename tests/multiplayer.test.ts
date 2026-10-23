@@ -51,6 +51,7 @@ it('synchronizes two racers, enforces host controls, resets readiness, transfers
   const host = await connect('player1', 'create')
   const code = states.get(host.sessionId)!.code
   expect(states.get(host.sessionId)).toMatchObject({ raceEnabled: false, race: null })
+  expect(backend.getMetrics()).toBeNull()
   expect(code).toMatch(/^[A-HJ-NP-Z2-9]{8}$/)
   const guest = await connect('player2', 'join', code)
   await vi.waitFor(() => expect(states.get(host.sessionId)?.racers).toHaveLength(2))

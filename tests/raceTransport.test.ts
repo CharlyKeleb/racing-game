@@ -20,7 +20,7 @@ beforeAll(async () => {
   // Warm WASM outside the clocked server session (startup work is not race time).
   const warmup = await factory.create([{ id: 'warm1', sessionId: 'warm1', carId: 'porsche911' }, { id: 'warm2', sessionId: 'warm2', carId: 'porsche911' }])
   warmup.dispose()
-  backend = createBackend({ origins: [origin], maxRooms: 4, authenticate: async token => ({ id: token, handle: token, displayName: `Verified ${token}`, expiresAt: Date.now() + 60_000 }),
+  backend = createBackend({ metrics: { intervalMs: 1000, report: () => {} }, origins: [origin], maxRooms: 4, authenticate: async token => ({ id: token, handle: token, displayName: `Verified ${token}`, expiresAt: Date.now() + 60_000 }),
     raceFactory: { ...factory, create: async racers => {
       const sim = await factory.create(racers)
       return { ...sim, dispose: () => { disposed(); sim.dispose() } }
@@ -80,6 +80,8 @@ it('runs a server-authoritative two-client grid/countdown/input/snapshot lifecyc
   ack(host)
   await vi.waitFor(() => expect(current(host).phase).toBe('countdown'))
   await vi.waitFor(() => expect(current(host).phase).toBe('racing'), { timeout: 5000 })
+  expect(backend.getMetrics()?.histograms.advance_ms.count).toBeGreaterThan(0)
+  expect(backend.getMetrics()?.histograms.snapshot_bytes.count).toBeGreaterThan(0)
   const raceId = current(host).race!.id
   const latest = [...frames.get(host.sessionId)!.values()].at(-1)!
   expect(latest.vehicles.map(v => v.id)).toEqual(['racer1', 'racer2'])
