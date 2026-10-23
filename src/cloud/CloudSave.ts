@@ -47,6 +47,7 @@ export class CloudSave {
       return
     }
     accountStore.setState({ status: 'loading' })
+    readReturnError()
     void loadProviders(config)
     // Lazy: keeps supabase-js out of the boot path.
     this.client = import('@supabase/supabase-js')
@@ -67,6 +68,7 @@ export class CloudSave {
       gameStore.subscribe((s, prev) => {
         if (s.settings !== prev.settings || s.builds !== prev.builds || s.presets !== prev.presets) this.scheduleUpload()
         if (s.phase !== prev.phase && this.pendingMerge && isIdle(s.phase)) void this.pullAndMerge()
+        if (isIdle(prev.phase) && !isIdle(s.phase) && accountStore.getState().returnError) accountStore.setState({ returnError: false })
       }),
       accountStore.subscribe((s, prev) => {
         if (s.localSaves !== prev.localSaves) this.scheduleUpload()
@@ -202,6 +204,20 @@ export class CloudSave {
   private readonly onPageHide = () => {
     if (this.uploadTimer) void this.uploadNow()
   }
+}
+
+/**
+ * A failed email or Google sign-in comes back as ?error_description=… (and the
+ * same in the hash). Show it in the account dialog and tidy the address bar.
+ */
+function readReturnError(): void {
+  const params = new URLSearchParams(location.search)
+  const hash = new URLSearchParams(location.hash.slice(1))
+  const description = params.get('error_description') ?? hash.get('error_description')
+  if (!description) return
+  const expired = (params.get('error_code') ?? hash.get('error_code')) === 'otp_expired'
+  accountStore.setState({ error: expired ? 'That sign-in link has expired or was already used. Send a new one and open only the latest email.' : description, returnError: true })
+  history.replaceState(history.state, '', location.pathname)
 }
 
 /** Public auth settings: which providers the project has turned on. */

@@ -20,6 +20,8 @@ export interface AccountState {
   lastSyncedAt: number | null
   /** The last sign-in or sync failure, shown in the account dialog. */
   error: string | null
+  /** True when a sign-in redirect came back with an error, so the menu opens the account dialog to show it. */
+  returnError: boolean
   /** Email a sign-in link was just sent to, so the dialog can say "check your inbox". */
   linkSentTo: string | null
   /** Sign-in methods enabled in the Supabase project; Google stays hidden until it's set up. */
@@ -34,6 +36,7 @@ export const accountStore = createStore<AccountState>()(() => ({
   sync: 'idle',
   lastSyncedAt: null,
   error: null,
+  returnError: false,
   linkSentTo: null,
   providers: { google: false, email: true },
   localSaves: 0,

@@ -1,5 +1,6 @@
 import { driftEvent } from '../racing/driftEvents'
 import { AccountButton, AccountDialog } from './Account'
+import { accountStore } from '../stores/accountStore'
 import { GiCheckeredFlag, GiStopwatch, GiRaceCar, GiRoad, GiHomeGarage, GiGears, GiSteeringWheel, GiPathDistance } from 'react-icons/gi'
 import { lazy, Suspense, useEffect, useState, type ComponentType } from 'react'
 import { buildStats, carClass, DEFAULT_BUILD, performanceRank } from '../vehicles/CarBuild'
@@ -39,7 +40,8 @@ export function MainMenu() {
   const phase = useGame((s) => s.phase)
   const [picked, setPicked] = useState<Exclude<Tab, 'garage'>>('play')
   const tab: Tab = phase === 'garage' ? 'garage' : picked
-  const [dialog, setDialog] = useState<'settings' | 'setup' | 'tracks' | 'account' | null>(null)
+  // A sign-in link that failed opens the account dialog, to say why.
+  const [dialog, setDialog] = useState<'settings' | 'setup' | 'tracks' | 'account' | null>(() => accountStore.getState().returnError ? 'account' : null)
   const switching = useGame((s) => s.carSwitching || s.trackSwitching)
   const carName = useGame((s) => s.carName)
   const carId = useGame((s) => s.settings.car)
