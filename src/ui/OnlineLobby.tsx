@@ -32,7 +32,7 @@ export function OnlineLobby({ onClose, onAccount }: { onClose(): void; onAccount
     <Panel>
       <header className="account-dialog__header"><div><span className="eyebrow">Online / Private lobby</span><h2 id="online-title" className="ui-panel__title">{connected ? 'Your crew. Your grid.' : 'Bring your rivals.'}</h2></div>
         <button className="racer-close" aria-label="Close online lobby" disabled={busy} onClick={() => dialog.current?.close()}>×</button></header>
-      <p className="racer-hint">{snapshot?.raceEnabled ? 'Private practice · Two racers · Stock cars' : 'Lobby preview · Networked racing is coming next.'}</p>
+      <p className="racer-hint">{snapshot?.raceEnabled ? 'Private practice · Two racers · Stock cars' : snapshot ? 'Lobby preview · Networked racing is coming next.' : 'Private rooms · Invite your rivals.'}</p>
       <ConnectionStatus />
       {!connected ? <>
         <div className="online-intro"><GiCheckeredFlag aria-hidden /><p>A private grid for you and your rivals.<br /><span>Create a room, share the code, get everyone ready.</span></p></div>

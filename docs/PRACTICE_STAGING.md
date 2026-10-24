@@ -1,5 +1,12 @@
 # Isolated online practice staging build (#120)
 
+Current launch update (2026-10-24): the user approved promoting this race image
+to the existing Fly app with one shared CPU / 1 GiB machine and a 1 GiB encrypted
+result volume. The matching production frontend is promoted. See the
+[launch runbook](PRIVATE_RACING_LAUNCH.md). Earlier build-only/no-deployment claims
+below describe the original isolated packaging work. Real two-device completion
+and remaining hosted acceptance gates are still open.
+
 `Dockerfile.race` is a separate root-context image for the shared authoritative
 physics adapter. It does not replace `server/Dockerfile`, `server/fly.toml`, or
 the deployed 256 MiB lobby pilot. No app, machine, volume or secret has been created or changed by this work.

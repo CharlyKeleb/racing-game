@@ -1,5 +1,22 @@
 # Private multiplayer lobbies (#120)
 
+## Current hosted launch — 2026-10-24
+
+The existing Fly app now runs the two-player private race image, with one shared
+CPU / 1 GiB machine and an encrypted 1 GiB result volume in Johannesburg. The
+production frontend at `https://racing-game-jade.vercel.app` now points to it;
+frontend/server fingerprints match and prediction remains disabled. Hosted
+health, origin/Auth rejection, private UID-1000 volume access, result-RPC
+validation and an idle volume-marker restart check pass. Finished real-account
+two-physical-device race/history and the remaining hosted acceptance checks are
+still required; #120 remains open. See [the current launch runbook](PRIVATE_RACING_LAUNCH.md).
+
+The sections below retain the original **2026-10-23 lobby-pilot** record. Their
+statements about the deployed lobby-only entrypoint, 256 MiB allocation and local
+frontend configuration describe that earlier release, not the current launch.
+
+## Historical lobby pilot
+
 The hosting target is **Fly.io**, replacing Railway in the original epic.
 The lobby pilot was deployed on 2026-10-23 with explicit approval for paid hosting:
 

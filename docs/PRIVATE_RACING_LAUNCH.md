@@ -65,6 +65,10 @@ unverified and never become fabricated ranks/rewards. Preserve the result volume
 and existing additive database migrations when reverting code. Do not destroy
 queued records or roll back live SQL as part of an application rollback.
 
+## Hosted verification — 2026-10-24
+
+The race image and production frontend are deployed. [The hosted receipt](measurements/hosted-private-racing-2026-10-24.json) records the image digest, machine/volume, frontend deployment, matching fingerprint, five HTTP/origin/Auth checks, UID/mode checks, rejected invalid-record RPC preflight, aggregate idle metrics and controlled idle restart. A private non-record marker survived the restart and was removed; no synthetic race was written. This does not prove replay of an actual queued race or sustained race capacity. Two real accounts on separate Macs have joined and launched the same one-lap race. A short active sample shows about 295 MiB RSS and simulation work p95 bounded by 2 ms, with accepted controls and no rejected inputs. This is not peak/sustained capacity; finished/saved acceptance remains pending.
+
 ## Acceptance
 
 #120 remains open until hosted health/origin/Auth checks, capacity measurements,

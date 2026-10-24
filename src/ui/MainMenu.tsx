@@ -204,7 +204,7 @@ function PlayMosaic({ onSetup, onTracks, onOnline }: { onSetup(): void; onTracks
       </article>
 
       <button className="online-entry" onClick={onOnline}>
-        <span><GiCheckeredFlag aria-hidden /><strong>Online lobby</strong></span><small>Private rooms · Up to 4 racers</small><b aria-hidden>↗</b>
+        <span><GiCheckeredFlag aria-hidden /><strong>Online lobby</strong></span><small>Private rooms · Race with a rival</small><b aria-hidden>↗</b>
       </button>
 
       <div className="hub-modes" role="radiogroup" aria-label="Game mode">
