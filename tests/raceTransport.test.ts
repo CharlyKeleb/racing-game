@@ -59,6 +59,8 @@ it('runs a server-authoritative two-client grid/countdown/input/snapshot lifecyc
   const code = current(host).code
   const guest = await connect('racer2', 'join', code)
   expect(current(host).raceEnabled).toBe(true)
+  expect(current(host).maxPlayers).toBe(2)
+  expect((await admission('third-racer', 'join', code)).status).toBe(503)
   host.send('start'); host.send('sync')
   await vi.waitFor(() => expect(current(host).racers).toHaveLength(2))
   expect(current(host).phase).toBe('lobby')
