@@ -46,40 +46,60 @@ The [hosted receipt](measurements/hosted-private-racing-2026-10-24.json) records
   production CORS; private writable outbox owned by UID 1000 with 0700 permissions.
 - Live rejected-invalid-result RPC preflight, writing no synthetic race record.
 - Controlled idle SIGTERM restart: a private non-record volume marker survived,
-  was removed afterward, and readiness recovered. This is not actual queued-result
-  replay or a rollback drill.
+  was removed afterward, and readiness recovered. A later idle rollback to the
+  retained lobby image and restore to the race image both passed; the five public
+  checks pass after restore. With explicit approval, an exact existing genuine
+  record was then queued on the hosted volume and replayed across idle SIGTERM
+  restart: the original save time and two history rows stayed unchanged, the
+  outbox cleared and the private temporary record file was removed.
 - Two real accounts joined/readied and launched one lap on separate physical Macs.
   The user explicitly reported both finished with matching saved results. Server
-  metrics corroborate one finalized/saved result and no pending writes. The agent
-  did not independently inspect the finished standings/history rows.
+  metrics ultimately show four finalized/saved results and no pending writes. The
+  user also reports owner history, rematch, menu and hidden-tab checks passed. The
+  agent did not independently inspect the finished standings/history rows. One
+  reconnect started but timed out. The user explicitly confirmed the same car
+  resumed in the same running race after the brief interruption; that need not
+  close the WebSocket. A forced hosted socket replacement was not independently
+  observed, and the failed counter cannot be attributed to that user check.
 - Short active samples around 295–299 MiB RSS and simulation work p95 bounded by
   2 ms. These are not peak/sustained capacity or a guarantee for other devices/
   networks; earlier counters include an aborted start whose cause is not attributed.
 
 ## Validation
 
-The functional two-seat launch change passed 3,278 tests across 510 files, both
-builds, staging types/artifact checks, lint and a real-physics three-lap AI check.
-GitHub CI passed on #148. Six approved rollback-only live SQL role/result tests,
-nine public HTTP probes, local container/outbox crash checks and the earlier
-same-Mac real-account retirement/save test also pass within their stated scope.
+The clean scoped suite passes **753 tests across 129 files**, matching GitHub CI
+on #149. Earlier local totals of 3,278/510 included nested worktree tests and are
+not unique coverage of this checkout. `vitest.config.ts` now restricts discovery
+to `tests/` while retaining the Vite configuration. Frontend build and lint pass.
+Earlier server/staging builds, real-physics three-lap AI checks, six approved
+rollback-only live SQL tests and local container/outbox checks remain supporting
+evidence within their stated scope.
 
-The follow-up public menu wording build/lint passes. A new key-free hosted probe
-passes five live operational checks and three unit tests; its fifteen-minute
-GitHub Actions workflow is pending publication/activation on main. See
-[the launch runbook](PRIVATE_RACING_LAUNCH.md) for notification/scheduling limits
-and budget ownership. This probe does not test a player's race or monthly spend.
+The key-free hosted probe passes five live checks and three unit tests. Its
+fifteen-minute workflow is merged in #149 and passed on main (run 40103971303).
+See [the launch runbook](PRIVATE_RACING_LAUNCH.md) for scheduling, notification and
+budget limits; this probe tests neither a player's race nor monthly spend.
 
-## Remaining before closing #120
+## Launch acceptance and limits
 
-- Finish the requested hosted recovery/rematch/menu/hidden-tab and owner-history
-  confirmation. Record actual expiry/revocation behavior without claiming an
-  immediate-ban system or unsupported refresh recovery.
-- Complete a controlled rollback and actual pending-result replay check on the
-  hosted volume while players are out of active rooms.
-- Record the accepted device/network baseline and limits. Real two-Mac racing
-  at about 235 ms observed desktop RTT is reported; mobile and real TCP shaping
-  at 30/100/200 ms are not established by earlier synthetic prediction tests.
-- Publish/activate the public health monitor and final evidence, and update the
-  issue only for checks actually completed. #120 remains open until its remaining
-  launch gates are resolved; the deferred epic features are not marked complete.
+The requested desktop private-racing checks are complete within the evidence
+above: two physical Macs, finished matching saved results, owner history,
+user-confirmed same-car/same-race recovery, rematch/menu/tab behavior, measured
+bounded resources, public monitoring, rollback/restore and exact genuine-record
+replay after hosted restart. The final receipt contains no private race payload.
+
+- Forced hosted WebSocket replacement was not independently observed. Local
+  socket tests cover authenticated held-seat recovery, immutable identity,
+  recovery timeouts and expiry; a short network stall may preserve its socket.
+- Natural live JWT expiry/revocation was not observed. Admission/refresh verifies
+  identity and JWT expiry, and logout releases the local seat. Local tests cover
+  terminal expiry. Immediate remote ban propagation is deferred with #144.
+- This is a two-Mac desktop pilot at about 237 ms observed RTT. Mobile and real
+  TCP shaping at 30/100/200 ms are unverified; synthetic prediction tests do not
+  establish those claims. Peak capacity and a hard spending cap are not claimed.
+- The genuine-record drill proves restart replay/idempotence on hosted storage;
+  it did not induce a live database outage. Earlier isolated tests cover bounded
+  retry/failure paths without disrupting the shared project.
+
+#150 carries the final launch evidence and closes #120 after required CI passes.
+Deferred epics #143–#147 remain open and are not declared implemented by this launch.

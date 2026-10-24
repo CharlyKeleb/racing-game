@@ -67,15 +67,48 @@ queued records or roll back live SQL as part of an application rollback.
 
 ## Hosted verification — 2026-10-24
 
-The race image and production frontend are deployed. [The hosted receipt](measurements/hosted-private-racing-2026-10-24.json) records the image digest, machine/volume, frontend deployment, matching fingerprint, five HTTP/origin/Auth checks, UID/mode checks, rejected invalid-record RPC preflight, aggregate idle metrics and controlled idle restart. A private non-record marker survived the restart and was removed; no synthetic race was written. This does not prove replay of an actual queued race or sustained race capacity. Two real accounts on separate Macs have joined and launched the same one-lap race. A short active sample shows about 295 MiB RSS and simulation work p95 bounded by 2 ms, with accepted controls and no rejected inputs. This is not peak/sustained capacity; The user subsequently reported that both Macs finished and showed matching saved results; hosted metrics confirm one finalized/saved race and no pending writes. The agent did not independently read the finished standings/history rows. Recovery/rematch and the remaining operational/device checks stay open.
+The race image and production frontend are deployed. The [hosted receipt](measurements/hosted-private-racing-2026-10-24.json)
+records deployment identity, matching fingerprint, public denial/health checks,
+private volume permissions and rejected-invalid-record RPC preflight. An idle
+SIGTERM restart preserved a disposable private marker, which was then removed.
+An idle rollback to the retained lobby image and restore to the race image both
+passed; the restored service passes all five public probes. A subsequent explicitly approved drill queued an exact already-saved genuine
+record on the actual volume and restarted the idle race machine with SIGTERM.
+Startup replay cleared the outbox; read-only database comparisons verified the
+original record/save time and exactly two history rows remained unchanged. The
+private temporary record was removed. No new race/identity or database outage
+was created; isolated tests cover failure/retry paths.
+
+Two real accounts on separate physical Macs reported finished matching saved
+results, owner history, rematch, menu and hidden-tab checks. Aggregate counters
+show four finalized/saved results, no failed writes and no pending writes before
+maintenance. One reconnect started and timed out, with zero successful recoveries;
+the user explicitly confirmed same-car/same-race recovery after the brief
+interruption. A short stall need not close the socket: a forced hosted socket
+replacement was not independently observed, and the failed counter cannot be
+attributed to that check. The agent did not read
+finished private history rows. Short active samples around 295–303 MiB RSS and
+1–2 ms p95 simulation work support this bounded pilot, not sustained peak load.
+One earlier aborted start is retained in the evidence without an attributed cause.
+
+The device/network baseline is two physical Macs at about 237 ms observed RTT,
+with Chrome directly observed on the local Mac. The other browser is unspecified.
+Mobile and real TCP-shaped 30/100/200 ms checks are unverified; keep those outside
+the verified pilot baseline. JWT expiry is terminal at the earlier lease deadline
+unless a fresh same-identity session is verified. Local socket tests cover that
+policy; natural live expiry/revocation has not been observed, and immediate remote
+ban propagation is deferred with account lifecycle work in #144.
 
 ## Acceptance
 
-#120 remains open until hosted health/origin/Auth checks, capacity measurements,
-a finished race on two real accounts and two physical devices, matching owner
-history, reconnect/rematch/leave/menu/hidden-tab/expiry, durable restart/rollback,
-and the documented device/network baseline pass. The local AI full-race check
-and same-Mac real DNF save are supporting evidence, not that acceptance result.
+#120 launch acceptance is complete for the documented desktop baseline; #150
+carries the final evidence and closure after required CI. It combines user-confirmed two-device finished results,
+history and recovery/rematch/menu/tab checks with hosted health/operational
+receipts and local forced-socket/Auth-expiry tests. The limits above remain
+explicit: no independent hosted forced-socket replacement, natural JWT expiry,
+mobile, real shaped-network or peak-load claim. The earlier AI full-race check
+and same-Mac DNF save remain supporting evidence. Broader features stay in the
+separate follow-up epics.
 
 ## Operational ownership and public health checks
 
@@ -100,3 +133,4 @@ This is a lightweight external check, not guaranteed continuous monitoring:
 can be delayed/dropped and public-repository schedules disable after 60 days of
 inactivity. It does not test sign-in, racing, private result history or spending.
 Those checks still require the documented acceptance process and billing review.
+The workflow is active on main; push run 40103971303 passed after #149 merged.

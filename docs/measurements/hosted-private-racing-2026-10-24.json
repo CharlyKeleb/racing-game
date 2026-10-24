@@ -1,6 +1,6 @@
 {
-  "recordedAt": "2026-10-24T14:38:09.156686+00:00",
-  "status": "two_physical_mac_finished_saved_acceptance_reported",
+  "recordedAt": "2026-10-24T15:11:00.186513+00:00",
+  "status": "bounded_desktop_private_racing_acceptance_passed",
   "sourceCommit": "920ff5633ad5493eeb49ce43c79aae39689f59bf",
   "mergedPullRequest": 148,
   "mergeCommit": "b004a4cee5d72c8e1e9bf461c25299eef7609777",
@@ -29,7 +29,7 @@
   },
   "frontend": {
     "url": "https://racing-game-jade.vercel.app",
-    "deploymentId": "dpl_3xKVtCyk1KaRtbio54d1YKE9CxXk",
+    "deploymentId": "dpl_3nB29ujRRUTaDurA7hXGs3MMMrpJ",
     "matchingFingerprint": "bb45039de6b0ee8539502ed6846b7d1368e647b602fee16c15322a5ce0ec35a8",
     "predictionEnabled": false,
     "cleanTrackedSourceUpload": true,
@@ -89,7 +89,7 @@
     "disposableMarkerRemoved": true,
     "markerMode": "0600",
     "raceRecordsCreated": 0,
-    "queuedRealResultReplayTested": false
+    "queuedRealResultReplayTested": true
   },
   "idleMetrics": {
     "schema": 1,
@@ -314,29 +314,34 @@
     "raceLaunched": true,
     "finishedAndSaved": true,
     "matchingSavedResults": true,
-    "confirmationMethod": "User explicitly reported both finished and matching saved results; two-Mac lobby/ready and active/save events corroborated by controlled desktop UI and hosted metrics. Finished standings/history rows were not read by the agent."
+    "confirmationMethod": "User explicitly reported both finished and matching saved results; two-Mac lobby/ready and active/save events corroborated by controlled desktop UI and hosted metrics. Finished standings/history rows were not read by the agent.",
+    "ownerHistoryConfirmedByUser": true,
+    "rematchMenuHiddenTabChecksReportedPassed": true,
+    "recoveryReportedPassed": true,
+    "successfulHeldSeatRecoveryCorroborated": false,
+    "recoveryDiscrepancy": "User explicitly confirmed the same car resumed in the same running race. A short network interruption need not replace the WebSocket. Aggregate counters show one separate uncorrelated failed recovery and no successful held-seat handshake; do not claim a forced hosted socket replacement was independently observed.",
+    "sameCarResumedSameRaceConfirmedByUser": true
   },
   "validation": {
-    "fullTestsPassed": 3278,
-    "fullFilesPassed": 510,
+    "fullTestsPassed": 753,
+    "fullFilesPassed": 129,
     "maxWorkers": 2,
     "focusedSocketTestsPassed": 15,
     "frontendServerBuildsPassed": true,
     "stagingTypesAndArtifactChecksPassed": true,
     "lintPassed": true,
     "threeLapAiCheckPassed": true,
-    "githubLaunchCiPassed": true
+    "githubLaunchCiPassed": true,
+    "localScopedSuitePassed": true,
+    "cleanGithubCiRun": 40103552583,
+    "historicalCountCorrection": "Earlier 3278/510 local totals included nested worktrees; they were not unique tests from this checkout. Vitest now discovers only tests/."
   },
   "budget": {
     "monthlyTargetUsd": 15,
     "hardProviderCap": false,
     "extraReplicaOrRegionCreated": false
   },
-  "remaining": [
-    "Hosted rematch/reconnect/expiry/menu/device/network measurements",
-    "Real pending-result restart recovery and rollback drill",
-    "Budget/external monitoring ownership"
-  ],
+  "remaining": [],
   "firstActiveRaceMetrics": {
     "schema": 1,
     "uptimeSeconds": 660.0157948279999,
@@ -791,5 +796,291 @@
     ],
     "scope": "Public health/readiness, pinned frontend manifest and unauthenticated/origin denials; not an authenticated race or spending check."
   },
-  "publicMonitorSchedule": "Prepared for 15-minute GitHub Actions checks after merge; not a continuous-uptime guarantee or spending check."
+  "publicMonitorSchedule": "Active on main after #149 merge; fifteen-minute best-effort GitHub schedule, not continuous uptime or spending monitoring.",
+  "finalPreMaintenanceMetrics": {
+    "schema": 1,
+    "uptimeSeconds": 1980.019585131,
+    "events": {
+      "admission_ok": 8,
+      "admission_rejected": 20,
+      "admission_rate_limited": 0,
+      "input_accepted": 21543,
+      "input_rejected": 1131,
+      "reconnect_started": 1,
+      "reconnect_succeeded": 0,
+      "reconnect_failed": 1,
+      "race_started": 5,
+      "race_finished": 4,
+      "race_aborted": 1,
+      "result_pending": 4,
+      "result_saved": 4,
+      "result_failed": 0
+    },
+    "gauges": {
+      "rooms": 0,
+      "racers": 0,
+      "heldSeats": 0,
+      "activeRaces": 0,
+      "admissionClaims": 0,
+      "pendingResultWrites": 0,
+      "rssMiB": 303.08203125,
+      "heapUsedMiB": 25.720726013183594
+    },
+    "histograms": {
+      "advance_ms": {
+        "count": 35664,
+        "mean": 0.6241001288131168,
+        "max": 21.442579000024125,
+        "p95Upper": 1,
+        "bounds": [
+          0.125,
+          0.25,
+          0.5,
+          1,
+          2,
+          4,
+          8,
+          12,
+          16,
+          16.67,
+          20,
+          25,
+          33.34,
+          50,
+          100,
+          250,
+          500,
+          1000
+        ],
+        "buckets": [
+          1461,
+          0,
+          7572,
+          25216,
+          1229,
+          155,
+          27,
+          2,
+          0,
+          1,
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "callback_gap_ms": {
+        "count": 35664,
+        "mean": 16.199332660385824,
+        "max": 352,
+        "p95Upper": 20,
+        "bounds": [
+          0.125,
+          0.25,
+          0.5,
+          1,
+          2,
+          4,
+          8,
+          12,
+          16,
+          16.67,
+          20,
+          25,
+          33.34,
+          50,
+          100,
+          250,
+          500,
+          1000
+        ],
+        "buckets": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          26208,
+          0,
+          9415,
+          24,
+          12,
+          0,
+          2,
+          2,
+          1,
+          0,
+          0
+        ]
+      },
+      "input_age_ticks": {
+        "count": 559,
+        "mean": 29.74597495527728,
+        "max": 1306,
+        "p95Upper": 15,
+        "bounds": [
+          0,
+          1,
+          2,
+          3,
+          6,
+          15,
+          30,
+          60,
+          120,
+          600,
+          36000
+        ],
+        "buckets": [
+          0,
+          127,
+          198,
+          125,
+          54,
+          28,
+          1,
+          3,
+          2,
+          9,
+          12,
+          0
+        ]
+      },
+      "snapshot_bytes": {
+        "count": 575,
+        "mean": 1823.8191304347827,
+        "max": 1885,
+        "p95Upper": 2048,
+        "bounds": [
+          256,
+          512,
+          1024,
+          2048,
+          4096,
+          8192,
+          16384,
+          32768
+        ],
+        "buckets": [
+          0,
+          0,
+          0,
+          575,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "finalize_ms": {
+        "count": 4,
+        "mean": 281.865302750055,
+        "max": 344.91749899997376,
+        "p95Upper": 1000,
+        "bounds": [
+          1,
+          10,
+          100,
+          1000,
+          5000,
+          10000,
+          30000,
+          60000
+        ],
+        "buckets": [
+          0,
+          0,
+          0,
+          4,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    }
+  },
+  "publicMonitorMainActivation": {
+    "runId": 40103971303,
+    "event": "push",
+    "conclusion": "success"
+  },
+  "controlledRollbackAndRestore": {
+    "executed": true,
+    "roomsBefore": 0,
+    "activeRacesBefore": 0,
+    "pendingWritesBefore": 0,
+    "rollbackImage": "registry.fly.io/charly-racing-multiplayer:deployment-01M5MJWQACAEF5HTPV6Y84TZG3",
+    "rollbackHealthPassed": true,
+    "raceImageRestored": true,
+    "restoredPublicChecksPassed": 5,
+    "volumePreserved": true,
+    "queuedRecordReplayProven": false
+  },
+  "deviceNetworkBaseline": {
+    "supportedPilot": "Two physical Macs, Chrome observed on the local Mac; second browser unspecified. User reports finished results, history, rematch/menu/tab checks passed.",
+    "observedRttMs": 237,
+    "mobileVerified": false,
+    "realTcpShaping30_100_200msVerified": false,
+    "scope": "Single private room, two racers, snapshot interpolation, ghost collisions; not mobile or scaled-service acceptance."
+  },
+  "exactExistingResultRestartReplay": {
+    "recordedAt": "2026-10-24T15:09:53.177Z",
+    "exactExistingRecordReplayed": true,
+    "historyRowsBefore": 2,
+    "historyRowsAfter": 2,
+    "originalSaveTimePreserved": true,
+    "privateOutboxCleared": true,
+    "newRaceOrIdentityCreated": false,
+    "scope": "Idempotent replay of one genuine already-committed result across an idle SIGTERM machine restart; not a live database outage.",
+    "explicitPrivatePayloadApproval": true,
+    "tlsChainAndHostnameVerification": true,
+    "temporaryRecordFileRemoved": true,
+    "initialVerificationAttempts": "Initial timestamp/TLS setup and transient command failures prevented complete receipts; service was restored and a final idle SIGTERM replay completed all comparisons.",
+    "privatePayloadIncludedInReceipt": false
+  },
+  "limitations": [
+    "User-reported same-car/same-race brief interruption recovery; forced hosted WebSocket replacement not independently corroborated. Local socket tests cover authenticated held-seat recovery and expiry.",
+    "Natural live JWT expiry/revocation not observed; terminal expiry and fresh-identity checks are tested locally. No immediate remote ban propagation.",
+    "Desktop two-Mac pilot only; mobile and real TCP shaping at 30/100/200 ms unverified.",
+    "Short bounded pilot metrics, not peak sustained capacity or an enforced spending cap.",
+    "Idempotent replay of an already-committed genuine record; no live database outage was induced."
+  ],
+  "finalPostReplayPublicProbe": {
+    "recordedAt": "2026-10-24T15:10:59.823Z",
+    "check": "hosted-private-practice",
+    "checks": [
+      {
+        "name": "health",
+        "status": 200
+      },
+      {
+        "name": "ready",
+        "status": 200
+      },
+      {
+        "name": "frontend-manifest",
+        "status": 200
+      },
+      {
+        "name": "unsigned-admission-denied",
+        "status": 401
+      },
+      {
+        "name": "foreign-origin-denied",
+        "status": 403
+      }
+    ],
+    "scope": "Public health/readiness, pinned frontend manifest and unauthenticated/origin denials; not an authenticated race or spending check."
+  }
 }
