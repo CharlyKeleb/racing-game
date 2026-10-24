@@ -2,15 +2,18 @@
 
 ## Current hosted launch — 2026-10-24
 
-The existing Fly app now runs the two-player private race image, with one shared
-CPU / 1 GiB machine and an encrypted 1 GiB result volume in Johannesburg. The
-production frontend at `https://racing-game-jade.vercel.app` now points to it;
-frontend/server fingerprints match and prediction remains disabled. Hosted
-health, origin/Auth rejection, private UID-1000 volume access, result-RPC
-validation and an idle volume-marker restart check pass. Two real users on separate Macs subsequently reported finishing with matching
-saved results, corroborated by a hosted finalized/save event. Independent history,
-recovery/rematch and remaining hosted acceptance checks are still pending; #120
-remains open. See [the current launch runbook](PRIVATE_RACING_LAUNCH.md).
+The existing Fly app runs two-player private racing on one shared CPU / 1 GiB
+machine and an encrypted 1 GiB volume in Johannesburg. The matching frontend is
+live at `https://racing-game-jade.vercel.app`. #120 closed after two-Mac finished/
+saved-history reports, documented recovery/rematch behavior, health/origin/Auth
+checks and controlled rollback/exact-record replay on hosted storage.
+
+The responsiveness follow-up enables local own-car physics instead of waiting
+for a server round trip plus the 100 ms render buffer. Remote cars remain
+interpolated; timing and results remain server-owned. See
+[responsive controls](MULTIPLAYER_RESPONSIVENESS.md),
+[the launch runbook](PRIVATE_RACING_LAUNCH.md) and
+[the scoped delivery status](ISSUE_120_STATUS.md) for evidence and limits.
 
 The sections below retain the original **2026-10-23 lobby-pilot** record. Their
 statements about the deployed lobby-only entrypoint, 256 MiB allocation and local

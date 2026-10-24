@@ -5,11 +5,11 @@ future **server** physics step. It removes the ambiguity between a 60 Hz local
 input history and the legacy 30 Hz latest-input mailbox. It does not grant the
 client ownership of time, physics, car state, results or competitive eligibility.
 
-This capability is disabled by default. The local runner can opt in with
+The generic server defaults this capability off; the hosted private-racing
+configuration now enables it for responsive own-car controls. The local runner can opt in with
 `MULTIPLAYER_SCHEDULED_INPUTS=1`; a trusted factory then advertises
 `scheduledInputVersion:1` alongside correction support. Existing clients and
-factories retain the mailbox path. The production lobby-only entrypoint is not
-changed or deployed. This is an experimental private-practice capability, not a
+factories retain the mailbox path. The historical lobby-only entrypoint remains separate. This is a private-practice capability, not a
 new verified leaderboard ruleset.
 
 `scheduledInput` carries existing bounded controls plus `{version:1,tick}`. The
@@ -34,8 +34,8 @@ After the first valid scheduled sample the seat stops accepting mailbox commands
 clears stale held input before fallback. Drop/recovery also clears the schedule.
 Received/applied sequence history, vehicle/controller resources and race progress
 are preserved. A fresh command must use a new sequence. The client send helpers
-prevent mixed send paths and require advertised support; no existing scene opts
-in yet. This chunk establishes the transport timing contract for a predictor.
+prevent mixed send paths and require advertised support; `OnlineRaceScene` uses this path when matching correction/scheduling capabilities
+and local prediction are enabled. See [responsive controls](MULTIPLAYER_RESPONSIVENESS.md).
 
 Tests cover exact ticks, gaps, queue/horizon/sequence/range guards, packet-driven
 clock rejection, legacy fallback, recovery cleanup, rate limiting and client

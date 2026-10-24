@@ -16,14 +16,20 @@ vi.mock('../src/multiplayer/LobbyClient', async () => ({ lobbyStore: (await impo
   openCorrectionStream: transport.open, sendScheduledRaceInput: transport.send, restoreMailboxControls: transport.mailbox }))
 beforeAll(() => initRapier())
 afterEach(() => { vi.restoreAllMocks();vi.unstubAllEnvs();lobbyStore.setState(lobbyStore.getInitialState(),true);onlineRaceStore.setState(onlineRaceStore.getInitialState(),true) })
-it('wires opt-in own-car physics while remote poses remain authoritative, then releases input and frees its world', async () => {
-  vi.stubEnv('VITE_ONLINE_PREDICTION','1')
+it.each([
+  { rttMs: 30, variationMs: 0, lateSample: false, flag: '' },
+  { rttMs: 237, variationMs: 79, lateSample: false, flag: '1' },
+  { rttMs: 300, variationMs: 33, lateSample: false, flag: '' },
+  { rttMs: 237, variationMs: 79, lateSample: true, flag: '' },
+  { rttMs: 30, variationMs: 0, lateSample: false, flag: '0' },
+])('responds on the next local step at $rttMs ms RTT, late sample=$lateSample, override=$flag', async ({rttMs, variationMs, lateSample, flag}) => {
+  vi.stubEnv('VITE_ONLINE_PREDICTION',flag)
   const now = vi.spyOn(performance,'now').mockReturnValue(0), stop=vi.fn()
   transport.open.mockReset();transport.open.mockReturnValue(stop);transport.send.mockClear();transport.mailbox.mockClear()
   const race={id:'race',protocol:3 as const,fingerprint:'a'.repeat(64),simulationVersion:1,tickRate:60 as const,snapshotRate:20 as const,countdownTicks:180,correctionVersion:1 as const,scheduledInputVersion:1 as const}
   const racers=[{id:'one',sessionId:'a',carId:'porsche911' as const},{id:'two',sessionId:'b',carId:'porsche911' as const}]
   const lobby={race,racers,phase:'racing',track:'nurburgring'}
-  lobbyStore.setState({status:'connected',snapshot:lobby as never,sessionId:'a',connectionLatency:{rttMs:30,variationMs:0,samples:2}})
+  lobbyStore.setState({status:'connected',snapshot:lobby as never,sessionId:'a',connectionLatency:lateSample ? null : {rttMs,variationMs,samples:2}})
   const track=new THREE.Group(),environment=new THREE.Group(),offline=new THREE.Group(),root=new THREE.Scene()
   root.add(track,environment,offline)
   let owned!:RAPIER.World,free!:ReturnType<typeof vi.spyOn>
@@ -37,7 +43,18 @@ it('wires opt-in own-car physics while remote poses remain authoritative, then r
     scene.push({raceId:race.id,tick:181,countdownTicks:0,phase:'racing',vehicles:[{...emptyVehicleState('one'),position:{x:20,y:.3,z:20},acknowledgedSequence:-1},
       {...emptyVehicleState('two'),position:{x:25,y:.3,z:30},acknowledgedSequence:-1}]},0)
     scene.render(0,1/60,false)
-    const drive={throttle:1,brake:0,steer:0,handbrake:false,nitro:false}
+    const drive={throttle:1,brake:0,steer:.5,handbrake:false,nitro:false}
+    if (flag === '0') {
+      expect(scene.fixedUpdate(drive,0)).toBe(false)
+      expect(scene.debugPrediction()).toMatchObject({enabled:false,streamOpen:false})
+      expect(transport.open).not.toHaveBeenCalled()
+      return
+    }
+    if (lateSample) {
+      expect(scene.fixedUpdate(drive,0)).toBe(false)
+      expect(scene.debugPrediction().enabled).toBe(false)
+      lobbyStore.setState({connectionLatency:{rttMs,variationMs,samples:1}})
+    }
     expect(scene.fixedUpdate(drive,0)).toBe(true);expect(transport.open).toHaveBeenCalledTimes(1)
     const authoritative=new RAPIER.World({x:0,y:-9.81,z:0})
     authoritative.createCollider(RAPIER.ColliderDesc.cuboid(500,.1,500).setTranslation(0,-.1,0))
@@ -52,15 +69,17 @@ it('wires opt-in own-car physics while remote poses remain authoritative, then r
     const coast=new PredictionWorld(coastWorld,config,()=>1),coastState=emptyVehicleState('one')
     try {
       coast.restore(correction)
-      for(let i=0;i<7;i++)coast.step({throttle:0,brake:0,steer:0,handbrake:false,nitro:false})
+      for(let i=0;i<scene.debugPrediction().leadTicks!+1;i++)coast.step({throttle:0,brake:0,steer:0,handbrake:false,nitro:false})
       coast.read(coastState)
     } finally {coast.dispose()}
     transport.open.mock.calls[0][3](correction)
     now.mockReturnValue(17);expect(scene.fixedUpdate(drive,17)).toBe(true)
-    expect(transport.send).toHaveBeenCalledWith(188,drive)
+    expect(transport.send).toHaveBeenCalledWith(182+scene.debugPrediction().leadTicks!,drive)
     scene.render(17,1/60,false,1)
     const cars:THREE.Object3D[]=[];root.traverse(o=>{if(o.name===config.id)cars.push(o)})
     expect(cars[0].position.z).toBeGreaterThan(coastState.position.z);expect(cars[0].position.z).not.toBe(20);expect(cars[1].position.z).toBe(30)
+    expect(scene.debugPrediction().ready).toBe(true) // no second server frame was supplied
+    expect(scene.debugPrediction().steer).toBeLessThan(0) // positive input turns wheels toward -X
     onlineRaceStore.setState({menuOpen:true})
     expect(scene.fixedUpdate(drive,34)).toBe(false);expect(stop).toHaveBeenCalledTimes(1);expect(transport.mailbox).toHaveBeenCalled()
     onlineRaceStore.setState({menuOpen:false})
@@ -77,7 +96,26 @@ it('wires opt-in own-car physics while remote poses remain authoritative, then r
     expect(scene.debugPrediction()).toMatchObject({ready:true,disabled:false,streamOpen:true})
     lobbyStore.setState({connectionLatency:{rttMs:500,variationMs:0,samples:1}})
     expect(scene.fixedUpdate(drive,39)).toBe(false)
-    expect(scene.debugPrediction()).toMatchObject({ready:false,disabled:true,streamOpen:false})
+    expect(scene.debugPrediction()).toMatchObject({ready:false,disabled:false,streamOpen:false})
+    lobbyStore.setState({connectionLatency:{rttMs:237,variationMs:79,samples:2}})
+    expect(scene.fixedUpdate(drive,40)).toBe(true)
+    now.mockReturnValue(41);transport.open.mock.calls.at(-1)![3]({...correction,tick:193,acknowledgedSequence:1})
+    expect(scene.fixedUpdate(drive,41)).toBe(true)
+    expect(scene.debugPrediction()).toMatchObject({ready:true,disabled:false,leadTicks:24})
+    // Public frames can continue while the first private correction is delayed.
+    scene.resetPrediction()
+    expect(scene.fixedUpdate(drive,42)).toBe(true)
+    scene.push({...scene.buffer.latest!,tick:241},1043)
+    expect(scene.fixedUpdate(drive,1043)).toBe(false)
+    expect(scene.debugPrediction()).toMatchObject({ready:false,disabled:false,streamOpen:false})
+    const opens=transport.open.mock.calls.length
+    expect(scene.fixedUpdate(drive,1500)).toBe(false)
+    expect(transport.open).toHaveBeenCalledTimes(opens)
+    scene.push({...scene.buffer.latest!,tick:301},2043)
+    expect(scene.fixedUpdate(drive,2043)).toBe(true)
+    now.mockReturnValue(2044);transport.open.mock.calls.at(-1)![3]({...correction,tick:301,acknowledgedSequence:2})
+    expect(scene.fixedUpdate(drive,2044)).toBe(true)
+    expect(scene.debugPrediction()).toMatchObject({ready:true,disabled:false,streamOpen:true})
   } finally {scene.dispose()}
   expect(free).toHaveBeenCalledTimes(1);expect(offline.visible).toBe(true)
 })

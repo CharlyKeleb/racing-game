@@ -1,0 +1,42 @@
+{
+  "recordedAt": "2026-10-24T15:37:54.257482+00:00",
+  "scope": "Local rendered desktop fixture, synthetic identities, no live account or database writes",
+  "network": {
+    "transport": "Actual loopback TCP/WebSockets through ordered delay proxy",
+    "oneWayDelayMs": 150,
+    "observedRttMs": {
+      "min": 301,
+      "max": 305
+    },
+    "omissionTestsAreSeparate": true
+  },
+  "responseSamples": {
+    "accelerationFirstChangedRenderedStateMs": 29.1,
+    "steeringFirstChangedRenderedStateMs": 13.7,
+    "method": "Fixture click handler records performance.now, applies development controls, then samples rendered own-car telemetry on requestAnimationFrame until a change exceeds .005. Selected samples, not percentiles or physical key-to-photon latency."
+  },
+  "prediction": {
+    "bothClientsReady": true,
+    "leadTicks": 24,
+    "menuReturnResumed": true,
+    "dropReauthenticationFreshRttResumed": true,
+    "replayBoundTicks": 36,
+    "serverTickOwnershipUnchanged": true,
+    "remoteCarsRemainInterpolated": true
+  },
+  "validation": {
+    "fullTestsPassed": 758,
+    "fullFilesPassed": 129,
+    "focusedPredictionTestsPassed": 14,
+    "sceneRetryChecksPassed": 5,
+    "frontendBuildPassed": true,
+    "lintPassed": true
+  },
+  "limits": [
+    "Not a hosted WAN or mobile test",
+    "No saved-result test in this synthetic fixture",
+    "Bounded fallback remains for stale corrections, excessive RTT, unavailable collision clone or explicit rollback",
+    "Original hosted acceptance receipt describes snapshot-only launch; this is follow-up response evidence"
+  ],
+  "screenshot": ".cache/multiplayer/response-300ms-steering.png"
+}
