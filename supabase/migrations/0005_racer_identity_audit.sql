@@ -1,5 +1,11 @@
 -- #120: append-only owner identity events, independent of handle reservations.
 begin;
+-- Serialize the baseline and trigger installation with profile writes. Without
+-- this lock a rename could commit after the baseline SELECT but before the
+-- audit trigger exists. Ordinary profile reads remain available.
+set local lock_timeout = '5s';
+set local statement_timeout = '30s';
+lock table public.profiles in share row exclusive mode;
 create table public.racer_identity_events (
   event_id uuid primary key default gen_random_uuid(),
   player_id uuid not null references auth.users(id) on delete cascade,

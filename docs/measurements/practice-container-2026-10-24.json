@@ -1,0 +1,58 @@
+{
+  "recordedAt": "2026-10-24T11:39:44.649Z",
+  "check": "isolated-practice-container",
+  "image": {
+    "id": "sha256:d9f220688ed40493675b82785e8ddbf6e59ac6f45e5e73b71b2ffb323d976c1e",
+    "architecture": "arm64",
+    "os": "linux",
+    "bytes": 93814684
+  },
+  "limits": {
+    "memoryMiB": 512,
+    "cpus": 1,
+    "network": "none",
+    "readOnly": true,
+    "externalPorts": false
+  },
+  "implicitEnablementRejected": true,
+  "assetSamples": [
+    {
+      "check": "practice-assets",
+      "fingerprint": "bb45039de6b0ee8539502ed6846b7d1368e647b602fee16c15322a5ce0ec35a8",
+      "racers": 2,
+      "ticks": 12,
+      "correctionVersion": 1,
+      "scheduledInputVersion": null,
+      "memoryAfterWorldSteps": {
+        "rssMiB": 138.7578125,
+        "heapUsedMiB": 23.417709350585938,
+        "externalMiB": 31.743401527404785
+      }
+    },
+    {
+      "check": "practice-assets",
+      "fingerprint": "bb45039de6b0ee8539502ed6846b7d1368e647b602fee16c15322a5ce0ec35a8",
+      "racers": 2,
+      "ticks": 12,
+      "correctionVersion": 1,
+      "scheduledInputVersion": 1,
+      "memoryAfterWorldSteps": {
+        "rssMiB": 207.4609375,
+        "heapUsedMiB": 22.052200317382812,
+        "externalMiB": 28.804079055786133
+      }
+    }
+  ],
+  "boot": {
+    "uid": 1000,
+    "health": {
+      "ok": true,
+      "protocol": 1
+    },
+    "readiness": {
+      "ready": true
+    }
+  },
+  "gracefulShutdownExitCode": 0,
+  "scope": "Local image build/boot, two-car twelve-tick checks and idle health/shutdown only. No hosted capacity, authenticated race, physical device or production credentials tested."
+}

@@ -1,0 +1,39 @@
+{
+  "recordedAt": "2026-10-23T22:56:36.423624+00:00",
+  "base": "5a906841edcc465ecece73a10f1fa990dc8365fd",
+  "dirtyWorktree": true,
+  "scope": "Two synthetic racers in local in-app browser tabs over real loopback WebSockets and real track physics; Supabase disabled; no physical-device, real-account, hosted or saved-result acceptance.",
+  "flags": {
+    "browserPrediction": true,
+    "serverScheduledInputs": true
+  },
+  "sourceSha256": {
+    "src/multiplayer/OnlineRaceScene.ts": "59d1b214c3e17cdd8f7659addfa844ac141bb658dcbd4e33ec1a1e6e4227ecf2",
+    "src/engine/Game.ts": "40eeac25918895945d12d91735474db8651149f3411aefaf4f7e21f12317488b",
+    "tests/browser/race-server.ts": "dbac9428338e471208db7f4fca67feffc1e1aafc153d3b0dc3457c3b2e78ba7e",
+    "tests/browser/online-smoke.tsx": "fd0242e15f36a684c6f0f0113188c6a5429678b951fea5ad8bfe88fce995a9bd"
+  },
+  "observations": {
+    "bothPredictionsReady": true,
+    "leadTicks": 6,
+    "observedDrivingSpeedKmh": 114,
+    "menuStoppedStreamAndResumed": true,
+    "afterFixDrop": {
+      "ready": false,
+      "disabled": false,
+      "streamOpen": false,
+      "tick": 434
+    },
+    "afterFreshAuthenticationAndRtt": {
+      "ready": true,
+      "disabled": false,
+      "streamOpen": true,
+      "tick": 1688
+    },
+    "firstRunServerBehindAbortObserved": true
+  },
+  "screenshots": [
+    ".cache/multiplayer/prediction-driving-smoke.png",
+    ".cache/multiplayer/prediction-recovered-smoke.png"
+  ]
+}

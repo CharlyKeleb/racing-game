@@ -1,0 +1,102 @@
+{
+  "recordedAt": "2026-10-24T13:06:38.574739+00:00",
+  "projectRef": "uqxxdjxiqczgigyifldl",
+  "status": "local_real_account_retirement_result_saved_and_verified",
+  "backend": "http://127.0.0.1:2568",
+  "configuration": {
+    "serverCredentialFileIgnored": true,
+    "serverCredentialMode": "0600",
+    "existingKeyReused": true,
+    "newKeyCreated": false,
+    "credentialPrinted": false,
+    "frontendTextFilesScanned": 42,
+    "serverCredentialAbsentFromFrontend": true,
+    "outboxMode": "0700",
+    "maximumRooms": 1,
+    "maximumRacersPerRace": 2,
+    "scheduledInputs": false,
+    "processPidAtRecording": 28750,
+    "frontendCredentialFileRoutesBlocked": {
+      "method": "HEAD",
+      "relativeRouteStatus": 403,
+      "absoluteFsRouteStatus": 403,
+      "responseBodiesRead": false
+    }
+  },
+  "preflight": {
+    "command": "npm run check:result-storage",
+    "rpcValidationReached": true,
+    "malformedRecordRejected": true,
+    "preflightRecordsWritten": 0,
+    "privateOutboxWritable": true
+  },
+  "realAccountRace": {
+    "browsers": [
+      "Chrome",
+      "Safari"
+    ],
+    "differentAccountsJoinedSameRoom": true,
+    "bothReadyAndLaunched": true,
+    "observedDrivingSpeedsKmH": {
+      "chrome": 50,
+      "safari": 57
+    },
+    "hostRetirementDidNotStopRival": true,
+    "bothRetiredThroughRealUI": true,
+    "raceDigest": "4fe9ea59115b15d72114e4f98aea2414fca1d697bacf44252469c4230677ad56",
+    "digestAlgorithm": "SHA-256 of race UUID, computed separately in each owner browser",
+    "matchingOwnerRaceDigests": true,
+    "ownerRowsPerBrowser": {
+      "chrome": 1,
+      "safari": 1
+    },
+    "allReturnedHistoryRowsOwned": true,
+    "retiredTicks": {
+      "chrome": 7119,
+      "safari": 8775
+    },
+    "status": "dnf",
+    "reason": "all-resolved",
+    "dnfReason": "left",
+    "protocol": 3,
+    "ruleset": "online-practice-v2",
+    "leaderboardEligible": false,
+    "pendingOutboxFilesAfter": 0,
+    "rejectedOutboxFilesAfter": 0,
+    "realRaceRecordCommitted": true,
+    "finishedLapsTested": false,
+    "twoPhysicalDevicesTested": false
+  },
+  "authFix": {
+    "lateProfileLoadExpiryNowRejected": true,
+    "regressionFailedBeforeFix": true,
+    "regressionPassedAfterFix": true,
+    "genuinelyExpiredSignedTokenReplayTested": false,
+    "revocationReplayTested": false
+  },
+  "validation": {
+    "focusedTestsPassed": 17,
+    "fullTestsPassed": 3278,
+    "fullFilesPassed": 510,
+    "fullSuiteMaxWorkers": 2,
+    "frontendBuildPassed": true,
+    "serverBuildPassed": true,
+    "strictLocalRunnerAndPreflightTypesPassed": true,
+    "strictFixtureTypesPassed": true,
+    "lintPassed": true
+  },
+  "proofImageIgnoredLocalPath": ".cache/multiplayer/two-account-saved-practice.png",
+  "cleanup": {
+    "bothRacersLeftRoom": true,
+    "temporaryChromeAndSafariCheckTabsClosed": true,
+    "originalSignedInGameTabsPreserved": true,
+    "localBackendLeftRunning": true
+  },
+  "remaining": [
+    "Finished-lap race on two physical devices",
+    "Genuine expired/revoked token replay acceptance",
+    "Hosted capacity, persistent volume and successful hosted result save",
+    "Long sessions, real DB outage and hosted restart/rollback drills"
+  ],
+  "scope": "One real local practice race was driven and retired by two real accounts, then saved to the existing live Supabase project and read separately by both owners. It remains private, DNF and competitively ineligible. No raw user/race UUIDs, email, credentials or private row payloads recorded. No new project/key, hosted deployment, paid resource, commit or GitHub push."
+}

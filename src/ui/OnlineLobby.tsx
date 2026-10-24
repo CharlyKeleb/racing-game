@@ -1,3 +1,4 @@
+import { ConnectionStatus } from './ConnectionStatus'
 import { useEffect, useRef, useState } from 'react'
 import { useStore } from 'zustand'
 import { GiCheckeredFlag } from 'react-icons/gi'
@@ -32,6 +33,7 @@ export function OnlineLobby({ onClose, onAccount }: { onClose(): void; onAccount
       <header className="account-dialog__header"><div><span className="eyebrow">Online / Private lobby</span><h2 id="online-title" className="ui-panel__title">{connected ? 'Your crew. Your grid.' : 'Bring your rivals.'}</h2></div>
         <button className="racer-close" aria-label="Close online lobby" disabled={busy} onClick={() => dialog.current?.close()}>×</button></header>
       <p className="racer-hint">{snapshot?.raceEnabled ? 'Private practice · Two racers · Stock cars' : 'Lobby preview · Networked racing is coming next.'}</p>
+      <ConnectionStatus />
       {!connected ? <>
         <div className="online-intro"><GiCheckeredFlag aria-hidden /><p>A private grid for up to four racers.<br /><span>Create a room, share the code, get everyone ready.</span></p></div>
         {account.status !== 'signedIn' || !account.profile ? <>

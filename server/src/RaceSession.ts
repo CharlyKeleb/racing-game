@@ -1,6 +1,7 @@
+import { ScheduledInputs } from './ScheduledInputs.js'
 import { RaceProgress, type RaceGate, type RacePosition } from './RaceProgress.js'
 import { randomUUID } from 'node:crypto'
-import { RACE_PROTOCOL, type LobbyCar, type RaceDescriptor, type RaceInput, type RaceSnapshot, type RaceVehicleState, type RaceResult, type RetirementReason } from './protocol.js'
+import { CORRECTION_VERSION, MAX_CORRECTION_BYTES, type CorrectionPhysicsState, type CorrectionEnvelope, RACE_PROTOCOL, type LobbyCar, type RaceDescriptor, type RaceInput, type RaceSnapshot, type RaceVehicleState, type RaceResult, type RetirementReason } from './protocol.js'
 
 export const SERVER_TICK_MS = 1000 / 60
 export const INPUT_TIMEOUT_TICKS = 15
@@ -12,11 +13,14 @@ export interface ServerRaceSimulation {
   step(): void
   setInput(id: string, input: RaceInput): void
   position(id: string, out: RacePosition): void
+  correction?(id: string): CorrectionPhysicsState
   states(): RaceVehicleState[]
   dispose(): void
 }
 export interface RaceSeat { sessionId: string; id: string; carId: LobbyCar }
 export interface RaceFactory {
+  correctionVersion?: typeof CORRECTION_VERSION
+  scheduledInputVersion?: 1
   checkpoints: readonly RaceGate[]
   fingerprint: string
   simulationVersion: number
@@ -24,13 +28,19 @@ export interface RaceFactory {
 }
 interface SeatInput {
   id: string
+  scheduled: boolean
+  schedule: ScheduledInputs
   connected: boolean
   received: number
   applied: number
+  appliedMode: 'hold' | 'neutral' | 'command'
+  firstAppliedTick: number | null
+  lastAppliedTick: number | null
   tick: number
   command: RaceInput
   rateAt: number
   rateCount: number
+  scheduledRateCount: number
 }
 const INPUT_KEYS = new Set(['raceId', 'sequence', 'throttle', 'brake', 'steer', 'steerSource', 'handbrake', 'nitro'])
 function isInput(value: unknown, raceId: string): value is RaceInput {
@@ -62,12 +72,15 @@ export class RaceSession {
   private finalSnapshot: RaceSnapshot | null = null
   private loadingResolved = false
   reason: string | null = null
+  readonly racers: readonly RaceSeat[]
+  readonly laps: number
 
-  constructor(readonly racers: readonly RaceSeat[], factory: RaceFactory, readonly laps = 3) {
+  constructor(racers: readonly RaceSeat[], factory: RaceFactory, laps = 3) {
+    this.racers = racers; this.laps = laps
     if (racers.length !== 2 || new Set(racers.map(r => r.id)).size !== 2 || new Set(racers.map(r => r.sessionId)).size !== 2) throw new Error('A race needs two distinct authenticated seats')
     for (const r of racers) this.progress.set(r.id, new RaceProgress(factory.checkpoints, laps))
-    this.descriptor = { protocol: RACE_PROTOCOL, id: randomUUID(), fingerprint: factory.fingerprint, simulationVersion: factory.simulationVersion, tickRate: 60, snapshotRate: 20, countdownTicks: 180 }
-    for (const r of racers) this.seats.set(r.sessionId, { id: r.id, connected: true, received: -1, applied: -1, tick: -Infinity, command: { ...NEUTRAL }, rateAt: -Infinity, rateCount: 0 })
+    this.descriptor = { protocol: RACE_PROTOCOL, id: randomUUID(), fingerprint: factory.fingerprint, simulationVersion: factory.simulationVersion, tickRate: 60, snapshotRate: 20, countdownTicks: 180, ...(factory.correctionVersion === CORRECTION_VERSION ? { correctionVersion: CORRECTION_VERSION, ...(factory.scheduledInputVersion === 1 ? { scheduledInputVersion: 1 as const } : {}) } : {}) }
+    for (const r of racers) this.seats.set(r.sessionId, { id: r.id, scheduled: false, schedule: new ScheduledInputs(), connected: true, received: -1, applied: -1, appliedMode: 'hold', firstAppliedTick: null, lastAppliedTick: null, tick: -Infinity, command: { ...NEUTRAL }, rateAt: -Infinity, rateCount: 0, scheduledRateCount: 0 })
   }
 
   /** A late-loading simulation is freed even when the room was cancelled/disposed meanwhile. */
@@ -75,6 +88,7 @@ export class RaceSession {
     try {
       const simulation = await factory.create(this.racers)
       if (this.phase === 'closed') { simulation.dispose(); return }
+      if (this.descriptor.correctionVersion === CORRECTION_VERSION && !simulation.correction) { simulation.dispose(); this.close('The race correction adapter could not load.'); return }
       this.simulation = simulation
       this.loadingResolved = true
       this.tryCountdown()
@@ -99,6 +113,7 @@ export class RaceSession {
     const seat = this.seats.get(sessionId)
     if (!seat) return
     seat.connected = connected
+    seat.schedule.clear(); seat.scheduled = false
     seat.tick = -Infinity
     seat.command = { ...NEUTRAL }
     if (!connected && this.phase === 'loading') this.loaded.delete(sessionId)
@@ -134,14 +149,42 @@ export class RaceSession {
 
   input(sessionId: string, value: unknown, nowMs: number): boolean {
     const seat = this.seats.get(sessionId)
-    if (this.phase !== 'racing' || !seat || !seat.connected || this.retirements.has(seat.id) || this.progress.get(seat.id)!.finishTicks !== null || !isInput(value, this.descriptor.id)) return false
+    if (this.phase !== 'racing' || !seat || seat.scheduled || !seat.connected || this.retirements.has(seat.id) || this.progress.get(seat.id)!.finishTicks !== null || !isInput(value, this.descriptor.id)) return false
     // A latest-input mailbox: never build a queue from client traffic. Bound jumps and message rate.
     if (value.sequence <= seat.received || value.sequence > seat.received + 120) return false
-    if (nowMs - seat.rateAt >= 1000) { seat.rateAt = nowMs; seat.rateCount = 0 }
+    if (nowMs - seat.rateAt >= 1000) { seat.rateAt = nowMs; seat.rateCount = 0; seat.scheduledRateCount = 0 }
     if (++seat.rateCount > 30) return false
     seat.received = value.sequence
     seat.command = { ...value }
     seat.tick = this.tick
+    return true
+  }
+
+  scheduledInput(sessionId: string, value: unknown, nowMs: number): boolean {
+    const seat = this.seats.get(sessionId)
+    if (this.descriptor.scheduledInputVersion !== 1 || !seat?.connected || !['countdown', 'racing'].includes(this.phase)
+      || this.retirements.has(seat.id) || this.progress.get(seat.id)!.finishTicks !== null || !value || typeof value !== 'object' || Array.isArray(value)) return false
+    const v = value as RaceInput & { version: number; tick: number }
+    if (v.version !== 1 || !Object.keys(v).every(key => INPUT_KEYS.has(key) || key === 'tick' || key === 'version')) return false
+    const { tick, version: _version, ...command } = v
+    if (!isInput(command, this.descriptor.id) || tick <= this.descriptor.countdownTicks || tick > this.descriptor.countdownTicks + 36_000
+      || command.sequence <= seat.received || command.sequence > seat.received + 120 || !Number.isFinite(nowMs)) return false
+    if (nowMs - seat.rateAt >= 1000) { seat.rateAt = nowMs; seat.rateCount = 0; seat.scheduledRateCount = 0 }
+    if (++seat.scheduledRateCount > 72 || !seat.schedule.enqueue(this.tick, tick, command)) return false
+    seat.received = command.sequence; seat.tick = this.tick; seat.scheduled = true; seat.command.raceId = this.descriptor.id
+    return true
+  }
+
+  /** Explicit fallback cancels queued controls, never resets a car or reuses the old mailbox. */
+  useMailbox(sessionId: string, value: unknown): boolean {
+    const seat = this.seats.get(sessionId)
+    if (this.descriptor.scheduledInputVersion !== 1 || !seat?.connected || !['countdown', 'racing'].includes(this.phase)
+      || !value || typeof value !== 'object' || Array.isArray(value)) return false
+    const v = value as { raceId: string; version: number; mode: string }
+    if (Object.keys(v).length !== 3 || !Object.keys(v).every(key => ['raceId', 'version', 'mode'].includes(key))
+      || v.raceId !== this.descriptor.id || v.version !== 1 || v.mode !== 'mailbox') return false
+    seat.schedule.clear(); seat.scheduled = false; seat.tick = -Infinity
+    seat.command = { ...NEUTRAL }
     return true
   }
 
@@ -162,9 +205,15 @@ export class RaceSession {
       for (const r of this.racers) {
         const seat = this.seats.get(r.sessionId)!
         const driving = racing && !this.retirements.has(r.id) && this.progress.get(r.id)!.finishTicks === null
-        const fresh = driving && seat.connected && this.tick - seat.tick < INPUT_TIMEOUT_TICKS
+        const fresh = driving && seat.connected && (seat.scheduled ? seat.schedule.take(this.tick + 1, seat.command) : this.tick - seat.tick < INPUT_TIMEOUT_TICKS)
         this.simulation!.setInput(r.id, driving ? fresh ? seat.command : NEUTRAL : HOLD)
-        if (fresh) seat.applied = seat.received
+        seat.appliedMode = !driving ? 'hold' : fresh ? 'command' : 'neutral'
+        if (fresh) {
+          const applied = seat.scheduled ? seat.command.sequence : seat.received
+          if (seat.applied !== applied) seat.firstAppliedTick = this.tick + 1
+          seat.applied = applied
+          seat.lastAppliedTick = this.tick + 1
+        }
       }
       this.simulation!.step()
       this.tick++
@@ -198,8 +247,26 @@ export class RaceSession {
       }),
       vehicles: this.simulation.states().map(v => {
         const racer = this.racers.find(r => r.id === v.id)!
-        return { ...v, acknowledgedSequence: this.seats.get(racer.sessionId)!.applied }
+        const seat = this.seats.get(racer.sessionId)!
+        return { ...v, acknowledgedSequence: seat.applied, inputApplication: { mode: seat.appliedMode, firstTick: seat.firstAppliedTick, lastTick: seat.lastAppliedTick } }
       }) }
+  }
+
+  /** Exact current own-seat state only; serializing is opt-in and outside the per-tick physics loop. */
+  correction(sessionId: string): string | null {
+    const seat = this.seats.get(sessionId)
+    if (this.descriptor.correctionVersion !== CORRECTION_VERSION || !this.simulation?.correction || !seat?.connected
+      || this.tick < 1 || (this.phase !== 'countdown' && this.phase !== 'racing')) return null
+    try {
+      const state = this.simulation.correction(seat.id)
+      const envelope: CorrectionEnvelope = { body: state.body, controller: state.controller,
+        version: CORRECTION_VERSION, raceProtocol: RACE_PROTOCOL, raceId: this.descriptor.id, racerId: seat.id,
+        carId: this.racers.find(r => r.sessionId === sessionId)!.carId, fingerprint: this.descriptor.fingerprint,
+        simulationVersion: this.descriptor.simulationVersion, tick: this.tick, acknowledgedSequence: seat.applied,
+        inputApplication: { mode: seat.appliedMode, firstTick: seat.firstAppliedTick, lastTick: seat.lastAppliedTick } }
+      const json = JSON.stringify(envelope)
+      return Buffer.byteLength(json) <= MAX_CORRECTION_BYTES ? json : null
+    } catch { return null } // A failed optional diagnostic/correction capture must not terminate a race.
   }
 
   private finish(reason: RaceResult['reason']): void {

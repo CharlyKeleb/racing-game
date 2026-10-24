@@ -1,0 +1,44 @@
+{
+  "recordedAt": "2026-10-24T11:22:22.938749+00:00",
+  "projectRef": "uqxxdjxiqczgigyifldl",
+  "projectName": "Racing-Simulator",
+  "region": "eu-central-1",
+  "status": "awaiting_explicit_live_migration_approval",
+  "baseline": {
+    "recordedVersion": "20261023134901",
+    "localSource": "0002_racer_profiles.sql",
+    "equivalentIgnoringCommentsWhitespaceAndTrailingTerminators": true,
+    "remoteSqlSha256": "23c81d644c6002121eef064c440ccf9eb2163a7dd35f3ccf321e23f67ae0a948",
+    "liveTablesConfirmed": [
+      "player_saves",
+      "profiles",
+      "reserved_handles",
+      "username_history"
+    ]
+  },
+  "pendingMigrations": [
+    {
+      "version": "20261024111821",
+      "source": "0003_online_practice_history.sql",
+      "sha256": "662e5ae4cc8989806d3cf98c110bb0f94a684e653299eca2141b4ae884cc898e"
+    },
+    {
+      "version": "20261024111822",
+      "source": "0004_online_practice_retirements.sql",
+      "sha256": "6a44e9b23fbd3f7cf12220878a4f7c8f9da84b13f835f1cb5b867d6cc44701f1"
+    },
+    {
+      "version": "20261024111823",
+      "source": "0005_racer_identity_audit.sql",
+      "sha256": "c070bc4c27c77f3cf5d62a27a94278095adabb5f1483f87f20a4c1c253c2f675"
+    }
+  ],
+  "dryRunSelectedOnlyPendingMigrations": true,
+  "localEvidence": {
+    "storageTestsPassed": 22,
+    "auditTestsPassedAfterLockFix": 5,
+    "lintPassed": true,
+    "preparationTestsPassed": 3
+  },
+  "scope": "CLI authentication, link, migration history fetch, schema type generation and dry-run only. No application table/schema migration applied; automatic approval review requires explicit user approval."
+}

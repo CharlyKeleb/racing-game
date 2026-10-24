@@ -40,6 +40,22 @@ const MIN_GAP = 0.05
 const CRACKLE_SEC = 0.11
 const BANG_SEC = 0.17
 
+/** Internal checkpoint for the same approved configuration; not a client input format. */
+export interface BackfireState {
+  popped: PopKind
+  strength: number
+  flash: number
+  flashKind: PopKind
+  count: number
+  sinceHigh: number | null
+  burst: number
+  nextBurst: number
+  sincePop: number | null
+  lastGear: number
+  burnoutNext: number
+  seed: number
+}
+
 export class Backfire {
   /** The pop that fired this tick (for its sound), NONE otherwise. */
   popped: PopKind = NONE
@@ -116,6 +132,40 @@ export class Backfire {
     x ^= x << 13; x ^= x >>> 17; x ^= x << 5
     this.seed = x >>> 0
     return this.seed / 4294967296
+  }
+
+  /** Allocate a detached checkpoint outside the per-tick update path. Infinity sentinels use null. */
+  captureState(): BackfireState {
+    return {
+      popped: this.popped,
+      strength: this.strength,
+      flash: this.flash,
+      flashKind: this.flashKind,
+      count: this.count,
+      sinceHigh: this.sinceHigh === Infinity ? null : this.sinceHigh,
+      burst: this.burst,
+      nextBurst: this.nextBurst,
+      sincePop: this.sincePop === Infinity ? null : this.sincePop,
+      lastGear: this.lastGear,
+      burnoutNext: this.burnoutNext,
+      seed: this.seed,
+    }
+  }
+
+  /** Restore a trusted checkpoint with the same config before replaying inputs. */
+  restoreState(state: BackfireState): void {
+    this.popped = state.popped
+    this.strength = state.strength
+    this.flash = state.flash
+    this.flashKind = state.flashKind
+    this.count = state.count
+    this.sinceHigh = state.sinceHigh ?? Infinity
+    this.burst = state.burst
+    this.nextBurst = state.nextBurst
+    this.sincePop = state.sincePop ?? Infinity
+    this.lastGear = state.lastGear
+    this.burnoutNext = state.burnoutNext
+    this.seed = state.seed
   }
 
   reset(): void {

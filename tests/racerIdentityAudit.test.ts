@@ -21,13 +21,14 @@ it('records each real handle/display change, including returning to an old handl
     await save(' NIGHTSHIFT_7 ', 'Night Shift') // canonical no-op, not a rename
     const rows = (await db.query('select * from public.my_racer_identity_history()')).rows
     expect(rows).toHaveLength(5) // original fixture creation + four real changes
-    expect(rows.map(r => [r.kind,r.old_handle,r.new_handle,r.new_display_name])).toEqual([
+    // Wall-clock timestamps can tie; the UUID tie-breaker is stable, not rename order.
+    expect(rows.map(r => [r.kind,r.old_handle,r.new_handle,r.new_display_name])).toEqual(expect.arrayContaining([
       ['renamed','apex_runner','nightshift_7','Night Shift'],
       ['renamed','apex_runner','apex_runner','Nürburgring Racer'],
       ['renamed','nightshift_7','apex_runner','Night Shift'],
       ['renamed','racer_0','nightshift_7','Night Shift'],
       ['created',null,'racer_0','Racer 0'],
-    ])
+    ]))
     await expect(save('admin','Admin')).rejects.toMatchObject({ code: '22023' })
     expect((await db.query('select * from public.my_racer_identity_history()')).rows).toHaveLength(5)
   })
@@ -72,6 +73,8 @@ it('uses a bounded stable cursor for same-timestamp events and rejects half curs
   await role('authenticated', resultPlayers[0], async () => {
     const first = (await db.query('select * from public.my_racer_identity_history()')).rows
     expect(first).toHaveLength(21)
+    const firstIds = first.map(r => r.event_id as string)
+    expect(firstIds).toEqual([...firstIds].sort().reverse())
     const last = first[19]
     const rest = (await db.query('select * from public.my_racer_identity_history($1,$2)',[last.recorded_at,last.event_id])).rows
     expect(rest).toHaveLength(10)
@@ -94,7 +97,9 @@ it('backfills a truthful baseline without inventing historic rename events', asy
     const rows=(await legacy.query('select kind,old_handle,new_handle from public.racer_identity_events')).rows
     expect(rows).toEqual([{kind:'baseline',old_handle:null,new_handle:'existing_racer'}])
     await legacy.exec("select public.save_racer_profile('renamed_existing','New Name')")
-    expect((await legacy.query('select kind from public.racer_identity_events order by recorded_at')).rows).toEqual([{kind:'baseline'},{kind:'renamed'}])
+    const kinds = (await legacy.query('select kind from public.racer_identity_events')).rows
+    expect(kinds).toHaveLength(2)
+    expect(kinds).toEqual(expect.arrayContaining([{kind:'baseline'},{kind:'renamed'}]))
     await legacy.query('delete from auth.users where id=$1',[resultPlayers[0]])
     expect((await legacy.query('select * from public.racer_identity_events')).rows).toEqual([])
   } finally { await legacy.close() }

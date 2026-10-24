@@ -32,8 +32,13 @@ export class ResultOutbox implements ResultPersistenceService {
   private timer?: ReturnType<typeof setTimeout>
   private running: Promise<void> | null = null
   private stopped = false
+  private readonly directory: string
+  private readonly writer: ResultWriter
+  private readonly retryBaseMs: number
 
-  private constructor(private readonly directory: string, private readonly writer: ResultWriter, private readonly retryBaseMs: number) {}
+  private constructor(directory: string, writer: ResultWriter, retryBaseMs: number) {
+    this.directory = directory; this.writer = writer; this.retryBaseMs = retryBaseMs
+  }
 
   static async open(directory: string, writer: ResultWriter, retryBaseMs = 1000): Promise<ResultOutbox> {
     if (!isAbsolute(directory)) throw new Error('Result outbox requires an absolute persistent directory')

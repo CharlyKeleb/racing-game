@@ -6,7 +6,7 @@ import { performance } from 'node:perf_hooks'
 import { RaceSession, SERVER_TICK_MS, type RaceFactory } from './RaceSession.js'
 import { Room, ServerError, type Client } from '@colyseus/core'
 import type { Authenticate, VerifiedRacer } from './auth.js'
-import { isLobbyCar, LOBBY_PROTOCOL, ROOM_CLOSED_CODE, type LobbyRacer, type LobbySnapshot, type ResultPersistence } from './protocol.js'
+import { CORRECTION_VERSION, CORRECTION_INTERVAL_TICKS, isLobbyCar, LOBBY_PROTOCOL, ROOM_CLOSED_CODE, type LobbyRacer, type LobbySnapshot, type ResultPersistence } from './protocol.js'
 
 export const RECONNECT_GRACE_SECONDS = 15
 export const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
@@ -42,6 +42,8 @@ export class LobbyRoom extends Room {
   private readonly refreshing = new Map<string, Client>()
   private readonly leases = new Map<string, { expiresAt: number; recoverUntil: number | null }>()
   private readonly recoveries = new Map<string, ReturnType<Room['allowReconnection']>>()
+  private readonly correctionSubscribers = new Map<string, { raceId: string; subscriptionId: number }>()
+  private lastCorrectionTick = 0
   private expiry = new Map<string, ReturnType<typeof setTimeout>>()
   /** All HTTP SDK matchmake methods are denied. Only our verified /rooms endpoint reserves seats. */
   static async onAuth(): Promise<never> { throw new ServerError(403, 'Use private room admission.') }
@@ -63,9 +65,30 @@ export class LobbyRoom extends Room {
       const snapshot = this.race?.snapshot()
       if (snapshot) client.send('race', snapshot)
     })
+    this.control('latency', (client, value: unknown) => {
+      if (Number.isSafeInteger(value) && Number(value) >= 0 && this.racers.get(client.sessionId)?.connected === true) client.send('latency', value)
+    })
+    this.control('corrections', (client, value: unknown) => {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) return
+      const v = value as { version: number; raceId: string; subscriptionId: number; enabled: boolean }
+      if (Object.keys(v).length !== 4 || Object.keys(v).some(key => !['version', 'raceId', 'subscriptionId', 'enabled'].includes(key))
+        || v.version !== CORRECTION_VERSION || v.raceId !== this.race?.descriptor.id || !Number.isSafeInteger(v.subscriptionId)
+        || v.subscriptionId < 1 || typeof v.enabled !== 'boolean' || this.racers.get(client.sessionId)?.connected !== true
+        || (this.leases.get(client.sessionId)?.expiresAt ?? 0) <= Date.now()) return
+      if (!v.enabled) {
+        if (this.correctionSubscribers.get(client.sessionId)?.subscriptionId === v.subscriptionId) this.correctionSubscribers.delete(client.sessionId)
+      } else if (this.race?.descriptor.correctionVersion === CORRECTION_VERSION && ['countdown', 'racing'].includes(this.race.phase)) {
+        this.correctionSubscribers.set(client.sessionId, { raceId: v.raceId, subscriptionId: v.subscriptionId })
+      }
+    })
     this.control('start', (client) => this.startRace(client))
     this.control('loaded', (client, value: unknown) => {
       if (this.race?.acknowledge(client.sessionId, value)) this.publish()
+    })
+    this.control('inputMode', (client, value: unknown) => { this.race?.useMailbox(client.sessionId, value) })
+    this.onMessage('scheduledInput', (client, value: unknown) => {
+      const accepted = this.racers.get(client.sessionId)?.connected === true && this.race?.scheduledInput(client.sessionId, value, performance.now())
+      this.metrics?.count(accepted ? 'input_accepted' : 'input_rejected')
     })
     this.onMessage('input', (client, value: unknown) => {
       const accepted = this.racers.get(client.sessionId)?.connected !== false && this.race?.input(client.sessionId, value, performance.now())
@@ -138,6 +161,7 @@ export class LobbyRoom extends Room {
     this.publish()
   }
   onDrop(client: Client, code?: number): void {
+    this.correctionSubscribers.delete(client.sessionId)
     const racer = this.racers.get(client.sessionId), lease = this.leases.get(client.sessionId)
     // Production lobby-only rooms keep their existing immediate-leave policy.
     if (!this.raceFactory || !racer || !lease || ![1001, 1005, 1006, 4010].includes(code ?? 1006) || lease.expiresAt <= Date.now()) return
@@ -162,6 +186,7 @@ export class LobbyRoom extends Room {
     this.armExpiry(client.sessionId)
   }
   onLeave(client: Client, code?: number) {
+    this.correctionSubscribers.delete(client.sessionId)
     const racer = this.racers.get(client.sessionId)
     if (!racer) return
     if (this.leases.get(client.sessionId)?.recoverUntil != null && !this.closing) this.metrics?.count('reconnect_failed')
@@ -179,6 +204,7 @@ export class LobbyRoom extends Room {
       if (!this.race.retire(client.sessionId, reason)) {
         this.race.close('A racer left before the start. Return to the lobby to prepare another race.'); this.finishRace()
       } else if (!wasFinished && this.race.phase === 'finished') {
+        this.correctionSubscribers.clear()
         this.persistResult(this.race)
         this.broadcast('race', this.race.snapshot())
       }
@@ -207,6 +233,7 @@ export class LobbyRoom extends Room {
   }
   onDispose() {
     this.disposed = true
+    this.correctionSubscribers.clear()
     this.clearRematch()
     if (this.hasActiveRace()) this.metrics?.count('race_aborted')
     this.race?.close('The room closed.')
@@ -230,7 +257,7 @@ export class LobbyRoom extends Room {
     }, Math.max(0, Math.min(due - Date.now(), 2_147_483_647))))
   }
   snapshot(): LobbySnapshot {
-    return { protocol: LOBBY_PROTOCOL, code: this.code, hostId: this.hostId, racers: [...this.racers.values()].map((r) => ({ ...r })), maxPlayers: 4, track: 'nurburgring', laps: this.laps, draining: this.isDraining(), phase: this.race && this.race.phase !== 'closed' ? this.race.phase : 'lobby', raceEnabled: !!this.raceFactory, ...(this.raceFactory ? { reconnectGraceSeconds: RECONNECT_GRACE_SECONDS, rematchEnabled: !this.isDraining() } : {}), race: this.race?.descriptor ?? null, raceRacers: this.raceRacers, rematchVotes: [...this.rematchVotes], rematchExpiresAt: this.rematchExpiresAt, resultPersistence: this.resultPersistence }
+    return { protocol: LOBBY_PROTOCOL, latencyProbe: true, code: this.code, hostId: this.hostId, racers: [...this.racers.values()].map((r) => ({ ...r })), maxPlayers: 4, track: 'nurburgring', laps: this.laps, draining: this.isDraining(), phase: this.race && this.race.phase !== 'closed' ? this.race.phase : 'lobby', raceEnabled: !!this.raceFactory, ...(this.raceFactory ? { reconnectGraceSeconds: RECONNECT_GRACE_SECONDS, rematchEnabled: !this.isDraining() } : {}), race: this.race?.descriptor ?? null, raceRacers: this.raceRacers, rematchVotes: [...this.rematchVotes], rematchExpiresAt: this.rematchExpiresAt, resultPersistence: this.resultPersistence }
   }
   private startRace(client: Client): void {
     if (this.isDraining() || this.closing || !this.raceFactory || this.race || this.racers.get(client.sessionId)?.id !== this.hostId) return
@@ -240,6 +267,7 @@ export class LobbyRoom extends Room {
     this.launchRace()
   }
   private launchRace(): void {
+    this.correctionSubscribers.clear(); this.lastCorrectionTick = 0
     this.clearRematch()
     this.race?.close('')
     const race = new RaceSession([...this.racers.values()].map(r => ({ id: r.id, sessionId: r.sessionId, carId: r.carId })), this.raceFactory!, this.laps)
@@ -300,8 +328,18 @@ export class LobbyRoom extends Room {
       const phase = race.phase
       try { race.advance(dt) } catch { race.close('The race simulation stopped. Return to the lobby.') }
       if (race.phase === 'closed') { this.finishRace(); return }
-      if (phase !== race.phase && race.phase === 'finished') this.persistResult(race)
+      if (phase !== race.phase && race.phase === 'finished') { this.correctionSubscribers.clear(); this.persistResult(race) }
       if (phase !== race.phase) this.publish()
+      if (this.correctionSubscribers.size && race.tick - this.lastCorrectionTick >= CORRECTION_INTERVAL_TICKS) {
+        this.lastCorrectionTick = race.tick
+        for (const client of this.clients) {
+          const subscription = this.correctionSubscribers.get(client.sessionId)
+          if (subscription?.raceId !== race.descriptor.id) continue
+          if ((this.leases.get(client.sessionId)?.expiresAt ?? 0) <= Date.now()) { this.correctionSubscribers.delete(client.sessionId); continue }
+          const state = race.correction(client.sessionId)
+          if (state !== null) client.send('correction', { subscriptionId: subscription.subscriptionId, state })
+        }
+      }
       if (phase !== race.phase || race.tick - this.lastSnapshotTick >= 3) {
         const snapshot = race.snapshot()
         if (snapshot) {
@@ -341,6 +379,7 @@ export class LobbyRoom extends Room {
     } catch { update({ raceId: race.descriptor.id, state: 'failed' }) }
   }
   private finishRace(): void {
+    this.correctionSubscribers.clear()
     this.clearRematch()
     const reason = this.race?.reason
     if (reason) this.metrics?.count('race_aborted')

@@ -1,3 +1,4 @@
+import { ConnectionStatus } from './ConnectionStatus'
 import { useEffect, useRef } from 'react'
 import { useStore } from 'zustand'
 import { lobbyStore, leaveLobby, returnToLobby, setRematchReady } from '../multiplayer/LobbyClient'
@@ -24,7 +25,7 @@ export function OnlineRaceHud() {
   const lights = state.countdown !== null ? startLightsLit(state.countdown) : 0
   return <div className="online-race" aria-label="Online practice">
     <header className="online-race__header">
-      <div><span className="eyebrow">Private practice · Nürburgring GP</span><strong>Your crew. Same circuit.</strong><p>Ghost cars · Server timing · Session results</p></div>
+      <div><span className="eyebrow">Private practice · Nürburgring GP</span><strong>Your crew. Same circuit.</strong><p>Ghost cars · Server timing · Session results</p><ConnectionStatus /></div>
       <Button size="sm" onClick={() => onlineRaceStore.setState({ menuOpen: true })}>Race menu <kbd>Esc</kbd></Button>
     </header>
     <aside className="online-race__roster" aria-label="Racers">{roster?.map(r => {

@@ -134,3 +134,42 @@ it('requires a fresh loading acknowledgement after recovery and never starts for
   expect(f.race.phase).toBe('countdown')
   f.race.close('done')
 })
+
+it('reports completed application ticks, superseded mailbox commands and a neutral timeout independently of acknowledgement', async () => {
+  const f = fixture(); await f.start()
+  const state = () => f.race.snapshot()!.vehicles[0]
+  expect(state()).toMatchObject({ acknowledgedSequence: -1, inputApplication: { mode: 'hold', firstTick: null, lastTick: null } })
+  f.race.advance(SERVER_TICK_MS)
+  expect(state().inputApplication).toEqual({ mode: 'neutral', firstTick: null, lastTick: null })
+  expect(f.race.input('a', f.drive(0), 0)).toBe(true)
+  expect(f.race.input('a', f.drive(1), 10)).toBe(true)
+  expect(state().acknowledgedSequence).toBe(-1) // receipt is not consumption
+  f.race.advance(SERVER_TICK_MS)
+  expect(state()).toMatchObject({ acknowledgedSequence: 1, inputApplication: { mode: 'command', firstTick: 182, lastTick: 182 } })
+  f.race.advance(SERVER_TICK_MS * 3)
+  expect(state().inputApplication).toEqual({ mode: 'command', firstTick: 182, lastTick: 185 })
+  for (let i = 0; i < 12; i++) f.race.advance(SERVER_TICK_MS)
+  expect(state()).toMatchObject({ acknowledgedSequence: 1, inputApplication: { mode: 'neutral', firstTick: 182, lastTick: 196 } })
+  expect(f.race.input('a', f.drive(2), 1000)).toBe(true)
+  f.race.advance(SERVER_TICK_MS)
+  expect(state()).toMatchObject({ acknowledgedSequence: 2, inputApplication: { mode: 'command', firstTick: 198, lastTick: 198 } })
+  f.race.setConnected('a', false)
+  expect(state().inputApplication?.mode).toBe('command') // last completed step; a drop does not rewrite history
+  f.race.advance(SERVER_TICK_MS)
+  expect(state()).toMatchObject({ acknowledgedSequence: 2, inputApplication: { mode: 'neutral', firstTick: 198, lastTick: 198 } })
+  f.race.setConnected('a', true)
+  expect(f.race.input('a', f.drive(3), 1020)).toBe(true)
+  f.race.advance(SERVER_TICK_MS)
+  const saved = state()
+  expect(saved).toMatchObject({ acknowledgedSequence: 3, inputApplication: { mode: 'command', firstTick: 200, lastTick: 200 } })
+  f.race.advance(SERVER_TICK_MS)
+  expect(saved.inputApplication?.lastTick).toBe(200) // detached published metadata
+  f.race.close('done')
+})
+it('reports held terminal controls without rewriting the last applied command ticks', async () => {
+  const f = fixture(); await f.start()
+  f.race.input('a', f.drive(0), 0); f.race.advance(SERVER_TICK_MS)
+  f.race.retire('a', 'left'); f.race.advance(SERVER_TICK_MS)
+  expect(f.race.snapshot()!.vehicles[0]).toMatchObject({ acknowledgedSequence: 0, inputApplication: { mode: 'hold', firstTick: 181, lastTick: 181 } })
+  f.race.close('done')
+})

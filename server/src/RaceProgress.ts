@@ -18,8 +18,11 @@ export class RaceProgress {
   private y = 0
   private z = 0
   private initialized = false
+  private readonly gates: readonly RaceGate[]
+  private readonly laps: number
 
-  constructor(private readonly gates: readonly RaceGate[], private readonly laps: number) {
+  constructor(gates: readonly RaceGate[], laps: number) {
+    this.gates = gates; this.laps = laps
     if (!Number.isInteger(laps) || laps < 1 || laps > 10 || gates.length < 2) throw new Error('Invalid race course')
     for (let i = 0; i < gates.length; i++) {
       const g = gates[i]

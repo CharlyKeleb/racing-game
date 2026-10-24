@@ -1,0 +1,46 @@
+{
+  "recordedAt": "2026-10-24T11:43:54.717118+00:00",
+  "projectRef": "uqxxdjxiqczgigyifldl",
+  "status": "live_sql_role_and_result_acceptance_passed",
+  "sql": "supabase/tests/online_practice_acceptance.sql",
+  "localChecksPassed": 6,
+  "localRollbackVerified": true,
+  "initialLiveAttempt": {
+    "exitCode": 1,
+    "sqlState": "42501",
+    "error": "permission denied for schema auth",
+    "successfulFixtureInserts": 0,
+    "transactionCommitted": false
+  },
+  "revisedLiveAttempt": {
+    "executed": true,
+    "exitCode": 0,
+    "files": 1,
+    "testsPassed": 6,
+    "result": "PASS",
+    "transactionCommitted": false,
+    "finalStatement": "ROLLBACK",
+    "scope": "Synthetic identities and one race inside a single transaction; no existing account IDs or records used.",
+    "checks": [
+      "backend result save, idempotent retry and conflicting-record rejection",
+      "two private history rows with retirement metadata and no competitive eligibility",
+      "owner race/audit reads and other-racer isolation",
+      "other-racer isolation, browser result/direct history writes and raw race reads denied",
+      "anonymous history/audit/result access denied",
+      "backend direct history mutation and identity audit RPC access denied"
+    ]
+  },
+  "remaining": "Real Auth tokens, HTTP gateway and expiry acceptance; configured persistent result writer; hosted capacity; physical devices.",
+  "validation": {
+    "focusedTestsPassed": 12,
+    "fullTestsPassed": 3274,
+    "fullFilesPassed": 509,
+    "strictTestTypesPassed": true,
+    "lintPassed": true
+  },
+  "approval": "User explicitly approved the rollback-only live database test, including postgres-role synthetic Auth/profile fixture setup.",
+  "uuidArrayLintWarning": {
+    "liveResultFunctionExecutedSuccessfully": true,
+    "staticWarningRemains": true
+  }
+}

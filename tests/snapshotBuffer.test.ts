@@ -57,3 +57,32 @@ it('keeps a finished frame at its final pose without reporting a stale connectio
   expect(out.position.x).toBe(6)
   expect(b.delayed(10_000)).toBe(false)
 })
+
+it('validates optional input application metadata and keeps legacy snapshots compatible', () => {
+  const buffer = new SnapshotBuffer('race', ['one', 'two'])
+  expect(buffer.push(frame(3), 50)).toBe(true)
+  for (const inputApplication of [
+    { mode: 'command', firstTick: 4, lastTick: 6 },
+    { mode: 'neutral', firstTick: 4, lastTick: 5 },
+  ]) {
+    const next = frame(6)
+    next.vehicles[0].inputApplication = inputApplication as never
+    const fresh = new SnapshotBuffer('race', ['one', 'two'])
+    expect(fresh.push(next, 100)).toBe(true)
+  }
+  for (const inputApplication of [
+    { mode: 'command', firstTick: 4, lastTick: 5 }, { mode: 'command', firstTick: null, lastTick: null },
+    { mode: 'neutral', firstTick: 7, lastTick: 6 }, { mode: 'hold', firstTick: 0, lastTick: 6 },
+    { mode: 'neutral', firstTick: 3, lastTick: 7 }, { mode: 'fake', firstTick: 3, lastTick: 6 },
+    { mode: 'command', firstTick: 3, lastTick: 6, sequence: 999 },
+  ]) {
+    const next = frame(6); next.vehicles[0].inputApplication = inputApplication as never
+    expect(buffer.push(next, 100)).toBe(false)
+  }
+  const badSequence = frame(6); badSequence.vehicles[0].acknowledgedSequence = -1
+  expect(buffer.push(badSequence, 100)).toBe(false) // acknowledgement cannot roll backwards
+  const valid = frame(6); valid.vehicles[0].inputApplication = { mode: 'command', firstTick: 4, lastTick: 6 }
+  expect(buffer.push(valid, 100)).toBe(true)
+  valid.vehicles[0].inputApplication.firstTick = 99
+  expect(buffer.latest?.vehicles[0].inputApplication?.firstTick).toBe(4)
+})

@@ -59,9 +59,14 @@ are released and the HUD reports the delayed connection. The server independentl
 neutralizes stale input after 250 ms. Returning from a hidden tab discards old
 interpolation history. Invalid/foreign/out-of-order frames cannot replace it.
 
-This is **not rollback prediction**: the local car is also interpolated from
-server poses, so input response includes network/interpolation delay. There is
-no claim of deterministic reconciliation or persisted competitive results. Controller state capture/replay and measured latency work remain next.
+By default the local car is also interpolated from server poses, so input response
+includes network/interpolation delay. An explicitly enabled
+[experimental prediction path](ONLINE_PREDICTION.md) instead simulates only the
+own car in an isolated collision world and reconciles validated controller/body
+corrections against a journal of exact scheduled server ticks. It is disabled by
+default and requires a separately enabled server capability. It does not run
+local lap rules, progression or results. Browser/device performance and hosted
+network acceptance remain pending; there is no claim of exact Rapier solver replay.
 Remote engines, richer driving effects, cockpit camera and car reset/recovery
 are also follow-ups; chase/rear view, keyboard, standard gamepad and touch driving
 are supported. Online gearbox is automatic regardless of the offline preference.

@@ -1,0 +1,30 @@
+{
+  "projectRef": "uqxxdjxiqczgigyifldl",
+  "legacyUntracked": {
+    "source": "0001_player_saves.sql",
+    "sha256": "6141229969f850dca3c069731cddd337ebc5c6126dee838ee9c0adc5b2c7084c",
+    "reason": "Existing player_saves table predates CLI migration tracking; do not replay it or fabricate an applied history entry."
+  },
+  "migrations": [
+    {
+      "version": "20261023134901",
+      "source": "0002_racer_profiles.sql",
+      "sha256": "5b1ab346d946c4468c62805f9023284528fba3f296d4006dc9588d3d52c5784f"
+    },
+    {
+      "version": "20261024111821",
+      "source": "0003_online_practice_history.sql",
+      "sha256": "662e5ae4cc8989806d3cf98c110bb0f94a684e653299eca2141b4ae884cc898e"
+    },
+    {
+      "version": "20261024111822",
+      "source": "0004_online_practice_retirements.sql",
+      "sha256": "6a44e9b23fbd3f7cf12220878a4f7c8f9da84b13f835f1cb5b867d6cc44701f1"
+    },
+    {
+      "version": "20261024111823",
+      "source": "0005_racer_identity_audit.sql",
+      "sha256": "c070bc4c27c77f3cf5d62a27a94278095adabb5f1483f87f20a4c1c253c2f675"
+    }
+  ]
+}

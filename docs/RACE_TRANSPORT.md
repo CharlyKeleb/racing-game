@@ -4,7 +4,10 @@ This slice connects the shared physics spike to a server-owned room lifecycle.
 Two real SDK clients can load the same race, count down, submit driving controls
 and receive identical authoritative car snapshots. The [browser practice adapter](BROWSER_MULTIPLAYER.md)
 now draws both cars with interpolation and exposes launch on the optional local
-backend. Server-timed practice laps and shared session results are implemented; prediction/reconciliation, competitive validation and hosted acceptance remain pending. An optional [durable result writer and owner history](ONLINE_PRACTICE_HISTORY.md) are now implemented.
+backend. Server-timed practice laps and shared session results are implemented.
+[Experimental own-car prediction](ONLINE_PREDICTION.md) is available behind explicit
+client/server flags; competitive validation and hosted acceptance remain pending.
+An optional [durable result writer and owner history](ONLINE_PRACTICE_HISTORY.md) are now implemented.
 
 ## Local development only
 
@@ -38,9 +41,13 @@ the existing 256 MiB machine.
 ## State and message contract
 
 The existing lobby protocol stays at version 1 for additive compatibility with
-the deployed lobby. Race descriptors have a separate `RACE_PROTOCOL` version 2,
+the deployed lobby. Race descriptors have a separate `RACE_PROTOCOL` version 3,
 `SIMULATION_VERSION`, asset fingerprint and random race ID. These are compatibility
 claims, not evidence that an untrusted browser loaded assets or ran physics.
+
+Protocol 3 adds explicit retirement results to the original protocol-2 transport.
+Optional [corrections](CORRECTION_STREAM.md) and [scheduled inputs](SCHEDULED_PRACTICE_INPUTS.md)
+negotiate their own capabilities without enabling them on legacy clients.
 
 | Message | Server behavior |
 | --- | --- |
@@ -129,6 +136,7 @@ protocol remains 1 because the deployed server is still lobby-only.
 ```sh
 npm run test:race-transport
 npm run test:multiplayer
+npm run check:finished-race
 npm run server:build
 npm run build
 npm run lint
@@ -148,6 +156,12 @@ and the shipped Nürburgring/Porsche simulation, checks equal snapshots at the s
 tick, ownership and acknowledgements, admission/configuration lock, host permissions,
 disconnect cleanup and reuse after cancellation. Client tests check frame ordering,
 race isolation, command sequencing, send pacing and cleanup.
+
+The [full-race acceptance command](FINISHED_RACE_ACCEPTANCE.md) drives two AI
+cars through the actual physics and ordinary 30 Hz mailbox until both complete
+three laps. It checks all ordered gates, positive lap times, finish-time sums
+and ranks. This adds local shipped-physics completion evidence without sockets,
+Auth, resets or database writes.
 
 These checks do not replace two physical devices, real Supabase session lifecycle
 acceptance, device/network measurements or staging production-image profiling.

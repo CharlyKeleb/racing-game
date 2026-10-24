@@ -1,0 +1,78 @@
+{
+  "recordedAt": "2026-10-24T13:22:14.419Z",
+  "passed": true,
+  "failure": null,
+  "fingerprint": "bb45039de6b0ee8539502ed6846b7d1368e647b602fee16c15322a5ce0ec35a8",
+  "simulationVersion": 1,
+  "raceProtocol": 3,
+  "laps": 3,
+  "checkpointsPerLap": 8,
+  "tick": 32558,
+  "phase": "finished",
+  "elapsedWallMs": 5167.3135,
+  "racers": [
+    {
+      "id": "ai-0",
+      "acceptedInputs": 16181,
+      "orderedGateCrossings": 24,
+      "distanceMetres": 15396,
+      "completedLaps": 3,
+      "nextCheckpoint": 1,
+      "lapTicks": [
+        10941,
+        10713,
+        10708
+      ],
+      "finishTicks": 32362
+    },
+    {
+      "id": "ai-1",
+      "acceptedInputs": 16189,
+      "orderedGateCrossings": 24,
+      "distanceMetres": 15388,
+      "completedLaps": 3,
+      "nextCheckpoint": 1,
+      "lapTicks": [
+        10956,
+        10708,
+        10714
+      ],
+      "finishTicks": 32378
+    }
+  ],
+  "result": {
+    "raceId": "8018414b-c369-463b-adab-564c993b52c6",
+    "track": "nurburgring",
+    "laps": 3,
+    "tickRate": 60,
+    "completedTick": 32558,
+    "reason": "all-finished",
+    "racers": [
+      {
+        "id": "ai-0",
+        "carId": "porsche911",
+        "status": "finished",
+        "rank": 1,
+        "finishTicks": 32362,
+        "lapTicks": [
+          10941,
+          10713,
+          10708
+        ]
+      },
+      {
+        "id": "ai-1",
+        "carId": "porsche911",
+        "status": "finished",
+        "rank": 2,
+        "finishTicks": 32378,
+        "lapTicks": [
+          10956,
+          10708,
+          10714
+        ]
+      }
+    ]
+  },
+  "scope": "Local unpaced real physics, default mailbox, countdown and authoritative ordered-gate lap completion. Synthetic seats; no sockets, browser, Auth, resets, teleports, database writes or hosted/device capacity claim."
+}

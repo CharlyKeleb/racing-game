@@ -324,6 +324,20 @@ export class StreamedTrack implements RaceTrack {
     }
   }
 
+  createPredictionWorld(): RAPIER.World {
+    if (!this.body || this.disposed) throw new Error('Track collision is unavailable')
+    const world = new RAPIER.World({ x: 0, y: -9.81, z: 0 })
+    try {
+      for (let i = 0; i < this.body.numColliders(); i++) {
+        const collider = this.body.collider(i), p = collider.translation(), q = collider.rotation()
+        world.createCollider(new RAPIER.ColliderDesc(collider.shape).setTranslation(p.x, p.y, p.z).setRotation(q)
+          .setFriction(collider.friction()).setRestitution(collider.restitution()).setCollisionGroups(collider.collisionGroups()))
+      }
+      world.timestep = 1 / 60; world.step()
+      return world
+    } catch (error) { world.free(); throw error }
+  }
+
   private async loadCollision(): Promise<void> {
     const gltf = await this.assets.loadGltf(this.baseUrl + this.manifest.collision)
     if (this.disposed) {

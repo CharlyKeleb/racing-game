@@ -36,5 +36,6 @@ it('offers private race history for an existing racer', () => {
   accountStore.setState({ status: 'signedIn', player, profileStatus: 'ready', profile: { id: player.id, handle: 'nightshift_7', display_name: 'Night Shift', handle_changed_at: new Date().toISOString() } })
   const dialog = renderToStaticMarkup(<AccountDialog onClose={() => {}} />)
   expect(dialog).toContain('Race history')
+  expect(dialog).toContain('Name history')
   expect(dialog).toContain('Your racer')
 })

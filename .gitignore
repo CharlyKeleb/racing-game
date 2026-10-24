@@ -10,6 +10,7 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+dist-race
 *.local
 
 # Editor directories and files
@@ -34,3 +35,6 @@ dist-ssr
 
 # Derived compatibility metadata (build:simulation)
 /public/multiplayer/manifest.json
+
+# Supabase CLI link/update metadata; never migration source.
+/supabase/.temp/

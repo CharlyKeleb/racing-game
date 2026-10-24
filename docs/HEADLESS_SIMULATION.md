@@ -90,7 +90,8 @@ capacity or claim measured production race capacity from this local spike.
 
 The [local race transport](RACE_TRANSPORT.md) adds server-owned loading/countdown,
 bounded sequenced inputs and authoritative snapshots. The [browser practice adapter](BROWSER_MULTIPLAYER.md) adds presentation and
-server-pose interpolation; full prediction/reconciliation is pending.
+server-pose interpolation by default; [experimental prediction](ONLINE_PREDICTION.md)
+and a separate [staging artifact](PRACTICE_STAGING.md) are now available locally.
 Then validate checkpoint/lap/finish rules and persist idempotent verified results.
 The two-device lobby acceptance gate and production frontend environment/release
 from the epic remain outstanding.

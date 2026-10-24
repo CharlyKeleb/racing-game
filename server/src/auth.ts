@@ -26,6 +26,8 @@ export function supabaseAuthenticator(url: string, publishableKey: string): Auth
       throw new AdmissionError(401, 'Your session has expired. Sign in again.')
     }
     const { data: profile, error: profileError } = await client.from('profiles').select('id,handle,display_name').eq('id', data.user.id).maybeSingle()
+    // Profile loading is asynchronous; never return a lease that expired during it.
+    if (claims.exp * 1000 <= Date.now()) throw new AdmissionError(401, 'Your session has expired. Sign in again.')
     if (profileError) throw new AdmissionError(503, 'Racer profiles are temporarily unavailable.')
     if (!profile) throw new AdmissionError(403, 'Create your racer profile before joining online.')
     return { id: data.user.id, handle: profile.handle, displayName: profile.display_name, expiresAt: claims.exp * 1000 }

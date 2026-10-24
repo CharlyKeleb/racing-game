@@ -1,0 +1,38 @@
+{
+  "scope": "Relocated compiled Node bundle, twelve offline asset-check steps; final sampled memory only, no server sockets/container/hosted capacity. Separate fresh processes.",
+  "assetEncoding": "RGAS/1",
+  "base": "5a906841edcc465ecece73a10f1fa990dc8365fd",
+  "dirtyWorktree": true,
+  "collectedAt": "2026-10-23T22:43:00.448366+00:00",
+  "node": "v24.7.0",
+  "platform": "Darwin",
+  "arch": "arm64",
+  "checks": [
+    {
+      "check": "practice-assets",
+      "fingerprint": "bb45039de6b0ee8539502ed6846b7d1368e647b602fee16c15322a5ce0ec35a8",
+      "racers": 2,
+      "ticks": 12,
+      "correctionVersion": 1,
+      "scheduledInputVersion": null,
+      "memoryAfterWorldSteps": {
+        "rssMiB": 253.375,
+        "heapUsedMiB": 32.9134521484375,
+        "externalMiB": 21.95515727996826
+      }
+    },
+    {
+      "check": "practice-assets",
+      "fingerprint": "bb45039de6b0ee8539502ed6846b7d1368e647b602fee16c15322a5ce0ec35a8",
+      "racers": 2,
+      "ticks": 12,
+      "correctionVersion": 1,
+      "scheduledInputVersion": 1,
+      "memoryAfterWorldSteps": {
+        "rssMiB": 245.046875,
+        "heapUsedMiB": 32.809471130371094,
+        "externalMiB": 21.95515727996826
+      }
+    }
+  ]
+}

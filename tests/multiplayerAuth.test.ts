@@ -34,3 +34,16 @@ it('uses server-read identity rather than user metadata and scopes profile fetch
   expect(result).toMatchObject({ id, handle: 'real_racer', displayName: 'Real Racer' })
   expect(String(mock.mock.calls[1][0])).toContain(`id=eq.${id}`)
 })
+it('rejects a token that expires while its owner profile is loading', async () => {
+  const clock = vi.spyOn(Date, 'now').mockReturnValue(1_800_000_000_000)
+  const signed = token()
+  const fetch = authFetch(true)
+  const base = fetch.getMockImplementation()!
+  fetch.mockImplementation(async input => {
+    const response = await base(input)
+    if (String(input).includes('/rest/v1/profiles')) clock.mockReturnValue(1_800_000_060_000)
+    return response
+  })
+  try { await expect(supabaseAuthenticator(url, 'public-key')(signed)).rejects.toMatchObject({ status: 401 }) }
+  finally { clock.mockRestore() }
+})

@@ -43,7 +43,12 @@ stats are incremented, so retries cannot duplicate progression.
 ## Optional local runner configuration
 
 The production entrypoint remains **lobby-only** and does not construct a writer.
-No live migration, secret, deployment, machine resize or paid volume is included.
+The three history/retirement/audit migrations were subsequently explicitly
+approved and applied to the existing Supabase project, and all six rollback-only
+live SQL-role/result checks passed. See [the CLI receipt](SUPABASE_CLI.md).
+An existing server credential is now configured locally in ignored
+`server/.env.local` (0600), paired with a dedicated 0700 outbox directory. No new
+key, hosted deployment, machine resize or paid volume was created.
 The real-account local race runner enables persistence only when both of these
 server-only values are present in `server/.env.local`:
 
@@ -159,3 +164,57 @@ does not complete the epic's first-playable acceptance gate by itself.
 Rollback: remove writer configuration and revert UI/runner first, preserving
 pending disk records. Keep accepted tables/records and identities for recovery.
 Any schema/data removal needs a separate backup and retention decision.
+
+## Packaged offline crash/restart drill
+
+`npm run check:outbox-container` runs the locally built practice image against a
+new disposable Docker volume, with a synthetic result and synthetic server key.
+Both server processes run as UID 1000 with a read-only root filesystem, no external
+network and no published ports. Root is used only to initialize ownership of this
+new test volume; no host directory is mounted.
+
+The first server confirms the exact pending file and its 0600 permissions inside
+the 0700 outbox, then receives SIGKILL. A fresh server on the same volume retains
+the identical SHA-256 record and remains ready. The second server handles SIGTERM
+cleanly. A durable pending file is safe to replay and does not require a nonzero
+exit; an unconfirmed enqueue is the separate shutdown error condition. All test
+containers and the volume are removed. See the
+[raw drill receipt](measurements/practice-outbox-restart-2026-10-24.json).
+
+This tests local disk recovery after process death during an offline retry. It does
+not exercise a real database outage, successful privileged HTTP write, live race
+finalization or the hosting provider's persistent volume/termination behavior.
+
+## Real local saving enabled — 2026-10-24
+
+The local frontend points to `http://127.0.0.1:2568`. `npm run server:race-dev`
+loads the ignored server configuration and now reports `resultStorage: true`.
+Only one room/two-racer race is supported; shutdown handlers are installed before
+listening. The preflight can be rerun without producing a race record:
+
+```sh
+npm run check:result-storage
+```
+
+It requires a writable private 0700 outbox and sends an intentionally invalid empty
+record through the actual server writer. Success means the privileged RPC was
+reached and rejected the invalid record at validation, rather than failing Auth or
+permissions. It does not claim a successful save. Credential values never appear
+in its output. The built frontend was scanned for the configured server key and
+contained no match across 42 text artifacts. HEAD requests to both relative and
+absolute filesystem routes for the backend credential file returned HTTP 403,
+without reading a response body.
+
+A subsequent real test did save: separate authenticated Chrome and Safari accounts
+joined the same room, readied/launched and drove (50/57 km/h observed), then both
+used Leave practice. The rival continued after the host retired. The authoritative
+protocol-3 `all-resolved` result committed after the last client left. Each owner
+then read exactly one private row with the same race UUID digest and its own
+retirement tick (7119/8775), `dnfReason=left`, and competitive eligibility false.
+The outbox had zero pending/rejected records afterward. No fake lap/finish was
+submitted and this does not satisfy completed-lap or two-physical-device acceptance.
+See the [sanitized live receipt](measurements/local-result-storage-2026-10-24.json).
+
+The local directory survives local process restarts, but is under ignored cache;
+it is not an approved hosted volume or a backup/retention guarantee. Hosted
+writer/volume configuration and operational acceptance remain separate work.

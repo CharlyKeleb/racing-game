@@ -1,5 +1,5 @@
 import { Quaternion } from 'three'
-import type { RaceSnapshot, RaceVehicleState } from '../../server/src/protocol'
+import { isInputApplication, type RaceSnapshot, type RaceVehicleState } from '../../server/src/protocol'
 
 const TICK_MS = 1000 / 60
 const MAX_FRAMES = 32
@@ -32,6 +32,9 @@ export class SnapshotBuffer {
       if (v.wheelOffsets !== undefined && (!Array.isArray(v.wheelOffsets) || v.wheelOffsets.length !== 4 || !v.wheelOffsets.every(Number.isFinite))) return false
       if (v.nitroIntensity !== undefined && !Number.isFinite(v.nitroIntensity)) return false
       if (v.braking !== undefined && !Number.isFinite(v.braking)) return false
+      if (!Number.isSafeInteger(v.acknowledgedSequence) || v.acknowledgedSequence < -1
+        || (last && v.acknowledgedSequence < last.vehicles.find(previous => previous.id === v.id)!.acknowledgedSequence)
+        || (v.inputApplication !== undefined && !isInputApplication(v.inputApplication, v.acknowledgedSequence, frame.tick))) return false
       seen.add(v.id)
     }
     this.frames.push(structuredClone(frame))

@@ -9,9 +9,24 @@ import App from '../../src/App'
 import '../../src/index.css'
 import { accountStore } from '../../src/stores/accountStore'
 import { lobbyStore, enterLobby } from '../../src/multiplayer/LobbyClient'
+import type { Game } from '../../src/engine/Game'
 if (!import.meta.env.DEV || import.meta.env.VITE_MULTIPLAYER_URL !== 'http://127.0.0.1:2569') throw new Error('This fixture only connects to its dedicated localhost test server')
 const player = new URL(location.href).searchParams.get('player') === 'two' ? 'two' : 'one'
 const persistence = new URL(location.href).searchParams.get('persistence') === '1'
+const prediction = new URL(location.href).searchParams.get('prediction') === '1'
+function fixtureGame(): Game | undefined { return (window as unknown as { __game?: Game }).__game }
+function PredictionDiagnostics() {
+  const [status, setStatus] = React.useState<ReturnType<Game['debugOnlinePrediction']>>(null)
+  const [throttle, setThrottle] = React.useState(false)
+  React.useEffect(() => {
+    const timer = setInterval(() => setStatus(fixtureGame()?.debugOnlinePrediction() ?? null), 250)
+    return () => { clearInterval(timer); fixtureGame()?.debugInput({ throttle: 0 }) }
+  }, [])
+  return <div style={{ position: 'fixed', zIndex: 1100, left: 20, bottom: 120, maxWidth: 500, background: '#15202b', color: 'white', padding: 8 }}>
+    <output aria-label="Prediction diagnostics">{JSON.stringify(status)}</output>
+    <button onClick={() => { fixtureGame()?.debugInput({ throttle: throttle ? 0 : 1 }); setThrottle(!throttle) }}>{throttle ? 'Release test throttle' : 'Apply test throttle'}</button>
+  </div>
+}
 const playerId = persistence ? resultPlayers[player === 'one' ? 0 : 1] : `smoke-${player}`
 export function Fixture() {
   const connected = useStore(lobbyStore, s => s.status === 'connected' || s.status === 'reconnecting')
@@ -34,7 +49,7 @@ export function Fixture() {
       return `smoke-${player}`
     })
   }
-  return <><App />{connected && <div style={{ position: 'fixed', zIndex: 1000, left: 20, bottom: 75 }}>
+  return <><App />{prediction && <PredictionDiagnostics />}{connected && <div style={{ position: 'fixed', zIndex: 1000, left: 20, bottom: 75 }}>
     <button disabled={recovering} onClick={() => { delayAuth.current = true; window.dispatchEvent(new Event('offline')) }}>Drop test connection</button>
   </div>}{!connected && <div style={{ position: 'fixed', zIndex: 1000, left: 20, top: '45%', padding: 20, background: '#15202b', color: 'white' }}>
     <p>Local browser fixture: racer {player}</p><button onClick={() => join('create')}>Create test lobby</button>

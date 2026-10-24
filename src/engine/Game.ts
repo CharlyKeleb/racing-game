@@ -559,6 +559,11 @@ export class Game {
     }
   }
 
+  /** Dev-only: inspect prediction without advancing physics. */
+  debugOnlinePrediction() {
+    return import.meta.env.DEV ? this.onlineScene?.debugPrediction() ?? null : null
+  }
+
   /** Dev-only: hold inputs for debugStep runs. */
   debugInput(state: Partial<InputState>): void {
     this.input.setTouch(state)
@@ -1078,6 +1083,8 @@ export class Game {
 
   loadPracticeHistory(more = false): Promise<void> { return this.cloud.loadPracticeHistory(more) }
 
+  loadIdentityHistory(more = false): Promise<void> { return this.cloud.loadIdentityHistory(more) }
+
   loadRacerProfile(): Promise<void> {
     return this.cloud.loadProfile()
   }
@@ -1220,6 +1227,7 @@ export class Game {
     if (this.onlineRaceId || this.onlineEnding) {
       this.input.setTouch(RELEASED_ONLINE_INPUT)
       if (document.hidden) {
+        this.onlineScene?.resetPrediction?.()
         sendRaceInput(RELEASED_ONLINE_INPUT)
         this.audio.suspend(); this.loop.stop()
       } else {
@@ -1310,6 +1318,7 @@ export class Game {
       if (this.onlineConnectionEpoch !== connectionEpoch) {
         this.onlineConnectionEpoch = connectionEpoch
         this.onlineScene?.buffer.resync()
+        this.onlineScene?.resetPrediction?.()
         if (this.onlineScene && snapshot.phase === 'loading') acknowledgeRaceLoaded(snapshot.race)
       }
       if (raceSnapshot) this.onlineScene?.push(raceSnapshot, performance.now())
@@ -1527,7 +1536,8 @@ export class Game {
       if (this.input.consume('pause')) this.togglePause()
       for (const action of ['camera', 'reset', 'restart', 'shiftUp', 'shiftDown', 'skip'] as const) this.input.consume(action)
       const active = this.onlineScene && !onlineRaceStore.getState().finished && !onlineRaceStore.getState().menuOpen && !document.hidden && !this.onlineScene.buffer.delayed(performance.now())
-      sendRaceInput(active ? this.input.state : RELEASED_ONLINE_INPUT)
+      const controls = active ? this.input.state : RELEASED_ONLINE_INPUT
+      if (!this.onlineScene?.fixedUpdate?.(controls, performance.now())) sendRaceInput(controls)
       return
     }
     const inputPhase = gameStore.getState().phase
@@ -1739,7 +1749,7 @@ export class Game {
 
   private renderFrame(alpha: number, dt: number): void {
     if (this.onlineRaceId || this.onlineEnding) {
-      this.onlineScene?.render(performance.now(), dt, !!this.input.state.lookBack)
+      this.onlineScene?.render(performance.now(), dt, !!this.input.state.lookBack, alpha)
       return
     }
     const frameDt = dt

@@ -17,9 +17,9 @@ const resultPersistence = SUPABASE_RESULT_SECRET_KEY && RESULT_OUTBOX_DIR
   ? await ResultOutbox.open(RESULT_OUTBOX_DIR, supabaseResultWriter(SUPABASE_URL, SUPABASE_RESULT_SECRET_KEY)) : undefined
 await initRapier()
 const bundle = JSON.parse(await readFile(new URL('../../.cache/multiplayer/simulation-assets.json', import.meta.url), 'utf8')) as SimulationBundle
+if (process.env.MULTIPLAYER_SCHEDULED_INPUTS !== undefined && !['0', '1'].includes(process.env.MULTIPLAYER_SCHEDULED_INPUTS)) throw new Error('MULTIPLAYER_SCHEDULED_INPUTS must be 0 or 1')
 const backend = createBackend({ metrics: consoleMetrics(process.env.MULTIPLAYER_METRICS), authenticate: supabaseAuthenticator(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY),
-  origins: ALLOWED_ORIGINS.split(',').map(s => s.trim()).filter(Boolean), raceFactory: createRaceFactory(bundle), resultPersistence, maxRooms: 5 })
-await backend.listen(2568, '127.0.0.1')
+  origins: ALLOWED_ORIGINS.split(',').map(s => s.trim()).filter(Boolean), raceFactory: createRaceFactory(bundle, { scheduledInputs: process.env.MULTIPLAYER_SCHEDULED_INPUTS === '1' }), resultPersistence, maxRooms: 1 })
 let stopping = false
 async function stop() {
   if (stopping) return
@@ -34,4 +34,5 @@ async function stop() {
 }
 process.on('SIGTERM', () => void stop())
 process.on('SIGINT', () => void stop())
-console.info('Local development race transport listening on 127.0.0.1:2568; one two-racer simulation maximum')
+await backend.listen(2568, '127.0.0.1')
+console.info('Local development race transport ready', { address: '127.0.0.1:2568', maximumRooms: 1, maximumRacers: 2, resultStorage: !!resultPersistence })

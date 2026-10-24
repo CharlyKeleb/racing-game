@@ -25,10 +25,11 @@ Events are removed by Auth user deletion through the FK cascade, matching the
 current private profile/reservation policy. A broader account deletion/export or
 competition-record anonymization flow is not implemented by this migration.
 
-Apply after 0004 to an isolated staging database first. No live migration is part
-of this change. Reverting the browser/backend does not require dropping the audit
+Migration 0005 was applied after 0004 to the existing Supabase project on
+2026-10-24 with explicit user approval; see the [deployment receipt](measurements/supabase-deployment-2026-10-24.json).
+Reverting the browser/backend does not require dropping the audit
 table or trigger; retain the additive schema so audit continuity is preserved.
-This is the storage/read-RPC chunk; an in-game name-history viewer, public profile
+The account dialog now includes an owner-only name-history viewer. Public profile
 search, moderation audit tools and handle redirects remain separate work.
 
 Names in admitted rooms and race-grid snapshots remain the identity verified on
@@ -47,3 +48,31 @@ invalid half cursors; and honest baseline migration of an existing project.
 These are single-connection transaction/RLS tests, not hosted Auth/PostgREST or
 multi-connection race tests. The existing profile RPC still serializes same-owner
 updates using its advisory lock and keeps distinct-owner reservations unique.
+
+## Private account viewer
+
+Open **Your racer → Name history** to read saved creation/rename events. A baseline
+is labeled “Name tracking began”; the UI explains that earlier changes may be
+absent. Display-name-only changes show both identities. Names render as text,
+without links or HTML interpretation. Only the signed-in owner can see the page;
+no account email or provider metadata is shown in event rows.
+
+The browser uses the existing owner RPC with paired `(recorded_at,event_id)`
+cursors, preserving microseconds in the original timestamp string. Each page
+replaces the previous one with at most 20 visible rows plus one lookahead; “Latest
+changes” restarts pagination. Failed older-page reads preserve the current rows
+and cursor for retry. There is an eight-second RPC timeout and a generic retry
+message, including when the additive migration has not been applied yet.
+
+Logout, account changes (including A→B→A), disposal and successful profile saves
+cancel/invalidate cached reads. A response from an old request cannot restore
+private rows. Successful saves invalidate history without issuing a hidden read;
+opening the history panel loads a fresh page. Nothing is written to localStorage,
+public profiles, historical race results or the database by this viewer. Apply
+migration 0005 before enabling it in another environment. The existing project
+already has the approved mapped migration.
+
+Focused tests cover malformed/foreign/duplicate/oversized responses, exact cursor
+preservation, bounded pages and retry, account/client-initialization races,
+invalidation/disposal, baseline labels and escaped old/new names. These include
+static React rendering, not browser click or two-device acceptance tests.

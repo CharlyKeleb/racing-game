@@ -27,6 +27,12 @@ export interface BurnoutInput {
   grounded: boolean
 }
 
+/** Internal checkpoint for the same approved configuration; not a client input format. */
+export interface BurnoutState {
+  intensity: number
+  holding: boolean
+}
+
 export class Burnout {
   /** 0..1: how hard the driven tyres are spinning. */
   intensity = 0
@@ -44,6 +50,20 @@ export class Burnout {
       const fall = s.throttle >= BURNOUT_THROTTLE && s.grounded ? FALL_SEC : FALL_SEC / 2
       this.intensity = Math.max(0, this.intensity - dt / fall)
     }
+  }
+
+  /** Allocate a detached checkpoint outside the per-tick update path. */
+  captureState(): BurnoutState {
+    return {
+      intensity: this.intensity,
+      holding: this.holding,
+    }
+  }
+
+  /** Restore a trusted checkpoint with the same config before replaying inputs. */
+  restoreState(state: BurnoutState): void {
+    this.intensity = state.intensity
+    this.holding = state.holding
   }
 
   reset(): void {
