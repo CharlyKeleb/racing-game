@@ -54,6 +54,17 @@ decoded/acknowledged corrections. It is unpaced and opens no sockets. Measured
 JSON payload/capture costs and short compiled memory samples have separate
 reports and fingerprints; none establishes hosted capacity.
 
+## Launch scope update — 2026-10-24
+
+The user approved completing #120 as the deployed, verified two-player private-
+racing foundation. Deferred competitive/account/social/ranked/advanced systems
+are tracked in #143–#147; they remain unfinished. See the
+[launch contract and runbook](PRIVATE_RACING_LAUNCH.md) and preserved
+[original roadmap](ISSUE_120_ORIGINAL_ROADMAP.md). The approved hosting target is
+one shared CPU / 1 GiB machine plus a 1 GiB encrypted volume on the existing Fly
+app, with a US$15/month budget target and no extra replica or region. Actual hosted
+acceptance remains necessary before closing #120.
+
 ## Remaining gates and roadmap
 
 - Run browser network shaping and the broader device matrix. Loopback socket/

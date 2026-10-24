@@ -1,0 +1,46 @@
+{
+  "recordedAt": "2026-10-24",
+  "status": "prepared_not_yet_deployed",
+  "scope": "Two-player private-racing launch; deferred epics #143\u2013#147 retain the broader roadmap.",
+  "approvedResources": {
+    "app": "charly-racing-multiplayer",
+    "region": "jnb",
+    "machines": 1,
+    "sharedCpus": 1,
+    "memoryMiB": 1024,
+    "persistentVolumeGiB": 1,
+    "monthlyTargetUsd": 15,
+    "hardBillingCap": false
+  },
+  "volume": {
+    "id": "vol_vwno7m0g93o9zenv",
+    "name": "practice_results",
+    "encrypted": true
+  },
+  "preparedImage": "registry.fly.io/charly-racing-multiplayer@sha256:eb3bf55e8cbdd062a36d999e076fea2c2ad02033200379118b380cf2638a7b77",
+  "configurationValidated": true,
+  "secretsStaged": true,
+  "secretValuesPrinted": false,
+  "capacityRegression": {
+    "failedBeforeFix": true,
+    "focusedTestsPassed": 15,
+    "practiceSeats": 2,
+    "lobbyOnlySeats": 4
+  },
+  "validation": {
+    "frontendBuildPassed": true,
+    "backendBuildPassed": true,
+    "strictStagingAndArtifactChecksPassed": true,
+    "lintPassed": true,
+    "realPhysicsThreeLapCheckPassed": true,
+    "fullTestsPassed": 3278,
+    "fullFilesPassed": 510,
+    "fullSuiteMaxWorkers": 2
+  },
+  "pending": [
+    "Hosted race deployment/health/volume verification",
+    "Production frontend promotion",
+    "Two-real-account/two-physical-device finished race and matching saved results",
+    "Hosted rematch/reconnect, expiry, durable restart, network/device acceptance"
+  ]
+}

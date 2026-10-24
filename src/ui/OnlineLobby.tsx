@@ -35,7 +35,7 @@ export function OnlineLobby({ onClose, onAccount }: { onClose(): void; onAccount
       <p className="racer-hint">{snapshot?.raceEnabled ? 'Private practice · Two racers · Stock cars' : 'Lobby preview · Networked racing is coming next.'}</p>
       <ConnectionStatus />
       {!connected ? <>
-        <div className="online-intro"><GiCheckeredFlag aria-hidden /><p>A private grid for up to four racers.<br /><span>Create a room, share the code, get everyone ready.</span></p></div>
+        <div className="online-intro"><GiCheckeredFlag aria-hidden /><p>A private grid for you and your rivals.<br /><span>Create a room, share the code, get everyone ready.</span></p></div>
         {account.status !== 'signedIn' || !account.profile ? <>
           <p className="race-setup__note">{account.status === 'signedIn' ? 'Finish your racer profile to join your friends.' : 'Sign in and create your racer to join a private lobby.'}</p>
           <Button variant="primary" onClick={onAccount}>{account.status === 'signedIn' ? 'Create your racer' : 'Sign in'}</Button>

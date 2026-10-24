@@ -52,7 +52,7 @@ export class LobbyRoom extends Room {
     this.isDraining = options.isDraining ?? (() => false)
     this.raceFactory = options.raceFactory
     this.resultWriter = options.resultPersistence
-    this.maxClients = 4
+    this.maxClients = this.raceFactory ? 2 : 4
     this.maxMessagesPerSecond = this.raceFactory ? 80 : 10
     if (this.raceFactory) this.setSimulationInterval((dt) => this.advanceRace(dt), SERVER_TICK_MS)
     this.seatReservationTimeout = 15
@@ -257,7 +257,7 @@ export class LobbyRoom extends Room {
     }, Math.max(0, Math.min(due - Date.now(), 2_147_483_647))))
   }
   snapshot(): LobbySnapshot {
-    return { protocol: LOBBY_PROTOCOL, latencyProbe: true, code: this.code, hostId: this.hostId, racers: [...this.racers.values()].map((r) => ({ ...r })), maxPlayers: 4, track: 'nurburgring', laps: this.laps, draining: this.isDraining(), phase: this.race && this.race.phase !== 'closed' ? this.race.phase : 'lobby', raceEnabled: !!this.raceFactory, ...(this.raceFactory ? { reconnectGraceSeconds: RECONNECT_GRACE_SECONDS, rematchEnabled: !this.isDraining() } : {}), race: this.race?.descriptor ?? null, raceRacers: this.raceRacers, rematchVotes: [...this.rematchVotes], rematchExpiresAt: this.rematchExpiresAt, resultPersistence: this.resultPersistence }
+    return { protocol: LOBBY_PROTOCOL, latencyProbe: true, code: this.code, hostId: this.hostId, racers: [...this.racers.values()].map((r) => ({ ...r })), maxPlayers: this.maxClients, track: 'nurburgring', laps: this.laps, draining: this.isDraining(), phase: this.race && this.race.phase !== 'closed' ? this.race.phase : 'lobby', raceEnabled: !!this.raceFactory, ...(this.raceFactory ? { reconnectGraceSeconds: RECONNECT_GRACE_SECONDS, rematchEnabled: !this.isDraining() } : {}), race: this.race?.descriptor ?? null, raceRacers: this.raceRacers, rematchVotes: [...this.rematchVotes], rematchExpiresAt: this.rematchExpiresAt, resultPersistence: this.resultPersistence }
   }
   private startRace(client: Client): void {
     if (this.isDraining() || this.closing || !this.raceFactory || this.race || this.racers.get(client.sessionId)?.id !== this.hostId) return
