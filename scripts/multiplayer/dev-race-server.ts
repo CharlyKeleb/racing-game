@@ -1,30 +1,38 @@
+import { consoleMetrics } from '../../server/src/MultiplayerMetrics'
 // Explicit local-only runner. Production server/src/index.ts remains lobby-only.
+import { ResultOutbox } from '../../server/src/ResultOutbox'
+import { supabaseResultWriter } from '../../server/src/supabaseResultWriter'
 import { initRapier } from '../../src/engine/PhysicsWorld'
 import { readFile } from 'node:fs/promises'
 import { createBackend } from '../../server/src/server'
 import { supabaseAuthenticator } from '../../server/src/auth'
 import { createRaceFactory, type SimulationBundle } from './race-factory'
 
-const { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, ALLOWED_ORIGINS } = process.env
+const { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, ALLOWED_ORIGINS, SUPABASE_RESULT_SECRET_KEY, RESULT_OUTBOX_DIR } = process.env
 if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY || !ALLOWED_ORIGINS) throw new Error('Set Supabase configuration and explicit allowed origins in server/.env.local')
 const authUrl = new URL(SUPABASE_URL)
 if (authUrl.protocol !== 'https:' && !['127.0.0.1', 'localhost'].includes(authUrl.hostname)) throw new Error('Supabase must use HTTPS.')
+if (!!SUPABASE_RESULT_SECRET_KEY !== !!RESULT_OUTBOX_DIR) throw new Error('Configure both the server result secret and persistent outbox directory, or neither')
+const resultPersistence = SUPABASE_RESULT_SECRET_KEY && RESULT_OUTBOX_DIR
+  ? await ResultOutbox.open(RESULT_OUTBOX_DIR, supabaseResultWriter(SUPABASE_URL, SUPABASE_RESULT_SECRET_KEY)) : undefined
 await initRapier()
 const bundle = JSON.parse(await readFile(new URL('../../.cache/multiplayer/simulation-assets.json', import.meta.url), 'utf8')) as SimulationBundle
-const backend = createBackend({ authenticate: supabaseAuthenticator(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY),
-  origins: ALLOWED_ORIGINS.split(',').map(s => s.trim()).filter(Boolean), raceFactory: createRaceFactory(bundle), maxRooms: 5 })
-await backend.listen(2568, '127.0.0.1')
-console.info('Local development race transport listening on 127.0.0.1:2568; one two-racer simulation maximum')
+if (process.env.MULTIPLAYER_SCHEDULED_INPUTS !== undefined && !['0', '1'].includes(process.env.MULTIPLAYER_SCHEDULED_INPUTS)) throw new Error('MULTIPLAYER_SCHEDULED_INPUTS must be 0 or 1')
+const backend = createBackend({ metrics: consoleMetrics(process.env.MULTIPLAYER_METRICS), authenticate: supabaseAuthenticator(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY),
+  origins: ALLOWED_ORIGINS.split(',').map(s => s.trim()).filter(Boolean), raceFactory: createRaceFactory(bundle, { scheduledInputs: process.env.MULTIPLAYER_SCHEDULED_INPUTS === '1' }), resultPersistence, maxRooms: 1 })
 let stopping = false
 async function stop() {
   if (stopping) return
   stopping = true
-  backend.drain()
   const deadline = setTimeout(() => process.exit(1), 20_000)
   deadline.unref()
-  await backend.gameServer.gracefullyShutdown(false)
+  const report = await backend.shutdown(15_000)
+  console.info('Multiplayer shutdown', report)
+  await resultPersistence?.close()
   clearTimeout(deadline)
-  process.exit(0)
+  process.exit(report.pendingResultWrites ? 1 : 0)
 }
 process.on('SIGTERM', () => void stop())
 process.on('SIGINT', () => void stop())
+await backend.listen(2568, '127.0.0.1')
+console.info('Local development race transport ready', { address: '127.0.0.1:2568', maximumRooms: 1, maximumRacers: 2, resultStorage: !!resultPersistence })

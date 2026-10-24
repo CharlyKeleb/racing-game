@@ -2,13 +2,13 @@ import { keyboardSteeringAngle } from './KeyboardSteering'
 import RAPIER from '@dimforge/rapier3d-compat'
 import * as THREE from 'three'
 import type { InputState } from '../input/InputManager'
-import { Backfire } from './Backfire'
-import { Burnout, BURNOUT_BRAKE, BURNOUT_THROTTLE } from './Burnout'
-import { Drift, type DriftConfig, type DriftGuide } from './Drift'
-import { Drivetrain, type GearRequest } from './Drivetrain'
-import { Nitro } from './Nitro'
+import { Backfire, type BackfireState } from './Backfire'
+import { Burnout, BURNOUT_BRAKE, BURNOUT_THROTTLE, type BurnoutState } from './Burnout'
+import { Drift, type DriftConfig, type DriftGuide, type DriftState } from './Drift'
+import { Drivetrain, type GearRequest, type DrivetrainState } from './Drivetrain'
+import { Nitro, type NitroState } from './Nitro'
 import { Surface, surfaceProps } from './Surface'
-import { Suspension } from './Suspension'
+import { Suspension, type SuspensionState } from './Suspension'
 import { steeringLimit, type SteeringLimitConfig } from './SteeringLimit'
 import { computeTireForces, peakSlipAngle } from './TirePhysics'
 import type { VehicleConfig, WheelConfig } from './VehicleConfig'
@@ -30,6 +30,36 @@ export interface WheelState {
   slide: number
   /** What the tire is on, for grip and for sand / dust effects. */
   surface: Surface
+}
+
+/** Controller checkpoint only: restore the matching rigid-body/world checkpoint separately. */
+export interface VehicleControllerState {
+  version: 1
+  drivetrain: DrivetrainState
+  nitro: NitroState
+  drift: DriftState
+  burnout: BurnoutState
+  backfire: BackfireState
+  driftMode: boolean
+  drafting: number
+  launchPush: number
+  steerAngle: number
+  wheelAngle: number
+  gripTurnRate: number
+  driftThrottle: number
+  forwardSpeed: number
+  braking: number
+  throttle: number
+  brake: number
+  wheels: {
+    suspension: SuspensionState
+    grounded: boolean
+    contactPoint: { x: number; y: number; z: number }
+    spin: number
+    slip: number
+    slide: number
+    surface: Surface
+  }[]
 }
 
 /** Burnout: tread sliding speed at full spin (m/s; smoke is full at 12), extra visual wheel spin (rad/s) and revs (share of redline). */
@@ -593,6 +623,54 @@ export class VehicleController {
   /** Throttle pedal after ramping, 0..1: what the engine actually gets (audio reads it). */
   get throttlePedal(): number {
     return this.drivetrain.gear < 0 ? this.brake : this.throttle
+  }
+
+  /** Detached, JSON-safe state. No capture work or allocation is added to update(). */
+  captureState(): VehicleControllerState {
+    return {
+      version: 1,
+      drivetrain: this.drivetrain.captureState(), nitro: this.nitro.captureState(),
+      drift: this.drift.captureState(), burnout: this.burnout.captureState(), backfire: this.backfire.captureState(),
+      driftMode: this.eventDrift !== null,
+      drafting: this.drafting,
+      launchPush: this.launchPush,
+      steerAngle: this.steerAngle,
+      wheelAngle: this.wheelAngle,
+      gripTurnRate: this.gripTurnRate,
+      driftThrottle: this.driftThrottle,
+      forwardSpeed: this.forwardSpeed,
+      braking: this.braking,
+      throttle: this.throttle,
+      brake: this.brake,
+      wheels: this.wheels.map(w => ({ suspension: w.suspension.captureState(), grounded: w.grounded,
+        contactPoint: { x: w.contactPoint.x, y: w.contactPoint.y, z: w.contactPoint.z },
+        spin: w.spin, slip: w.slip, slide: w.slide, surface: w.surface })),
+    }
+  }
+
+  /** Internal trusted checkpoint, bound to the same approved car/config and track surface sampler. */
+  restoreState(state: VehicleControllerState): void {
+    if (state.version !== 1 || state.wheels.length !== this.wheels.length) throw new Error('Incompatible controller checkpoint')
+    this.drivetrain.restoreState(state.drivetrain); this.nitro.restoreState(state.nitro)
+    this.drift.restoreState(state.drift); this.burnout.restoreState(state.burnout); this.backfire.restoreState(state.backfire)
+    this.setDriftMode(state.driftMode)
+    this.drafting = state.drafting
+    this.launchPush = state.launchPush
+    this.steerAngle = state.steerAngle
+    this.wheelAngle = state.wheelAngle
+    this.gripTurnRate = state.gripTurnRate
+    this.driftThrottle = state.driftThrottle
+    this.forwardSpeed = state.forwardSpeed
+    this.braking = state.braking
+    this.throttle = state.throttle
+    this.brake = state.brake
+    for (let i = 0; i < this.wheels.length; i++) {
+      const wheel = this.wheels[i], saved = state.wheels[i]
+      wheel.suspension.restoreState(saved.suspension)
+      wheel.grounded = saved.grounded
+      wheel.contactPoint.set(saved.contactPoint.x, saved.contactPoint.y, saved.contactPoint.z)
+      wheel.spin = saved.spin; wheel.slip = saved.slip; wheel.slide = saved.slide; wheel.surface = saved.surface
+    }
   }
 
   reset(): void {

@@ -24,6 +24,14 @@ export function torqueAt(rpm: number, curve: [number, number][]): number {
   return curve[curve.length - 1][1]
 }
 
+/** Internal checkpoint for the same approved configuration; not a client input format. */
+export interface DrivetrainState {
+  gear: number
+  manual: boolean
+  rpm: number
+  shiftTimer: number
+}
+
 /**
  * Engine + gearbox. Pure — fed wheel speed, returns force at the driven
  * wheels. Automatic by default; with `manual` set the driver picks forward gears
@@ -137,6 +145,24 @@ export class Drivetrain {
   shift(gear: Gear): void {
     this.gear = gear
     this.shiftTimer = this.cfg.shiftTimeSec
+  }
+
+  /** Allocate a detached checkpoint outside the per-tick update path. */
+  captureState(): DrivetrainState {
+    return {
+      gear: this.gear,
+      manual: this.manual,
+      rpm: this.rpm,
+      shiftTimer: this.shiftTimer,
+    }
+  }
+
+  /** Restore a trusted checkpoint with the same config before replaying inputs. */
+  restoreState(state: DrivetrainState): void {
+    this.gear = state.gear
+    this.manual = state.manual
+    this.rpm = state.rpm
+    this.shiftTimer = state.shiftTimer
   }
 
   reset(): void {

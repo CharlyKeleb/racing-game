@@ -35,7 +35,7 @@ export type TestGame = Game & Record<string, any>
  */
 export function makeTestGame(fields: Record<string, unknown> = {}): TestGame & { stubbed: Set<string> } {
   const stubbed = new Set<string>()
-  const base = Object.assign(Object.create(Game.prototype), { disposed: false }, fields, { stubbed })
+  const base = Object.assign(Object.create(Game.prototype), { disposed: false, onlineRaceId: null, onlineEnding: false }, fields, { stubbed })
   return new Proxy(base, {
     get(target, key, receiver) {
       if (typeof key === 'symbol' || key in target) return Reflect.get(target, key, receiver)

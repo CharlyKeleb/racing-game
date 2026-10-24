@@ -1,0 +1,66 @@
+{
+  "schema": 1,
+  "recordedAt": "2026-10-23T22:35:18.244Z",
+  "revision": "5a906841edcc465ecece73a10f1fa990dc8365fd",
+  "dirtyWorktree": true,
+  "benchmarkSourceSha256": "ca35d09d7bac43d2ecb557df44a1214fe459890e64bcd825e5174e0013904096",
+  "fingerprint": "5cef5dd9817b20e53db2d14d2f188dfcec563988ceee526734ac1d8f9fa9a93d",
+  "simulationVersion": 1,
+  "raceProtocol": 3,
+  "environment": {
+    "node": "v24.7.0",
+    "platform": "darwin",
+    "arch": "arm64",
+    "cpu": "Apple M1 Pro"
+  },
+  "racers": 2,
+  "simulatedSeconds": 30,
+  "measuredTicks": 1800,
+  "elapsedMs": 433.04391699999996,
+  "cpuMs": 1023.168,
+  "serverAndHarnessTickMs": {
+    "count": 1800,
+    "p50": 0.15162499999996726,
+    "p95": 0.43612500000006094,
+    "p99": 1.1689590000000294,
+    "max": 9.619416999999999
+  },
+  "correctionEncodeMs": {
+    "count": 600,
+    "p50": 0.01841699999999946,
+    "p95": 0.04475000000002183,
+    "p99": 0.11533299999996416,
+    "max": 0.7586669999999458
+  },
+  "correctionDecodeMs": {
+    "count": 600,
+    "p50": 0.03983299999993051,
+    "p95": 0.10654199999999037,
+    "p99": 0.4885420000000522,
+    "max": 3.498666999999955
+  },
+  "correctionBytes": {
+    "count": 600,
+    "p50": 3157,
+    "p95": 3212,
+    "p99": 3220,
+    "max": 3224
+  },
+  "publicSnapshotBytes": {
+    "count": 600,
+    "p50": 1744,
+    "p95": 1776,
+    "p99": 1782,
+    "max": 1785
+  },
+  "privateJsonBytesPerSimulatedSecondPerRacer": [
+    31570.633333333335,
+    31583.1
+  ],
+  "sampledPeakRssMiB": 462.078125,
+  "distanceMetres": [
+    796,
+    797
+  ],
+  "scope": "Local unpaced real-track AI/session/scheduled-input/public JSON/private correction capture and browser decoder measurement. Server sample includes AI/harness work and excludes decoder time. CPU/RSS include the entire development process. No sockets, scheduling, renderer/prediction world, database, container, network timing or Fly capacity claim."
+}

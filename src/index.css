@@ -1603,3 +1603,80 @@ html, body { overscroll-behavior: none; }
   .online-room-code strong { font-size: 24px; }
   .online-join { grid-template-columns: 1fr; }
 }
+
+/* Private online practice. Separate from local lap/progression HUD. */
+.online-race { position: absolute; inset: 0; pointer-events: none; color: #f3f6fc; }
+.online-race__header { display: flex; justify-content: space-between; align-items: start; gap: 24px; margin: 28px 32px; }
+.online-race__header > div { padding: 16px 24px; background: linear-gradient(110deg, #111923ed, #111923aa); border-left: 3px solid var(--accent, #ffcf24); }
+.online-race__header strong { display: block; margin-top: 6px; font-size: clamp(18px, 2vw, 28px); text-transform: uppercase; font-style: italic; }
+.online-race__header p { font-size: 12px; opacity: .7; margin: 8px 0 0; }
+.online-race .ui-btn, .online-race .touch { pointer-events: auto; }
+.online-race__roster { position: absolute; top: 145px; right: 32px; display: grid; gap: 12px; background: #111923c9; padding: 14px 22px; border-right: 2px solid #60daf8; }
+.online-race__roster strong, .online-race__roster span { display: block; }
+.online-race__roster span { opacity: .6; font-size: 11px; margin-top: 3px; }
+.online-race__gauges { position: absolute; right: 36px; bottom: 35px; padding: 18px 25px; min-width: 180px; background: linear-gradient(120deg, #11192380, #111923e8); border-bottom: 3px solid #60daf8; transform: skew(-5deg); }
+.online-race__gauges > strong { display: block; font-size: 72px; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.online-race__gauges small { margin-left: 10px; font-size: 13px; font-weight: 400; }
+.online-race__gauges b { float: right; color: #ffdc42; font-size: 24px; }
+.online-race__gauges label { display: flex; gap: 12px; align-items: center; margin-top: 8px; font-size: 11px; }
+.online-race__gauges meter { flex: 1; accent-color: #60daf8; }
+.online-race__keys { position: absolute; bottom: 20px; left: 32px; font-size: 12px; opacity: .75; }
+.online-race__message { position: absolute; top: 43%; left: 50%; transform: translate(-50%, -50%); display: grid; gap: 10px; padding: 24px 36px; background: #111923e0; text-align: center; }
+.online-race__message strong { font-size: 25px; text-transform: uppercase; font-style: italic; }
+.online-race__message span { font-size: 13px; opacity: .7; }
+.online-race__delay { position: absolute; top: 28%; left: 50%; transform: translateX(-50%); padding: 12px 24px; background: #422d15ec; color: #ffdf8b; }
+.online-race__menu { max-width: 430px; display: grid; gap: 16px; pointer-events: auto; }
+.online-race__menu p { line-height: 1.6; opacity: .8; }
+@media (pointer: coarse) {
+  .online-race__header { margin: 12px 16px; gap: 10px; }
+  .online-race__header > div { padding: 10px 14px; }
+  .online-race__header p { display: none; }
+  .online-race__roster { top: 90px; right: 16px; padding: 8px 12px; gap: 6px; }
+  .online-race__gauges { bottom: auto; top: 160px; right: 16px; min-width: 125px; padding: 10px 16px; }
+  .online-race__gauges > strong { font-size: 42px; }
+}
+
+.online-race__dialog { border: 0; background: transparent; color: inherit; padding: 0; width: min(430px, calc(100vw - 32px)); pointer-events: auto; }
+.online-race__dialog::backdrop { background: #0009; }
+
+.online-race__timing { position: absolute; top: 155px; left: 32px; padding: 16px 24px; display: grid; gap: 8px; background: #111923de; border-left: 2px solid #60daf8; }
+.online-race__timing span { font: 700 28px var(--font-display); font-variant-numeric: tabular-nums; }
+.online-race__timing small { opacity: .7; }
+.online-race__results { width: min(680px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow: auto; }
+.online-race__results .ui-panel { display: grid; gap: 20px; }
+.online-race__results p { font-size: 13px; line-height: 1.6; color: var(--muted); }
+.online-race__results table { width: 100%; border-collapse: collapse; font-size: 13px; text-align: left; font-variant-numeric: tabular-nums; }
+.online-race__results td, .online-race__results th { padding: 12px 6px; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+.online-race__results thead { color: var(--muted); font-size: 11px; text-transform: uppercase; }
+@media (max-width: 700px) {
+  .online-race__timing { top: 90px; left: 16px; padding: 10px 14px; font-size: 11px; max-width: 45%; }
+  .online-race__timing span { font-size: 22px; }
+}
+
+.account-tabs { display: flex; flex-wrap: wrap; gap: 8px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+.account-tabs button { padding: 10px 14px; border: 1px solid var(--line); color: var(--muted); background: transparent; font: inherit; cursor: pointer; }
+.account-tabs button[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); background: #ffd2000a; }
+.practice-history { display: grid; gap: 16px; padding: 20px 0; }
+.practice-history header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.practice-history h3 { font: italic 800 24px var(--font-display); text-transform: uppercase; margin: 6px 0 0; }
+.practice-history__scroll { overflow-x: auto; }
+.practice-history table { width: 100%; border-collapse: collapse; text-align: left; font-size: 12px; font-variant-numeric: tabular-nums; }
+.practice-history caption { text-align: left; color: var(--muted); padding-bottom: 8px; }
+.practice-history td, .practice-history th { padding: 14px 8px; border-bottom: 1px solid var(--line); }
+.practice-history td { white-space: nowrap; }
+.practice-history thead { font-size: 10px; text-transform: uppercase; color: var(--muted); }
+.practice-history tbody th { min-width: 160px; }
+.practice-history tbody span, .practice-history tbody small { display: block; margin-top: 5px; color: var(--muted); font-size: 11px; font-weight: 400; }
+.practice-history__empty { padding: 24px 16px; border: 1px dashed var(--line); color: var(--muted); text-align: center; line-height: 1.6; }
+
+.identity-history__events { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
+.identity-history__events li { padding: 16px; border: 1px solid var(--line); }
+.identity-history__event-header { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; }
+.identity-history__event-header time { font-size: 11px; color: var(--muted); }
+.identity-history dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px 16px; margin: 16px 0 0; font-size: 12px; }
+.identity-history dt { color: var(--muted); }
+.identity-history dd { margin: 0; overflow-wrap: anywhere; }
+.identity-history dd span { display: block; margin-top: 4px; color: var(--muted); }
+
+.connection-status { margin: 8px 0; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.connection-status strong { font: inherit; color: inherit; }

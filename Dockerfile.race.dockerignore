@@ -1,0 +1,29 @@
+# Allow only build sources and trusted assets into this image's build context.
+**
+!package.json
+!package-lock.json
+!vite.race.config.ts
+!tsconfig.app.json
+!tsconfig.race.json
+!src/
+!src/**
+!server/
+!server/package.json
+!server/package-lock.json
+!server/src/
+!server/src/**
+!scripts/
+!scripts/multiplayer/
+!scripts/multiplayer/**
+!public/
+!public/models/
+!public/models/cars/
+!public/models/cars/**
+!public/models/tracks/
+!public/models/tracks/nurburgring/
+!public/models/tracks/nurburgring/**
+# Never include configuration secrets, even below an allowed source directory.
+**/.env*
+**/*.local
+**/node_modules
+**/.git

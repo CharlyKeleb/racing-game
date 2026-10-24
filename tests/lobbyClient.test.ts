@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-const sdk = vi.hoisted(() => ({ consume: vi.fn() }))
-vi.mock('@colyseus/sdk', () => ({ Client: class { consumeSeatReservation = sdk.consume } }))
+const sdk = vi.hoisted(() => ({ consume: vi.fn(), reconnect: vi.fn() }))
+vi.mock('@colyseus/sdk', () => ({ Client: class { consumeSeatReservation = sdk.consume; reconnect = sdk.reconnect } }))
 let lobby: typeof import('../src/multiplayer/LobbyClient')
 let account: typeof import('../src/stores/accountStore')
 function fakeRoom() {
-  return { sessionId: 'seat', reconnection: { enabled: true }, connection: { isOpen: true }, send: vi.fn(), leave: vi.fn(async () => {}), onMessage: vi.fn(), onLeave: vi.fn(), onError: vi.fn() }
+  return { reconnectionToken: 'test-only-seat-secret', sessionId: 'seat', reconnection: { enabled: true }, connection: { isOpen: true }, send: vi.fn(), leave: vi.fn(async () => {}), onMessage: vi.fn(), onLeave: vi.fn(), onError: vi.fn() }
 }
 beforeEach(async () => {
   vi.resetModules()
@@ -12,7 +12,7 @@ beforeEach(async () => {
   account = await import('../src/stores/accountStore')
   account.accountStore.setState({ status: 'signedIn', player: { id: 'player1', email: null, name: null, avatarUrl: null } })
   lobby = await import('../src/multiplayer/LobbyClient')
-  sdk.consume.mockReset()
+  sdk.consume.mockReset(); sdk.reconnect.mockReset()
 })
 afterEach(async () => { await lobby.leaveLobby(); vi.useRealTimers(); vi.unstubAllEnvs(); vi.unstubAllGlobals() })
 it('requests a private seat with a bearer token and syncs after joining', async () => {
@@ -65,11 +65,11 @@ it('accepts only ordered frames for the active race, sends bounded sequenced con
   vi.stubGlobal('fetch', async () => new Response(JSON.stringify({ sessionId: 'seat' })))
   await lobby.enterLobby('create', '', 'porsche911', async () => 'test-token')
   const handlers = new Map(room.onMessage.mock.calls)
-  const race = { protocol: 1, id: 'race-a', fingerprint: 'a'.repeat(64), simulationVersion: 1, tickRate: 60, snapshotRate: 20, countdownTicks: 180 }
+  const race = { protocol: 3 as const, id: 'race-a', fingerprint: 'a'.repeat(64), simulationVersion: 1, tickRate: 60, snapshotRate: 20, countdownTicks: 180 }
   const state = { protocol: 1, phase: 'loading', raceEnabled: true, race, racers: [] }
   handlers.get('lobby')!(state)
   lobby.acknowledgeRaceLoaded(race)
-  expect(room.send).toHaveBeenCalledWith('loaded', { protocol: 1, raceId: 'race-a', fingerprint: race.fingerprint, simulationVersion: 1 })
+  expect(room.send).toHaveBeenCalledWith('loaded', { protocol: 3, raceId: 'race-a', fingerprint: race.fingerprint, simulationVersion: 1 })
   const drive = { throttle: 1, brake: 0, steer: 0, handbrake: false, nitro: false }
   expect(lobby.sendRaceInput(drive)).toBeNull()
   handlers.get('lobby')!({ ...state, phase: 'racing' })
@@ -91,4 +91,179 @@ it('accepts only ordered frames for the active race, sends bounded sequenced con
   handlers.get('race')!({ raceId: 'race-a', tick: 1000, phase: 'racing', vehicles: [] })
   expect(lobby.lobbyStore.getState().raceSnapshot).toBeNull()
   now.mockRestore()
+})
+
+it('keeps the active race during a drop, suppresses outbound queues, and resumes only after fresh Auth and sequence synchronization', async () => {
+  const original = fakeRoom(), recovered = fakeRoom(), getToken = vi.fn(async () => 'fresh-test-token')
+  sdk.consume.mockResolvedValue(original); sdk.reconnect.mockResolvedValue(recovered)
+  vi.stubGlobal('fetch', async () => new Response(JSON.stringify({ sessionId: 'seat' })))
+  await lobby.enterLobby('create', '', 'porsche911', getToken)
+  const handlers = new Map(original.onMessage.mock.calls)
+  const race = { id: 'race-a', protocol: 3, fingerprint: 'a'.repeat(64), simulationVersion: 1 }
+  const state = { protocol: 1, phase: 'racing', raceEnabled: true, reconnectGraceSeconds: 15, race, racers: [] }
+  handlers.get('lobby')!(state)
+  const input = { throttle: 1, brake: 0, steer: 0, handbrake: false, nitro: false }
+  const now = vi.spyOn(performance, 'now'); now.mockReturnValue(100)
+  expect(lobby.sendRaceInput(input)).toBe(0)
+  original.connection.isOpen = false
+  original.onLeave.mock.calls[0][0](1006)
+  expect(lobby.lobbyStore.getState()).toMatchObject({ status: 'reconnecting', snapshot: state })
+  expect(lobby.sendRaceInput(input)).toBeNull()
+  lobby.setLobbyReady(true)
+  expect(original.send).not.toHaveBeenCalledWith('ready', true)
+  await vi.waitFor(() => expect(recovered.send).toHaveBeenCalledWith('refresh', 'fresh-test-token'))
+  expect(sdk.reconnect).toHaveBeenCalledWith('test-only-seat-secret')
+  expect(getToken).toHaveBeenCalledTimes(2)
+  expect(recovered.reconnection).toMatchObject({ enabled: false, maxEnqueuedMessages: 0 })
+  expect(lobby.sendRaceInput(input)).toBeNull()
+  const resumed = new Map(recovered.onMessage.mock.calls)
+  resumed.get('lobby')!(state)
+  resumed.get('race')!({ raceId: race.id, tick: 300, phase: 'racing', vehicles: [] })
+  resumed.get('resumed')!({ raceId: race.id, nextInputSequence: 4 })
+  expect(lobby.lobbyStore.getState()).toMatchObject({ status: 'connected', connectionEpoch: 1 })
+  now.mockReturnValue(1000)
+  expect(lobby.sendRaceInput(input)).toBe(4)
+  handlers.get('lobby')!({ ...state, race: null })
+  expect(lobby.lobbyStore.getState().snapshot?.race?.id).toBe(race.id)
+  now.mockRestore()
+})
+it('cancels recovery on logout and releases a connection that finishes after cancellation', async () => {
+  const original = fakeRoom(), recovered = fakeRoom()
+  sdk.consume.mockResolvedValue(original)
+  let finish!: (room: ReturnType<typeof fakeRoom>) => void
+  sdk.reconnect.mockImplementation(() => new Promise(resolve => { finish = resolve }))
+  vi.stubGlobal('fetch', async () => new Response(JSON.stringify({ sessionId: 'seat' })))
+  await lobby.enterLobby('create', '', 'porsche911', async () => 'test-token')
+  new Map(original.onMessage.mock.calls).get('lobby')!({ reconnectGraceSeconds: 15, race: null })
+  original.connection.isOpen = false; original.onLeave.mock.calls[0][0](1006)
+  account.accountStore.setState({ player: null })
+  finish(recovered)
+  await vi.waitFor(() => expect(recovered.leave).toHaveBeenCalledTimes(1))
+  expect(recovered.send).not.toHaveBeenCalled()
+  expect(lobby.lobbyStore.getState().status).toBe('idle')
+})
+it('bounds a stalled reconnect handshake to fifteen seconds and ignores a late success', async () => {
+  vi.useFakeTimers()
+  const original = fakeRoom(), recovered = fakeRoom()
+  sdk.consume.mockResolvedValue(original)
+  let finish!: (room: ReturnType<typeof fakeRoom>) => void
+  sdk.reconnect.mockImplementation(() => new Promise(resolve => { finish = resolve }))
+  vi.stubGlobal('fetch', async () => new Response(JSON.stringify({ sessionId: 'seat' })))
+  await lobby.enterLobby('create', '', 'porsche911', async () => 'test-token')
+  new Map(original.onMessage.mock.calls).get('lobby')!({ reconnectGraceSeconds: 15, race: null })
+  original.connection.isOpen = false; original.onLeave.mock.calls[0][0](1006)
+  await vi.advanceTimersByTimeAsync(15_001)
+  expect(lobby.lobbyStore.getState()).toMatchObject({ status: 'idle', error: expect.stringContaining('in time') })
+  finish(recovered); await vi.advanceTimersByTimeAsync(0)
+  expect(recovered.leave).toHaveBeenCalledTimes(1)
+  expect(recovered.send).not.toHaveBeenCalled()
+})
+it('does not reconnect against lobby-only servers or after explicit session rejection', async () => {
+  const original = fakeRoom(); sdk.consume.mockResolvedValue(original)
+  vi.stubGlobal('fetch', async () => new Response(JSON.stringify({ sessionId: 'seat' })))
+  await lobby.enterLobby('create', '', 'porsche911', async () => 'test-token')
+  original.connection.isOpen = false; original.onLeave.mock.calls[0][0](1006)
+  expect(sdk.reconnect).not.toHaveBeenCalled()
+  expect(lobby.lobbyStore.getState().status).toBe('idle')
+})
+it('binds rematch consent to the active finished race and suppresses it offline', async () => {
+  const room = fakeRoom(); sdk.consume.mockResolvedValue(room)
+  vi.stubGlobal('fetch', async () => new Response(JSON.stringify({ sessionId: 'seat' })))
+  await lobby.enterLobby('create', '', 'porsche911', async () => 'test-token')
+  const state = { phase: 'racing', race: { id: 'first' } }
+  const receive = new Map(room.onMessage.mock.calls).get('lobby')!
+  receive(state); room.send.mockClear()
+  lobby.setRematchReady(true); expect(room.send).not.toHaveBeenCalled()
+  receive({ ...state, phase: 'finished' }); lobby.setRematchReady(true)
+  expect(room.send).toHaveBeenLastCalledWith('rematch', { raceId: 'first', ready: true })
+  lobby.setRematchReady(false)
+  expect(room.send).toHaveBeenLastCalledWith('rematch', { raceId: 'first', ready: false })
+  room.send.mockClear(); room.connection.isOpen = false
+  lobby.setRematchReady(true); expect(room.send).not.toHaveBeenCalled()
+  room.connection.isOpen = true
+  receive({ ...state, phase: 'loading', race: { id: 'second' } }); lobby.setRematchReady(true)
+  expect(room.send).not.toHaveBeenCalled()
+})
+
+it('explains a maintenance room closure without asking for unnecessary reauthentication', async () => {
+  const room = fakeRoom(); sdk.consume.mockResolvedValue(room)
+  vi.stubGlobal('fetch', async () => new Response(JSON.stringify({ sessionId: 'seat' })))
+  await lobby.enterLobby('create', '', 'porsche911', async () => 'test-token')
+  room.onLeave.mock.calls[0][0](4011)
+  expect(lobby.lobbyStore.getState()).toMatchObject({ status: 'idle', error: 'The room closed for a restart or expiry. Create or join a new lobby.' })
+  expect(sdk.reconnect).not.toHaveBeenCalled()
+})
+
+it('probes only an advertised capability, matches echoes and clears stale RTT on leave', async () => {
+  vi.useFakeTimers()
+  const now = vi.spyOn(performance, 'now').mockReturnValue(100)
+  try {
+    const room = fakeRoom(); sdk.consume.mockResolvedValue(room)
+    vi.stubGlobal('fetch', async () => new Response(JSON.stringify({ sessionId: 'seat' })))
+    await lobby.enterLobby('create', '', 'porsche911', async () => 'test-token')
+    const receive = new Map(room.onMessage.mock.calls)
+    receive.get('lobby')!({ race: null })
+    expect(room.send).not.toHaveBeenCalledWith('latency', expect.anything())
+    receive.get('lobby')!({ latencyProbe: true, race: null })
+    expect(room.send).toHaveBeenLastCalledWith('latency', 0)
+    now.mockReturnValue(140); receive.get('latency')!(0)
+    expect(lobby.lobbyStore.getState().connectionLatency).toEqual({ rttMs: 40, variationMs: 0, samples: 1 })
+    now.mockReturnValue(2100); await vi.advanceTimersByTimeAsync(2000)
+    expect(room.send).toHaveBeenLastCalledWith('latency', 1)
+    now.mockReturnValue(2160); receive.get('latency')!(0)
+    expect(lobby.lobbyStore.getState().connectionLatency?.rttMs).toBe(40)
+    receive.get('latency')!(1)
+    expect(lobby.lobbyStore.getState().connectionLatency).toEqual({ rttMs: 60, variationMs: 20, samples: 2 })
+    now.mockReturnValue(8100); await vi.advanceTimersByTimeAsync(2000)
+    expect(lobby.lobbyStore.getState().connectionLatency).toBeNull()
+    await lobby.leaveLobby()
+    room.send.mockClear(); await vi.advanceTimersByTimeAsync(10_000)
+    receive.get('latency')!(2)
+    expect(room.send).not.toHaveBeenCalled()
+    expect(lobby.lobbyStore.getState().connectionLatency).toBeNull()
+  } finally { now.mockRestore() }
+})
+it('restarts probes after authenticated recovery and ignores echoes from the old socket', async () => {
+  const original = fakeRoom(), recovered = fakeRoom()
+  sdk.consume.mockResolvedValue(original); sdk.reconnect.mockResolvedValue(recovered)
+  vi.stubGlobal('fetch', async () => new Response(JSON.stringify({ sessionId: 'seat' })))
+  const now = vi.spyOn(performance, 'now').mockReturnValue(100)
+  try {
+    await lobby.enterLobby('create', '', 'porsche911', async () => 'test-token')
+    const old = new Map(original.onMessage.mock.calls)
+    const state = { latencyProbe: true, reconnectGraceSeconds: 15, race: null }
+    old.get('lobby')!(state)
+    now.mockReturnValue(150); old.get('latency')!(0)
+    expect(lobby.lobbyStore.getState().connectionLatency?.rttMs).toBe(50)
+    original.connection.isOpen = false; original.onLeave.mock.calls[0][0](1006)
+    expect(lobby.lobbyStore.getState().connectionLatency).toBeNull()
+    await vi.waitFor(() => expect(recovered.send).toHaveBeenCalledWith('refresh', 'test-token'))
+    const fresh = new Map(recovered.onMessage.mock.calls)
+    fresh.get('lobby')!(state)
+    expect(recovered.send).not.toHaveBeenCalledWith('latency', expect.anything())
+    fresh.get('resumed')!({ raceId: null, nextInputSequence: 0 })
+    expect(recovered.send).toHaveBeenLastCalledWith('latency', 0)
+    old.get('latency')!(0)
+    expect(lobby.lobbyStore.getState().connectionLatency).toBeNull()
+    now.mockReturnValue(230); fresh.get('latency')!(0)
+    expect(lobby.lobbyStore.getState().connectionLatency).toEqual({ rttMs: 80, variationMs: 0, samples: 1 })
+  } finally { now.mockRestore() }
+})
+
+it('negotiates scheduled practice controls and explicitly clears them before mailbox fallback', async () => {
+  const room = fakeRoom(); sdk.consume.mockResolvedValue(room)
+  vi.stubGlobal('fetch', async () => new Response(JSON.stringify({ sessionId: 'seat' })))
+  await lobby.enterLobby('create', '', 'porsche911', async () => 'test-token')
+  const receive = new Map(room.onMessage.mock.calls).get('lobby')!
+  const input = { throttle: 1, brake: 0, steer: .2, handbrake: false, nitro: false }
+  receive({ phase: 'racing', race: { id: 'race' } })
+  expect(lobby.sendScheduledRaceInput(200, input)).toBeNull()
+  receive({ phase: 'racing', race: { id: 'race', scheduledInputVersion: 1 } })
+  expect(lobby.sendScheduledRaceInput(200, input)).toBe(0)
+  expect(room.send).toHaveBeenLastCalledWith('scheduledInput', expect.objectContaining({ version: 1, raceId: 'race', sequence: 0, tick: 200 }))
+  expect(lobby.sendScheduledRaceInput(200, input)).toBeNull()
+  expect(lobby.sendRaceInput(input)).toBeNull()
+  lobby.restoreMailboxControls()
+  expect(room.send).toHaveBeenLastCalledWith('inputMode', { version: 1, raceId: 'race', mode: 'mailbox' })
+  expect(lobby.sendRaceInput(input)).toBe(1)
 })

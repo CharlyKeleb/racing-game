@@ -1,0 +1,98 @@
+{
+  "recordedAt": "2026-10-24T11:30:16.907659+00:00",
+  "projectRef": "uqxxdjxiqczgigyifldl",
+  "projectName": "Racing-Simulator",
+  "region": "eu-central-1",
+  "approval": "User explicitly approved the three live migrations.",
+  "status": "applied_schema_metadata_verified",
+  "migrations": [
+    {
+      "version": "20261024111821",
+      "source": "0003_online_practice_history.sql",
+      "sha256": "662e5ae4cc8989806d3cf98c110bb0f94a684e653299eca2141b4ae884cc898e"
+    },
+    {
+      "version": "20261024111822",
+      "source": "0004_online_practice_retirements.sql",
+      "sha256": "6a44e9b23fbd3f7cf12220878a4f7c8f9da84b13f835f1cb5b867d6cc44701f1"
+    },
+    {
+      "version": "20261024111823",
+      "source": "0005_racer_identity_audit.sql",
+      "sha256": "c070bc4c27c77f3cf5d62a27a94278095adabb5f1483f87f20a4c1c253c2f675"
+    }
+  ],
+  "apply": {
+    "command": "supabase db push --profile supabase --linked --workdir .cache/multiplayer/supabase-deploy --yes",
+    "exitCode": 0,
+    "allThreeReportedApplied": true
+  },
+  "schemaMetadata": {
+    "command": "supabase gen types typescript --profile supabase --linked --schema public --workdir .cache/multiplayer/supabase-deploy",
+    "exitCode": 0,
+    "tablesConfirmed": [
+      "online_practice_races",
+      "online_practice_history",
+      "racer_identity_events"
+    ],
+    "retirementColumnsConfirmed": [
+      "retired_ticks",
+      "dnf_reason"
+    ],
+    "functionsConfirmed": [
+      "record_online_practice",
+      "my_online_practice_history",
+      "my_racer_identity_history"
+    ]
+  },
+  "followUp": {
+    "migrationList": {
+      "exitCode": 0,
+      "localAndRemoteVersionsMatch": [
+        "20261023134901",
+        "20261024111821",
+        "20261024111822",
+        "20261024111823"
+      ]
+    },
+    "noPendingDryRun": {
+      "exitCode": 0,
+      "message": "Remote database is up to date."
+    },
+    "liveSqlLint": {
+      "exitCode": 0,
+      "warnings": [
+        {
+          "function": "public.record_online_practice",
+          "variable": "seen",
+          "sqlState": "42804",
+          "message": "text to uuid[] initialization cast warning"
+        }
+      ],
+      "errors": []
+    },
+    "temporaryAuthenticationBlock": "Initial concurrent CLI checks failed; sequential retries succeeded."
+  },
+  "localEvidence": {
+    "testsPassed": 3273,
+    "suitesPassed": 508,
+    "storageTestsPassed": 22,
+    "auditTestsPassed": 5,
+    "preparationTestsPassed": 3,
+    "lintPassed": true,
+    "strictPreparationTestTypesPassed": true
+  },
+  "remaining": [
+    "Real Auth tokens, HTTP gateway and expiry acceptance",
+    "Server-only result credentials and persistent outbox configuration",
+    "Hosted capacity and budget",
+    "Two physical devices with authenticated accounts"
+  ],
+  "scope": "Only the three explicitly approved live schema migrations were applied. No backend/frontend deployment, hosting purchase or GitHub push.",
+  "subsequentLiveSqlAcceptance": {
+    "receipt": "supabase-acceptance-2026-10-24.json",
+    "testsPassed": 6,
+    "rollbackCompleted": true,
+    "resultFunctionExecutedSuccessfully": true
+  }
+}

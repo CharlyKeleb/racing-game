@@ -152,6 +152,27 @@ export interface DriftInput {
   allowBrakeTap?: boolean
 }
 
+/** Internal checkpoint for the same approved configuration; not a client input format. */
+export interface DriftState {
+  amount: number
+  active: boolean
+  exiting: boolean
+  entry: number
+  direction: number
+  score: number
+  lastScore: number
+  sinceEnd: number | null
+  brakeHeld: number
+  steeredWhileBraking: boolean
+  tapArm: number
+  counter: number
+  brakeArm: number
+  downshiftArm: number
+  wasBraking: boolean
+  calm: number
+  exitTimer: number
+}
+
 export class Drift {
   /** 0..1: how much drift handling is applied right now (eased). */
   amount = 0
@@ -297,6 +318,50 @@ export class Drift {
   rearGripScale(throttle: number, cfg: DriftConfig): number {
     const drifting = cfg.rearGrip - cfg.throttleGripLoss * throttle
     return 1 - this.amount * (1 - drifting)
+  }
+
+  /** Allocate a detached checkpoint outside the per-tick update path. Infinity sentinels use null. */
+  captureState(): DriftState {
+    return {
+      amount: this.amount,
+      active: this.active,
+      exiting: this.exiting,
+      entry: this.entry,
+      direction: this.direction,
+      score: this.score,
+      lastScore: this.lastScore,
+      sinceEnd: this.sinceEnd === Infinity ? null : this.sinceEnd,
+      brakeHeld: this.brakeHeld,
+      steeredWhileBraking: this.steeredWhileBraking,
+      tapArm: this.tapArm,
+      counter: this.counter,
+      brakeArm: this.brakeArm,
+      downshiftArm: this.downshiftArm,
+      wasBraking: this.wasBraking,
+      calm: this.calm,
+      exitTimer: this.exitTimer,
+    }
+  }
+
+  /** Restore a trusted checkpoint with the same config before replaying inputs. */
+  restoreState(state: DriftState): void {
+    this.amount = state.amount
+    this.active = state.active
+    this.exiting = state.exiting
+    this.entry = state.entry
+    this.direction = state.direction
+    this.score = state.score
+    this.lastScore = state.lastScore
+    this.sinceEnd = state.sinceEnd ?? Infinity
+    this.brakeHeld = state.brakeHeld
+    this.steeredWhileBraking = state.steeredWhileBraking
+    this.tapArm = state.tapArm
+    this.counter = state.counter
+    this.brakeArm = state.brakeArm
+    this.downshiftArm = state.downshiftArm
+    this.wasBraking = state.wasBraking
+    this.calm = state.calm
+    this.exitTimer = state.exitTimer
   }
 
   reset(): void {

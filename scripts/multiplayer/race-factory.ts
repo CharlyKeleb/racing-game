@@ -2,7 +2,7 @@ import { HeadlessSimulation, SIMULATION_VERSION, type SimulationTrack } from '..
 import { startingGrid } from '../../src/racing/StartingGrid'
 import { resolveVehicleConfig, type VehicleConfig } from '../../src/vehicles/VehicleConfig'
 import type { RaceFactory, ServerRaceSimulation } from '../../server/src/RaceSession'
-import { LOBBY_CARS, type RaceVehicleState } from '../../server/src/protocol'
+import { CORRECTION_VERSION, LOBBY_CARS, type RaceVehicleState } from '../../server/src/protocol'
 
 export interface SimulationBundle {
   format: number
@@ -12,7 +12,7 @@ export interface SimulationBundle {
 }
 
 /** Local development adapter. One active world until production memory/capacity is established. */
-export function createRaceFactory(bundle: SimulationBundle): RaceFactory {
+export function createRaceFactory(bundle: SimulationBundle, options: { scheduledInputs?: boolean } = {}): RaceFactory {
   if (bundle.format !== 1 || !/^[a-f0-9]{64}$/.test(bundle.fingerprint) || bundle.track.id !== 'nurburgring') throw new Error('Invalid simulation asset package')
   const configs = new Map(LOBBY_CARS.map(id => {
     if (!bundle.cars[id]) throw new Error(`Missing stock config: ${id}`)
@@ -20,6 +20,9 @@ export function createRaceFactory(bundle: SimulationBundle): RaceFactory {
   }))
   let active = false
   return {
+    correctionVersion: CORRECTION_VERSION,
+    ...(options.scheduledInputs ? { scheduledInputVersion: 1 as const } : {}),
+    checkpoints: bundle.track.checkpoints,
     fingerprint: bundle.fingerprint,
     simulationVersion: SIMULATION_VERSION,
     async create(seats) {
@@ -40,7 +43,19 @@ export function createRaceFactory(bundle: SimulationBundle): RaceFactory {
         let disposed = false
         const adapter: ServerRaceSimulation = {
           step: () => world.step(),
+          position: (id, out) => {
+            const p = world.vehicles.get(id)!.body.translation()
+            out.x = p.x; out.y = p.y; out.z = p.z
+          },
           setInput: (id, input) => world.setInput(id, input),
+          correction: id => {
+            const vehicle = world.vehicles.get(id)
+            if (!vehicle || disposed) throw new Error('Unknown active correction seat')
+            const p = vehicle.body.translation(), q = vehicle.body.rotation(), v = vehicle.body.linvel(), a = vehicle.body.angvel()
+            return { body: { position: { x: p.x, y: p.y, z: p.z }, rotation: { x: q.x, y: q.y, z: q.z, w: q.w },
+              velocity: { x: v.x, y: v.y, z: v.z }, angularVelocity: { x: a.x, y: a.y, z: a.z }, sleeping: vehicle.body.isSleeping() },
+              controller: vehicle.controller.captureState() }
+          },
           states: () => {
             const states: RaceVehicleState[] = []
             for (const [id, vehicle] of world.vehicles) {
@@ -48,7 +63,8 @@ export function createRaceFactory(bundle: SimulationBundle): RaceFactory {
               const p = vehicle.body.translation(), q = vehicle.body.rotation(), v = vehicle.body.linvel(), av = vehicle.body.angvel()
               states.push({ id, position: { x: p.x, y: p.y, z: p.z }, rotation: { x: q.x, y: q.y, z: q.z, w: q.w },
                 velocity: { x: v.x, y: v.y, z: v.z }, angularVelocity: { x: av.x, y: av.y, z: av.z },
-                speed: controller.forwardSpeed, steer: controller.wheelAngle, rpm: controller.drivetrain.rpm, gear: controller.drivetrain.gear, nitro: controller.nitro.charge })
+                speed: controller.forwardSpeed, steer: controller.wheelAngle, rpm: controller.drivetrain.rpm, gear: controller.drivetrain.gear, nitro: controller.nitro.charge, nitroIntensity: controller.nitro.intensity, braking: controller.braking,
+                wheelOffsets: controller.wheels.map(w => w.suspension.wheelOffset()) })
             }
             return states
           },

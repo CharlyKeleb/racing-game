@@ -1,0 +1,33 @@
+{
+  "recordedAt": "2026-10-24T11:53:05.325Z",
+  "check": "offline-container-outbox-restart",
+  "imageId": "sha256:d9f220688ed40493675b82785e8ddbf6e59ac6f45e5e73b71b2ffb323d976c1e",
+  "boots": [
+    {
+      "boot": 1,
+      "uid": 1000,
+      "ready": true,
+      "pendingFiles": 1,
+      "exactRecordHash": "1710eb252171d6fb935ecaa111f7d0cc76ff48dc996bbc885af33a60113c74f8",
+      "directoryMode": "0700",
+      "recordMode": "0600",
+      "termination": "SIGKILL",
+      "shutdownExitCode": 137
+    },
+    {
+      "boot": 2,
+      "uid": 1000,
+      "ready": true,
+      "pendingFiles": 1,
+      "exactRecordHash": "1710eb252171d6fb935ecaa111f7d0cc76ff48dc996bbc885af33a60113c74f8",
+      "directoryMode": "0700",
+      "recordMode": "0600",
+      "termination": "SIGTERM",
+      "shutdownExitCode": 0
+    }
+  ],
+  "network": "none",
+  "externalPorts": false,
+  "volumeRemoved": true,
+  "scope": "Same exact pending synthetic record retained across SIGKILL and a fresh container process on one local disposable volume, followed by graceful shutdown. No live DB outage, real result key, authenticated race, successful HTTP commit or hosted storage tested."
+}

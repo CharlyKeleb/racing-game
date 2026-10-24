@@ -1,5 +1,13 @@
 import type { SuspensionConfig } from './VehicleConfig'
 
+/** Internal checkpoint for the same approved configuration; not a client input format. */
+export interface SuspensionState {
+  compression: number
+  velocity: number
+  peak: number
+  prevCompression: number
+}
+
 /** Spring-damper for one raycast wheel. Pure, unit-testable. */
 export class Suspension {
   /** Current compression in meters (0 = fully extended). */
@@ -47,6 +55,24 @@ export class Suspension {
   /** Distance from the mount to the wheel center, for positioning the visual wheel. */
   wheelOffset(): number {
     return this.cfg.restLength - this.compression
+  }
+
+  /** Allocate a detached checkpoint outside the per-tick update path. */
+  captureState(): SuspensionState {
+    return {
+      compression: this.compression,
+      velocity: this.velocity,
+      peak: this.peak,
+      prevCompression: this.prevCompression,
+    }
+  }
+
+  /** Restore a trusted checkpoint with the same config before replaying inputs. */
+  restoreState(state: SuspensionState): void {
+    this.compression = state.compression
+    this.velocity = state.velocity
+    this.peak = state.peak
+    this.prevCompression = state.prevCompression
   }
 
   reset(): void {

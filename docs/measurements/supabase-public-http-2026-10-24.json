@@ -1,0 +1,60 @@
+{
+  "recordedAt": "2026-10-24T11:50:16.348Z",
+  "projectRef": "uqxxdjxiqczgigyifldl",
+  "check": "public-supabase-http-gateway",
+  "checks": [
+    {
+      "name": "public-key-project-reachable",
+      "status": 200
+    },
+    {
+      "name": "anonymous-online_practice_races-read-denied",
+      "status": 401,
+      "code": "42501"
+    },
+    {
+      "name": "anonymous-online_practice_history-read-denied",
+      "status": 401,
+      "code": "42501"
+    },
+    {
+      "name": "anonymous-racer_identity_events-read-denied",
+      "status": 401,
+      "code": "42501"
+    },
+    {
+      "name": "anonymous-my_online_practice_history-denied",
+      "status": 401,
+      "code": "42501"
+    },
+    {
+      "name": "anonymous-my_racer_identity_history-denied",
+      "status": 401,
+      "code": "42501"
+    },
+    {
+      "name": "anonymous-record_online_practice-denied",
+      "status": 401,
+      "code": "42501"
+    },
+    {
+      "name": "missing-session-denied",
+      "status": 401,
+      "code": 401
+    },
+    {
+      "name": "forged-session-denied",
+      "status": 403,
+      "code": 403
+    }
+  ],
+  "scope": "Public key, anonymous SQL permissions and missing/forged session rejection only. No valid player session, real token expiry, result write or physical device tested.",
+  "localValidation": {
+    "probeRegressionTestsPassed": 3,
+    "strictTestTypesPassed": true,
+    "lintPassed": true,
+    "finalFullTestsPassed": 3277,
+    "finalFullFilesPassed": 510,
+    "initialFullRun": "Three timing-sensitive failures while game browser initialization overlapped; repeat after temporary tab closure passed all tests."
+  }
+}

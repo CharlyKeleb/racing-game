@@ -15,8 +15,8 @@ export interface SimulationTrack {
   spawn: PhysicsSpawn
   line: { x: number; y: number; z: number }[]
   checkpoints: { index: number; position: [number, number, number]; tangent: [number, number, number]; radius: number }[]
-  meshes: { vertices: number[]; indices: number[]; barrier: boolean }[]
-  surface: { info: SurfaceGridInfo; cells: number[] } | null
+  meshes: { vertices: number[] | Float32Array; indices: number[] | Uint32Array; barrier: boolean }[]
+  surface: { info: SurfaceGridInfo; cells: number[] | Uint8Array } | null
 }
 
 const NEUTRAL: InputState = Object.freeze({ throttle: 0, brake: 0, steer: 0, handbrake: false, nitro: false })
@@ -35,10 +35,12 @@ export class HeadlessSimulation {
   }
 
   private constructor(track: SimulationTrack) {
-    this.surface = track.surface ? new SurfaceMap(track.surface.info, Uint8Array.from(track.surface.cells)) : null
+    this.surface = track.surface ? new SurfaceMap(track.surface.info, track.surface.cells instanceof Uint8Array
+      ? track.surface.cells : Uint8Array.from(track.surface.cells)) : null
     const ground = this.physics.world.createRigidBody(RAPIER.RigidBodyDesc.fixed())
     for (const mesh of track.meshes) {
-      this.physics.world.createCollider(RAPIER.ColliderDesc.trimesh(Float32Array.from(mesh.vertices), Uint32Array.from(mesh.indices))
+      this.physics.world.createCollider(RAPIER.ColliderDesc.trimesh(mesh.vertices instanceof Float32Array ? mesh.vertices : Float32Array.from(mesh.vertices),
+        mesh.indices instanceof Uint32Array ? mesh.indices : Uint32Array.from(mesh.indices))
         .setFriction(mesh.barrier ? 0.25 : 0.9).setRestitution(mesh.barrier ? 0.2 : 0), ground)
     }
     // Populate Rapier's query pipeline before the first suspension/ground query.

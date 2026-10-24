@@ -1,0 +1,263 @@
+{
+  "schema": 1,
+  "revision": "5a906841edcc465ecece73a10f1fa990dc8365fd",
+  "worktreeDirty": true,
+  "protocol": 3,
+  "simulationVersion": 1,
+  "fingerprint": "a8de691796d9dace24821f334576c8d9dcee54e4ab4a235be78a471b6d3d6d78",
+  "environment": {
+    "node": "v24.7.0",
+    "platform": "darwin",
+    "arch": "arm64",
+    "cpu": "Apple M1 Pro"
+  },
+  "rooms": 1,
+  "racers": 2,
+  "wallSeconds": 30.000639166,
+  "serverTicksObserved": 1800,
+  "cpuMs": 2190.731,
+  "cpuCoreShare": 0.07302281087673544,
+  "peakSampledRssMiB": 542.96875,
+  "peakSampledHeapMiB": 125.6613540649414,
+  "inputsSent": 1742,
+  "duplicateOrOlderFrames": 0,
+  "distanceMetres": [
+    796,
+    797
+  ],
+  "frameArrivalMs": {
+    "count": 1192,
+    "p50": 49.5625,
+    "p95": 60.821374999999534,
+    "p99": 66.40250000000015,
+    "max": 67.78887499999837
+  },
+  "inputToAckFrameMs": {
+    "count": 1192,
+    "p50": 19.448958000000857,
+    "p95": 34.494542000000365,
+    "p99": 36.79479100000026,
+    "max": 39.23374999999942
+  },
+  "snapshotJsonBytes": {
+    "count": 1194,
+    "p50": 1736,
+    "p95": 1768,
+    "p99": 1775,
+    "max": 1777
+  },
+  "metrics": {
+    "schema": 1,
+    "uptimeSeconds": 33.128526208000004,
+    "events": {
+      "admission_ok": 2,
+      "admission_rejected": 0,
+      "admission_rate_limited": 0,
+      "input_accepted": 1742,
+      "input_rejected": 0,
+      "reconnect_started": 0,
+      "reconnect_succeeded": 0,
+      "reconnect_failed": 0,
+      "race_started": 1,
+      "race_finished": 0,
+      "race_aborted": 0,
+      "result_pending": 0,
+      "result_saved": 0,
+      "result_failed": 0
+    },
+    "gauges": {
+      "rooms": 1,
+      "racers": 2,
+      "heldSeats": 0,
+      "activeRaces": 1,
+      "admissionClaims": 0,
+      "pendingResultWrites": 0,
+      "rssMiB": 437.34375,
+      "heapUsedMiB": 70.12865447998047
+    },
+    "histograms": {
+      "advance_ms": {
+        "count": 1996,
+        "mean": 0.5906252194388776,
+        "max": 17.647750000000087,
+        "p95Upper": 2,
+        "bounds": [
+          0.125,
+          0.25,
+          0.5,
+          1,
+          2,
+          4,
+          8,
+          12,
+          16,
+          16.67,
+          20,
+          25,
+          33.34,
+          50,
+          100,
+          250,
+          500,
+          1000
+        ],
+        "buckets": [
+          62,
+          2,
+          895,
+          914,
+          101,
+          13,
+          7,
+          1,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "callback_gap_ms": {
+        "count": 1996,
+        "mean": 16.5561122244489,
+        "max": 34,
+        "p95Upper": 20,
+        "bounds": [
+          0.125,
+          0.25,
+          0.5,
+          1,
+          2,
+          4,
+          8,
+          12,
+          16,
+          16.67,
+          20,
+          25,
+          33.34,
+          50,
+          100,
+          250,
+          500,
+          1000
+        ],
+        "buckets": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1017,
+          0,
+          973,
+          4,
+          1,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "input_age_ticks": {
+        "count": 30,
+        "mean": 1.4,
+        "max": 2,
+        "p95Upper": 2,
+        "bounds": [
+          0,
+          1,
+          2,
+          3,
+          6,
+          15,
+          30,
+          60,
+          120,
+          600,
+          36000
+        ],
+        "buckets": [
+          0,
+          18,
+          12,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "snapshot_bytes": {
+        "count": 33,
+        "mean": 1716.1515151515152,
+        "max": 1768,
+        "p95Upper": 2048,
+        "bounds": [
+          256,
+          512,
+          1024,
+          2048,
+          4096,
+          8192,
+          16384,
+          32768
+        ],
+        "buckets": [
+          0,
+          0,
+          0,
+          33,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "finalize_ms": {
+        "count": 0,
+        "mean": null,
+        "max": null,
+        "p95Upper": null,
+        "bounds": [
+          1,
+          10,
+          100,
+          1000,
+          5000,
+          10000,
+          30000,
+          60000
+        ],
+        "buckets": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    }
+  },
+  "scope": "Local paced single-process server + two SDK clients + AI; loopback, synthetic auth, no DB/renderer/network impairment. Ack latency is not RTT or input-to-display latency. JSON bytes exclude wire framing. Not Fly capacity or two-device acceptance."
+}

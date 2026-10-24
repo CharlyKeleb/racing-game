@@ -38,7 +38,8 @@ export class AssetManager {
     const profiling = performanceCapture.active
     const started = profiling ? performance.now() : 0
     const absolute = new URL(url, document.baseURI)
-    const response = await fetch(absolute, { signal })
+    const timeout = AbortSignal.timeout(20_000)
+    const response = await fetch(absolute, { signal: signal ? AbortSignal.any([signal, timeout]) : timeout })
     if (!response.ok || response.headers.get('content-type')?.includes('text/html')) throw new Error(`GLTF unavailable: ${url}`)
     const bytes = await response.arrayBuffer()
     signal?.throwIfAborted()
@@ -101,7 +102,7 @@ export class AssetManager {
   /** Null covers a missing file and SPA HTML fallback responses. */
   private async fetchJson(url: string): Promise<unknown | null> {
     try {
-      const res = await fetch(url)
+      const res = await fetch(url, { signal: AbortSignal.timeout(12_000) })
       if (!res.ok || !res.headers.get('content-type')?.includes('json')) return null
       return await res.json()
     } catch {
@@ -112,7 +113,7 @@ export class AssetManager {
   /** Raw bytes, or null when missing. */
   async loadBinary(url: string): Promise<Uint8Array | null> {
     try {
-      const res = await fetch(url)
+      const res = await fetch(url, { signal: AbortSignal.timeout(12_000) })
       if (!res.ok || res.headers.get('content-type')?.includes('text/html')) return null
       return new Uint8Array(await res.arrayBuffer())
     } catch {
@@ -123,7 +124,7 @@ export class AssetManager {
   /** Cheap existence check so we can fall back to placeholder assets quietly. */
   async exists(url: string): Promise<boolean> {
     try {
-      const res = await fetch(url, { method: 'HEAD' })
+      const res = await fetch(url, { method: 'HEAD', signal: AbortSignal.timeout(8000) })
       const type = res.headers.get('content-type') ?? ''
       return res.ok && !type.includes('text/html')
     } catch {

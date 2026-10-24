@@ -1,3 +1,5 @@
+import { IdentityHistory } from './IdentityHistoryLoader'
+import { PracticeHistory } from './PracticeHistoryLoader'
 import { validateRacer, profileError } from './racerIdentity'
 import type { Session, SupabaseClient } from '@supabase/supabase-js'
 import { accountStore, type Player } from '../stores/accountStore'
@@ -33,6 +35,8 @@ const message = (err: unknown) => (err instanceof Error ? err.message : typeof e
 export class CloudSave {
   private readonly client: Promise<SupabaseClient | null>
   private playerId: string | null = null
+  private readonly practiceHistory = new PracticeHistory(() => this.client, () => this.playerId)
+  private readonly identityHistory = new IdentityHistory(() => this.client, () => this.playerId)
   /** False until this player's cloud save has merged in; uploads wait for it. */
   private merged = false
   private pendingMerge = false
@@ -112,6 +116,10 @@ export class CloudSave {
     return data.session.access_token
   }
 
+  loadPracticeHistory(more = false): Promise<void> { return this.practiceHistory.load(more) }
+
+  loadIdentityHistory(more = false): Promise<void> { return this.identityHistory.load(more) }
+
   async loadProfile(): Promise<void> {
     const client = await this.client
     const playerId = this.playerId
@@ -138,6 +146,7 @@ export class CloudSave {
       const { data, error } = await client.rpc('save_racer_profile', { requested_handle: handle.trim(), requested_display_name: displayName.normalize('NFC').trim() })
       if (this.disposed || this.playerId !== playerId) return
       if (error) { accountStore.setState({ profileError: profileError(error) }); return }
+      this.identityHistory.invalidate()
       accountStore.setState({ profile: data, profileStatus: 'ready' })
     } catch {
       if (!this.disposed && this.playerId === playerId) accountStore.setState({ profileError: 'Could not save your racer. Please try again.' })
@@ -145,6 +154,8 @@ export class CloudSave {
   }
 
   dispose(): void {
+    this.practiceHistory.dispose()
+    this.identityHistory.dispose()
     this.disposed = true
     if (this.uploadTimer) clearTimeout(this.uploadTimer)
     for (const off of this.cleanup) off()

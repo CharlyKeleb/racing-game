@@ -1,3 +1,4 @@
+import { lobbyStore } from '../multiplayer/lobbyStore'
 import { driftEvent } from '../racing/driftEvents'
 import { AccountButton, AccountDialog } from './Account'
 import { accountStore } from '../stores/accountStore'
@@ -43,7 +44,7 @@ export function MainMenu() {
   const [picked, setPicked] = useState<Exclude<Tab, 'garage'>>('play')
   const tab: Tab = phase === 'garage' ? 'garage' : picked
   // A sign-in link that failed opens the account dialog, to say why.
-  const [dialog, setDialog] = useState<'settings' | 'setup' | 'tracks' | 'account' | 'online' | null>(() => accountStore.getState().returnError ? 'account' : null)
+  const [dialog, setDialog] = useState<'settings' | 'setup' | 'tracks' | 'account' | 'online' | null>(() => accountStore.getState().returnError ? 'account' : lobbyStore.getState().status === 'connected' || lobbyStore.getState().error ? 'online' : null)
   useEffect(() => {
     const check = () => {
       const s = accountStore.getState()

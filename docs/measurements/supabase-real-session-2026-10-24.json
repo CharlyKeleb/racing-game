@@ -1,0 +1,56 @@
+{
+  "recordedAt": "2026-10-24T12:35:52.951356+00:00",
+  "projectRef": "uqxxdjxiqczgigyifldl",
+  "browser": "Chrome",
+  "frontend": "http://127.0.0.1:5173",
+  "backend": "http://127.0.0.1:2568",
+  "status": "real_session_profile_history_refresh_and_local_admission_passed",
+  "checks": {
+    "authServerAccepted": true,
+    "profileOwnerMatches": true,
+    "raceHistoryRows": 0,
+    "identityHistoryRows": 1,
+    "allReturnedRowsOwned": true,
+    "normalRefreshSucceeded": true,
+    "accessTokenRotated": true,
+    "expiryDidNotRegress": true,
+    "sessionExpiryBeforeRefresh": "2026-10-24T13:15:35.000Z",
+    "sessionExpiryAfterRefresh": "2026-10-24T13:31:46.000Z",
+    "originalSessionRoomAdmission": true,
+    "refreshedSessionRoomAdmission": true,
+    "firstRoomRemainedConnectedAfterRefresh": true,
+    "bothTestRoomsLeft": true
+  },
+  "fixture": "tests/browser/auth-session.html",
+  "proofImageIgnoredLocalPath": ".cache/multiplayer/real-session-refresh.png",
+  "localConfiguration": {
+    "frontendMultiplayerUrl": "http://127.0.0.1:2568",
+    "origins": [
+      "http://127.0.0.1:5173",
+      "http://localhost:5173"
+    ],
+    "resultPersistenceEnabled": false,
+    "scheduledInputsEnabled": false,
+    "practiceProcessPidAtRecording": 27493,
+    "serverLeftRunningForNextChecks": true
+  },
+  "remaining": [
+    "Rejection of a genuinely expired signed token",
+    "Revoked-session behavior",
+    "Second real account and physical-device race acceptance",
+    "Server-only result writer configuration and successful HTTP result commit",
+    "Hosted capacity and persistent storage acceptance"
+  ],
+  "scope": "One existing game account; real Auth and PostgREST reads plus a normal session refresh, and two sequential local backend admissions. No player token, UUID, email or private row payload recorded; no new race result or profile mutation, production deployment or GitHub push.",
+  "validation": {
+    "strictFixtureTypesPassed": true,
+    "lintPassed": true,
+    "frontendBuildPassed": true,
+    "fixtureAbsentFromProductionBuild": true,
+    "lastPriorFullSuite": {
+      "testsPassed": 3277,
+      "filesPassed": 510
+    },
+    "fullSuiteRepeatedInThisChunk": false
+  }
+}

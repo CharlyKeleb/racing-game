@@ -39,6 +39,23 @@ export interface NitroInput {
 const SURGE_SHARE = 0.6
 const SURGE_SEC = 0.45
 
+/** Internal checkpoint for the same approved configuration; not a client input format. */
+export interface NitroState {
+  charge: number
+  active: boolean
+  perfect: boolean
+  missed: boolean
+  missedAt: number
+  intensity: number
+  ignited: boolean
+  surge: number
+  burnTime: number
+  perfectLeft: number
+  attempted: boolean
+  releasedFor: number
+  wasHeld: boolean
+}
+
 export class Nitro {
   /** Tank level, 0..1. */
   charge = 0
@@ -157,6 +174,42 @@ export class Nitro {
     this.active = false
     this.perfect = false
     this.perfectLeft = 0
+  }
+
+  /** Allocate a detached checkpoint outside the per-tick update path. */
+  captureState(): NitroState {
+    return {
+      charge: this.charge,
+      active: this.active,
+      perfect: this.perfect,
+      missed: this.missed,
+      missedAt: this.missedAt,
+      intensity: this.intensity,
+      ignited: this.ignited,
+      surge: this.surge,
+      burnTime: this.burnTime,
+      perfectLeft: this.perfectLeft,
+      attempted: this.attempted,
+      releasedFor: this.releasedFor,
+      wasHeld: this.wasHeld,
+    }
+  }
+
+  /** Restore a trusted checkpoint with the same config before replaying inputs. */
+  restoreState(state: NitroState): void {
+    this.charge = state.charge
+    this.active = state.active
+    this.perfect = state.perfect
+    this.missed = state.missed
+    this.missedAt = state.missedAt
+    this.intensity = state.intensity
+    this.ignited = state.ignited
+    this.surge = state.surge
+    this.burnTime = state.burnTime
+    this.perfectLeft = state.perfectLeft
+    this.attempted = state.attempted
+    this.releasedFor = state.releasedFor
+    this.wasHeld = state.wasHeld
   }
 
   reset(): void {

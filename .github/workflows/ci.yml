@@ -40,5 +40,7 @@ jobs:
       - run: npm --prefix server ci
       - run: npm run server:build
       - run: npm run build
+      - run: npm run check:race-staging
+      - run: npm run check:finished-race
       - run: npm test
       - run: npm run lint

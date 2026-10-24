@@ -1,3 +1,5 @@
+import { useStore } from 'zustand'
+import { onlineRaceStore } from './multiplayer/onlineRaceStore'
 import { ControllerNavigation } from './ui/ControllerNavigation'
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import type { Game } from './engine/Game'
@@ -8,6 +10,7 @@ import { Narration } from './ui/Narration'
 import { MainMenu } from './ui/MainMenu'
 import { isTouchDevice } from './engine/device'
 
+const OnlineRaceHud = lazy(() => import('./ui/OnlineRaceHud').then(module => ({ default: module.OnlineRaceHud })))
 const Hud = lazy(() => import('./ui/Hud').then(module => ({ default: module.Hud })))
 const PauseMenu = lazy(() => import('./ui/PauseMenu').then(module => ({ default: module.PauseMenu })))
 const RaceIntro = lazy(() => import('./ui/RaceIntro').then(module => ({ default: module.RaceIntro })))
@@ -24,6 +27,7 @@ export default function App() {
   // An ended Time Trial session has no finish line cinematic: straight to its results.
   const trialEnded = useTelemetry(s => s.trialEnded)
   const phase = useGame((s) => s.phase)
+  const onlineMenu = useStore(onlineRaceStore, s => s.menuOpen || s.resultsOpen)
   const error = useGame((s) => s.error)
   const progress = useGame((s) => s.loadProgress)
   const trackName = useGame((s) => s.trackName)
@@ -50,7 +54,7 @@ export default function App() {
 
   return (
     <GameContext.Provider value={game}>
-      <ControllerNavigation phase={phase} />
+      <ControllerNavigation phase={phase === 'online' && onlineMenu ? 'paused' : phase} />
       <div className="viewport" ref={containerRef} />
       <div className={touch ? "overlay overlay--touch" : "overlay"}>
         {error && (
@@ -74,6 +78,7 @@ export default function App() {
         {(phase === 'menu' || phase === 'garage') && <MainMenu />}
         <Narration />
         <Suspense fallback={<div className="boot" role="status">Loading…</div>}>
+          {phase === 'online' && <OnlineRaceHud />}
           {phase === 'intro' && <RaceIntro />}
           {(phase === 'countdown' || phase === 'racing' || phase === 'paused') && <Hud />}
           {(phase === 'countdown' || phase === 'racing') && touch && <TouchControls />}

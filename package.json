@@ -21,10 +21,28 @@
     "server:build": "npm --prefix server run build",
     "test:multiplayer": "vitest run tests/multiplayer.test.ts tests/multiplayerAuth.test.ts tests/lobbyClient.test.ts",
     "build:simulation": "node scripts/multiplayer/build-simulation-assets.mjs",
+    "build:race-staging": "tsc -p tsconfig.race.json && npm run build:simulation && node scripts/multiplayer/build-compact-assets.mjs && vite build --config vite.race.config.ts",
+    "check:race-staging": "npm run build:race-staging && node scripts/multiplayer/check-staging-build.mjs",
+    "supabase:prepare-existing": "node scripts/multiplayer/prepare-existing-supabase.mjs",
+    "benchmark:transport": "npm run build:simulation && node --import ./server/node_modules/tsx/dist/loader.mjs scripts/multiplayer/benchmark-transport.ts",
+    "benchmark:corrections": "npm run build:simulation && node --import ./server/node_modules/tsx/dist/loader.mjs scripts/multiplayer/benchmark-corrections.ts",
     "benchmark:simulation": "npm run build:simulation && server/node_modules/.bin/tsx scripts/multiplayer/benchmark.ts",
     "test:simulation": "vitest run tests/headlessSimulation.test.ts tests/handling.test.ts",
     "server:race-dev": "npm run build:simulation && node --env-file=server/.env.local --import ./server/node_modules/tsx/dist/loader.mjs scripts/multiplayer/dev-race-server.ts",
-    "test:race-transport": "vitest run tests/raceSession.test.ts tests/raceTransport.test.ts tests/lobbyClient.test.ts"
+    "test:multiplayer-metrics": "vitest run tests/multiplayerMetrics.test.ts tests/multiplayerMetricsTransport.test.ts tests/raceTransport.test.ts",
+    "test:identity-audit": "vitest run tests/racerIdentityAudit.test.ts",
+    "test:race-shutdown": "vitest run tests/raceShutdown.test.ts tests/multiplayerSignals.test.ts tests/multiplayer.test.ts",
+    "test:race-rematch": "vitest run tests/raceRematch.test.ts tests/onlineRaceLifecycle.test.ts tests/lobbyClient.test.ts",
+    "test:race-reconnect": "vitest run tests/raceReconnect.test.ts tests/raceSession.test.ts tests/lobbyClient.test.ts tests/onlineRaceLifecycle.test.ts",
+    "test:result-storage": "vitest run tests/practiceDatabase.test.ts tests/resultOutbox.test.ts tests/supabaseResultWriter.test.ts tests/practiceHistory.test.ts tests/raceResultsTransport.test.ts",
+    "test:race-transport": "vitest run tests/raceProgress.test.ts tests/raceResults.test.ts tests/raceSession.test.ts tests/raceTransport.test.ts tests/raceResultsTransport.test.ts tests/lobbyClient.test.ts",
+    "predev": "npm run build:simulation",
+    "prebuild": "npm run build:simulation",
+    "check:practice-container": "node scripts/multiplayer/check-practice-container.mjs",
+    "probe:supabase-public": "node scripts/multiplayer/probe-supabase-public.mjs",
+    "check:outbox-container": "node scripts/multiplayer/check-outbox-container.mjs",
+    "check:result-storage": "node --env-file=server/.env.local --import ./server/node_modules/tsx/dist/loader.mjs scripts/multiplayer/check-result-storage.ts",
+    "check:finished-race": "npm run build:simulation && node --import ./server/node_modules/tsx/dist/loader.mjs scripts/multiplayer/check-finished-lap.ts"
   },
   "dependencies": {
     "@colyseus/sdk": "0.18.6",
@@ -39,6 +57,7 @@
     "zustand": "^5.0.15"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.11",
     "@gltf-transform/cli": "^4.5.1",
     "@gltf-transform/core": "^4.5.1",
     "@gltf-transform/extensions": "^4.5.1",
