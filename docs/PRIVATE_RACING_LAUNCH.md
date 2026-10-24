@@ -12,7 +12,8 @@ The user approved narrowing #120 to working hosted two-player private racing on
 
 The launch uses existing Google/magic-link accounts and completed racer profiles,
 exactly two stock-car racers, Nürburgring GP, ghost collisions and private room
-codes. Prediction and scheduled inputs remain disabled. Saved practice results
+codes. The responsiveness follow-up enables local own-car prediction and scheduled
+inputs; remote cars remain interpolated. See [response verification](MULTIPLAYER_RESPONSIVENESS.md). Saved practice results
 remain competitively ineligible. Existing account and private history security
 requirements still apply; this scope split does not declare deferred work done.
 
@@ -53,7 +54,7 @@ bypass or publish the local test-server entrypoint.
 
 Build the production frontend from the same source/lockfile, with the existing
 public Supabase settings, `VITE_MULTIPLAYER_URL` set to the Fly HTTPS hostname and
-`VITE_ONLINE_PREDICTION=0`. Check the frontend manifest against the server startup
+`VITE_ONLINE_PREDICTION=1`. Check the frontend manifest against the server startup
 fingerprint. Build/upload from tracked source and actual checked-out LFS assets;
 exclude local `.env.local`, backend credentials and generated private caches.
 

@@ -14,7 +14,7 @@ const bundle: SimulationBundle = { format: 1, fingerprint: 'a'.repeat(64),
     line: [{x:0,y:0,z:0},{x:0,y:0,z:1000},{x:1000,y:0,z:1000},{x:1000,y:0,z:0}],
     checkpoints: [{ index:0,position:[0,0,0],tangent:[0,0,1],radius:10 },{index:1,position:[0,0,900],tangent:[0,0,1],radius:10}],
     surface:null, meshes:[{vertices,indices,barrier:false}] } }
-for (const delay of [1,3,6]) it('reconciles tick-scheduled ghost physics with ' + delay * 2 + ' ticks RTT and bounded jitter/omissions', async () => {
+for (const delay of [1,3,6,9]) it('reconciles tick-scheduled ghost physics with ' + delay * 2 + ' ticks RTT and bounded jitter/omissions', async () => {
   const factory = createRaceFactory(bundle, { scheduledInputs: true })
   const race = new RaceSession([{id:'one',sessionId:'a',carId:'porsche911'},{id:'two',sessionId:'b',carId:'diablo'}],factory)
   let local: PredictionWorld | undefined
@@ -32,7 +32,7 @@ for (const delay of [1,3,6]) it('reconciles tick-scheduled ghost physics with ' 
       const value={...input,version:1,tick,sequence:sequence++,raceId:race.descriptor.id}
       if(sequence%29!==0) commands.push({due:wall+delay+(sequence%3===0?1:0),value})
       return true
-    },Math.max(6,delay*2+4))
+    },Math.min(24,Math.max(6,delay*2+6)))
     const positions=new Map<number,{x:number;y:number;z:number}>(),errors:number[]=[]
     const out=emptyVehicleState('one')
     for(wall=181;wall<=1080;wall++) {

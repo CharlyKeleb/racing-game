@@ -14,6 +14,11 @@ The full earlier scope is preserved in
 moderation and retention; #145 garage/social/matchmaking; #146 ranked progression,
 rewards and crews; #147 four-player scaling, contact, spectating and replays.
 
+The subsequent responsiveness fix enables local own-car prediction with scheduled
+server inputs, deferred initialization and recoverable RTT/correction fallback.
+See [the response check](MULTIPLAYER_RESPONSIVENESS.md). The launch receipt below
+preserves the earlier snapshot-only baseline rather than rewriting its history.
+
 ## Delivered
 
 - Shared headless physics and versioned collision/checkpoint/stock-car assets;
@@ -25,8 +30,8 @@ rewards and crews; #147 four-player scaling, contact, spectating and replays.
 - Idempotent private result storage, durable bounded retry outbox, owner history,
   complete rename events from audit start and a private paginated name-history UI.
 - Bounded RTT diagnostics, full controller checkpoints, correction streaming,
-  replay history and experimental prediction/scheduled inputs. Both experimental
-  capabilities remain disabled in the hosted baseline.
+  replay history and experimental prediction/scheduled inputs. The original hosted
+  baseline had both disabled; the responsiveness follow-up enables them.
 - Compact-asset production container, existing-project migration tooling,
   scoped acceptance receipts and documented launch/rollback configuration.
 

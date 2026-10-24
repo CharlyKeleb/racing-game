@@ -7,7 +7,8 @@ export interface PredictedPhysics {
 }
 const HOLD: InputState = Object.freeze({ throttle: 0, brake: 0, steer: 0, handbrake: true, nitro: false })
 const NEUTRAL: InputState = Object.freeze({ ...HOLD, handbrake: false })
-export const MAX_REPLAY_TICKS = 24
+export const MAX_PREDICTION_LEAD_TICKS = 24
+export const MAX_REPLAY_TICKS = 36
 /** Tick-keyed scheduling makes correction replay explicit; input sequences are never used as durations. */
 export class PredictionReconciler {
   private readonly physics: PredictedPhysics
@@ -24,7 +25,7 @@ export class PredictionReconciler {
   private lastAck = -1
   readonly leadTicks: number
   constructor(physics: PredictedPhysics, send: (tick: number, input: InputState) => boolean, leadTicks = 12) {
-    if (!Number.isSafeInteger(leadTicks) || leadTicks < 6 || leadTicks > 18) throw new Error('Prediction lead must be 6–18 ticks')
+    if (!Number.isSafeInteger(leadTicks) || leadTicks < 6 || leadTicks > MAX_PREDICTION_LEAD_TICKS) throw new Error('Prediction lead must be 6–24 ticks')
     this.physics = physics; this.send = send; this.leadTicks = leadTicks
   }
   get ready(): boolean { return this.running }

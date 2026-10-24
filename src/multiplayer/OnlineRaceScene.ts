@@ -1,4 +1,5 @@
-import { PredictionReconciler } from './PredictionReconciler'
+import { MAX_PREDICTION_LEAD_TICKS, PredictionReconciler } from './PredictionReconciler'
+import type { ConnectionLatencySample } from './ConnectionLatency'
 import { PredictionWorld } from '../simulation/PredictionWorld'
 import { lobbyStore, openCorrectionStream, sendScheduledRaceInput, restoreMailboxControls } from './LobbyClient'
 import type { InputState } from '../input/InputManager'
@@ -47,6 +48,7 @@ export class OnlineRaceScene {
   private predictionEpoch = -1
   private predictionDisabled = false
   private correctionsStartedAt = -Infinity
+  private predictionRetryAt = -Infinity
   private readonly race: NonNullable<LobbySnapshot['race']>
   private readonly playerCarId: LobbySnapshot['racers'][number]['carId']
 
@@ -96,16 +98,7 @@ export class OnlineRaceScene {
     }
     this.playerCar = this.cars.find(car => car.state.id === playerId)!
     const latency = lobbyStore.getState().connectionLatency
-    const lead = latency ? Math.max(6, Math.ceil((latency.rttMs + latency.variationMs) * .06) + 4) : Infinity
-    if (import.meta.env.VITE_ONLINE_PREDICTION === '1' && this.race.scheduledInputVersion === 1
-      && this.race.correctionVersion === 1 && context.track.createPredictionWorld && lead <= 18) {
-      let world: ReturnType<NonNullable<RaceTrack['createPredictionWorld']>> | undefined
-      try {
-        world = context.track.createPredictionWorld()
-        this.predictionWorld = new PredictionWorld(world, this.playerCar.config, (x, z) => context.track.surfaceAt(x, z))
-        this.prediction = new PredictionReconciler(this.predictionWorld, (tick, input) => sendScheduledRaceInput(tick, input) !== null, lead)
-      } catch { world?.free(); this.predictionWorld = null; this.prediction = null }
-    }
+    if (latency) this.ensurePrediction(latency)
     for (const child of context.renderer.scene.children) {
       this.visibility.set(child, child.visible)
       child.visible = child === context.track.group || child === context.environment.group
@@ -121,13 +114,35 @@ export class OnlineRaceScene {
     context.audio.resume()
   }
 
+  private ensurePrediction(latency: ConnectionLatencySample): boolean {
+    if (this.predictionDisabled || import.meta.env.VITE_ONLINE_PREDICTION === '0' || this.race.scheduledInputVersion !== 1
+      || this.race.correctionVersion !== 1 || !this.context.track.createPredictionWorld) return false
+    const required = Math.max(6, Math.ceil((latency.rttMs + latency.variationMs) * .06) + 4)
+    if (!Number.isFinite(required) || required > MAX_PREDICTION_LEAD_TICKS) return false
+    if (!this.predictionWorld) {
+      let world: ReturnType<NonNullable<RaceTrack['createPredictionWorld']>> | undefined
+      try {
+        world = this.context.track.createPredictionWorld()
+        this.predictionWorld = new PredictionWorld(world, this.playerCar.config, (x, z) => this.context.track.surfaceAt(x, z))
+      } catch { world?.free(); this.predictionDisabled = true; return false }
+    }
+    if (!this.prediction || required > this.prediction.leadTicks) {
+      this.resetPrediction()
+      // Reserve a little RTT headroom rather than disabling local controls on the next sample.
+      const lead = Math.min(MAX_PREDICTION_LEAD_TICKS, required + 3)
+      this.prediction = new PredictionReconciler(this.predictionWorld, (tick, input) => sendScheduledRaceInput(tick, input) !== null, lead)
+    }
+    return true
+  }
+
   push(snapshot: RaceSnapshot, now: number): void { this.buffer.push(snapshot, now) }
 
   /** Read-only development fixture diagnostics; not used by the player HUD or physics loop. */
   debugPrediction() {
     return { enabled: !!this.prediction, ready: this.prediction?.ready ?? false, disabled: this.predictionDisabled,
       tick: this.prediction?.predictedTick ?? null, leadTicks: this.prediction?.leadTicks ?? null,
-      streamOpen: !!this.stopCorrections, x: this.playerCar.model.root.position.x, z: this.playerCar.model.root.position.z }
+      streamOpen: !!this.stopCorrections, x: this.playerCar.model.root.position.x, z: this.playerCar.model.root.position.z,
+      steer: this.playerCar.state.steer, speed: this.playerCar.state.speed }
   }
 
   resetPrediction(): void {
@@ -136,16 +151,14 @@ export class OnlineRaceScene {
     if (this.prediction) restoreMailboxControls()
   }
 
-  /** Optional experimental own-car physics. Remote cars always stay in the snapshot presentation buffer. */
+  /** Own-car controls run locally; remote cars stay in the snapshot presentation buffer. */
   fixedUpdate(input: InputState, now: number): boolean {
-    if (!this.prediction || !this.predictionWorld || this.predictionDisabled) return false
     const lobby = lobbyStore.getState(), online = onlineRaceStore.getState(), latency = lobby.connectionLatency
     if (lobby.status !== 'connected' || !latency || online.menuOpen || online.finished || online.resultsOpen || this.buffer.delayed(now)
       || !['countdown', 'racing'].includes(lobby.snapshot?.phase ?? '')) {
       this.resetPrediction(); return false
     }
-    const requiredLead = Math.ceil((latency.rttMs + latency.variationMs) * .06) + 4
-    if (requiredLead > this.prediction.leadTicks) { this.predictionDisabled = true; this.resetPrediction(); return false }
+    if (now < this.predictionRetryAt || !this.ensurePrediction(latency) || !this.prediction || !this.predictionWorld) { this.resetPrediction(); return false }
     if (this.predictionEpoch !== lobby.connectionEpoch) { this.resetPrediction(); this.predictionEpoch = lobby.connectionEpoch }
     if (!this.stopCorrections) {
       this.correctionsStartedAt = now
@@ -163,7 +176,7 @@ export class OnlineRaceScene {
       })
     }
     if (!this.prediction.ready) {
-      if (now - this.correctionsStartedAt > 1000) { this.predictionDisabled = true; this.resetPrediction(); return false }
+      if (now - this.correctionsStartedAt > 1000) { this.resetPrediction(); this.predictionRetryAt = now + 1000; return false }
       return true // Wait for a validated base; never launch physics from a rendered pose.
     }
     this.predictionWorld.read(this.predicted)

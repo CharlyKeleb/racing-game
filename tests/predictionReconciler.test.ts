@@ -29,12 +29,12 @@ it('bootstraps neutral lookahead without emitting a late input burst and then pr
 })
 it('bounds replay work, resynchronizes missing history, and never invents local race time', () => {
   const f = fixture(); f.predictor.accept(correction(200), 0)
-  for (let i = 0; i < 20; i++) f.predictor.advance(drive, i * 17)
+  for (let i = 0; i < MAX_REPLAY_TICKS; i++) f.predictor.advance(drive, i * 10)
   const before = f.physics.step.mock.calls.length
-  f.predictor.accept(correction(201, 50), 350)
+  f.predictor.accept(correction(201, 50), MAX_REPLAY_TICKS * 10)
   expect(f.physics.step.mock.calls.length - before).toBeLessThanOrEqual(MAX_REPLAY_TICKS)
   expect(f.x()).toBe(50); expect(f.predictor.predictedTick).toBe(213) // rebase, not unbounded catch-up
-  expect(f.predictor.accept(correction(201), 351)).toBe(false)
+  expect(f.predictor.accept(correction(201), MAX_REPLAY_TICKS * 10 + 1)).toBe(false)
 })
 it('suspends on stale corrections, backwards time, rejected sends or physics failure until a fresh base', () => {
   const f = fixture(); f.predictor.accept(correction(200), 0)
