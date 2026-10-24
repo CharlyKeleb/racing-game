@@ -67,7 +67,7 @@ queued records or roll back live SQL as part of an application rollback.
 
 ## Hosted verification — 2026-10-24
 
-The race image and production frontend are deployed. [The hosted receipt](measurements/hosted-private-racing-2026-10-24.json) records the image digest, machine/volume, frontend deployment, matching fingerprint, five HTTP/origin/Auth checks, UID/mode checks, rejected invalid-record RPC preflight, aggregate idle metrics and controlled idle restart. A private non-record marker survived the restart and was removed; no synthetic race was written. This does not prove replay of an actual queued race or sustained race capacity. Two real accounts on separate Macs have joined and launched the same one-lap race. A short active sample shows about 295 MiB RSS and simulation work p95 bounded by 2 ms, with accepted controls and no rejected inputs. This is not peak/sustained capacity; finished/saved acceptance remains pending.
+The race image and production frontend are deployed. [The hosted receipt](measurements/hosted-private-racing-2026-10-24.json) records the image digest, machine/volume, frontend deployment, matching fingerprint, five HTTP/origin/Auth checks, UID/mode checks, rejected invalid-record RPC preflight, aggregate idle metrics and controlled idle restart. A private non-record marker survived the restart and was removed; no synthetic race was written. This does not prove replay of an actual queued race or sustained race capacity. Two real accounts on separate Macs have joined and launched the same one-lap race. A short active sample shows about 295 MiB RSS and simulation work p95 bounded by 2 ms, with accepted controls and no rejected inputs. This is not peak/sustained capacity; The user subsequently reported that both Macs finished and showed matching saved results; hosted metrics confirm one finalized/saved race and no pending writes. The agent did not independently read the finished standings/history rows. Recovery/rematch and the remaining operational/device checks stay open.
 
 ## Acceptance
 
@@ -76,3 +76,27 @@ a finished race on two real accounts and two physical devices, matching owner
 history, reconnect/rematch/leave/menu/hidden-tab/expiry, durable restart/rollback,
 and the documented device/network baseline pass. The local AI full-race check
 and same-Mac real DNF save are supporting evidence, not that acceptance result.
+
+## Operational ownership and public health checks
+
+The owner is the existing Charly Fly account/repository owner. Keep the approved
+US$15/month target under review in Fly billing; shared CPU, RAM, provisioned volume,
+snapshots and egress are billed independently. No hard spending cap or billing
+alert has been verified. Do not expand replicas, memory, regions or volume growth
+without a new budget decision. The one-room/two-racer limit is a capacity boundary,
+not a promise about the monthly bill.
+
+`.github/workflows/multiplayer-health.yml` checks public health, readiness, the
+current frontend protocol/fingerprint, unsigned admission denial and foreign-
+origin denial every fifteen minutes (off the hour), on relevant changes and by
+manual dispatch. It needs no Supabase/player credentials and cannot admit a seat.
+The CLI helper retries transient failures three times, then exits unsuccessfully;
+Actions exposes the failed run and GitHub notification delivery follows the
+owner's notification settings. Update the pinned manifest fingerprint with any
+approved physics/asset/protocol release.
+
+This is a lightweight external check, not guaranteed continuous monitoring:
+[GitHub schedules](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule)
+can be delayed/dropped and public-repository schedules disable after 60 days of
+inactivity. It does not test sign-in, racing, private result history or spending.
+Those checks still require the documented acceptance process and billing review.

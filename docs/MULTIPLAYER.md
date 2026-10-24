@@ -7,9 +7,10 @@ CPU / 1 GiB machine and an encrypted 1 GiB result volume in Johannesburg. The
 production frontend at `https://racing-game-jade.vercel.app` now points to it;
 frontend/server fingerprints match and prediction remains disabled. Hosted
 health, origin/Auth rejection, private UID-1000 volume access, result-RPC
-validation and an idle volume-marker restart check pass. Finished real-account
-two-physical-device race/history and the remaining hosted acceptance checks are
-still required; #120 remains open. See [the current launch runbook](PRIVATE_RACING_LAUNCH.md).
+validation and an idle volume-marker restart check pass. Two real users on separate Macs subsequently reported finishing with matching
+saved results, corroborated by a hosted finalized/save event. Independent history,
+recovery/rematch and remaining hosted acceptance checks are still pending; #120
+remains open. See [the current launch runbook](PRIVATE_RACING_LAUNCH.md).
 
 The sections below retain the original **2026-10-23 lobby-pilot** record. Their
 statements about the deployed lobby-only entrypoint, 256 MiB allocation and local

@@ -1,124 +1,85 @@
 # Issue 120 delivery status — 2026-10-24
 
-Delivery branch: `codex/issue-120-transport-benchmark`, developed from
-`5a906841edcc465ecece73a10f1fa990dc8365fd`. On 2026-10-24 the user authorized
-publishing all completed work to GitHub and updating the epic checklist.
-The work was developed in twenty local chunks; full file snapshots, dependency
-manifests and sequential patches are retained outside the repository at
-`/tmp/racing-game-issue120-local-chunks`. GitHub publication does not deploy the
-frontend or the hosted race backend, or complete the remaining acceptance gates.
+## Current launch
 
-## Implemented locally
+The two-player private-racing foundation from #142 and #148 is merged on main.
+The existing Fly app now runs the real race image, and the matching production
+frontend is live at <https://racing-game-jade.vercel.app>. The older lobby-only
+pilot is retained as a rollback image; it is no longer the active deployment.
 
-The earlier stacked work provides authoritative two-racer practice, shared
-checkpoint/lap results, optional durable private history, authenticated recovery,
-retirements, rematch, draining, identity audit and aggregate metrics. It is not all
-on main or deployed. The deployed pilot remains lobby-only.
+The user approved narrowing #120 to this working hosted private-racing launch.
+The full earlier scope is preserved in
+[the original roadmap](ISSUE_120_ORIGINAL_ROADMAP.md). Deferred work remains open:
+#143 competitive integrity/leaderboards/stats; #144 expanded account lifecycle,
+moderation and retention; #145 garage/social/matchmaking; #146 ranked progression,
+rewards and crews; #147 four-player scaling, contact, spectating and replays.
 
-The subsequent local chunks add transport benchmarking, private name-history UI,
-own-connection RTT/variation, controller checkpoints, exact input-application
-metadata and fixed history, complete correction decoding, per-seat correction
-streaming, bounded scheduled inputs, experimental own-car prediction, a separate
-staging artifact/CI check, correction-cost measurements and compact collision
-assets. Prediction and scheduled server capability remain explicitly opt-in.
-The user selected the existing Supabase project; accounts and histories will be
-shared by hosted testing. The three explicitly approved live history/retirement/audit migrations are now applied.
-No hosted application or hosted secret configuration changed. The ignored local
-frontend config now points to the localhost practice backend for real-session checks.
-The local result writer now uses an existing server-only key in an ignored 0600
-backend file and a private 0700 outbox. No new key or hosted credential was created.
+## Delivered
 
-## Verification
+- Shared headless physics and versioned collision/checkpoint/stock-car assets;
+  authoritative loading, countdown, bounded inputs, ghost racing, ordered laps
+  and shared session results. Practice rooms now admit exactly two racers;
+  lobby-only mode retains four seats.
+- Verified admission, bounded reconnect/reauthentication, retirement/DNF, rematch
+  consent, menu behavior, draining and aggregate operational metrics.
+- Idempotent private result storage, durable bounded retry outbox, owner history,
+  complete rename events from audit start and a private paginated name-history UI.
+- Bounded RTT diagnostics, full controller checkpoints, correction streaming,
+  replay history and experimental prediction/scheduled inputs. Both experimental
+  capabilities remain disabled in the hosted baseline.
+- Compact-asset production container, existing-project migration tooling,
+  scoped acceptance receipts and documented launch/rollback configuration.
 
-The full suite passed **3,278 tests across 510 suites** after local socket
-permission became available. Earlier sandbox-only attempts had loopback/signal
-failures; those suites now pass. A new large-geometry test initially timed out;
-native exact byte comparison preserves all geometry checks and passes in the
-full run. Frontend/backend builds, strict staging types, lint and the relocated
-compiled artifact check pass. Compact assets have geometry/replay/corruption checks.
+## Hosted evidence
 
-Synthetic 33/100/200 ms prediction checks and a mocked-stream scene test pass.
-A [real-physics full-race check](FINISHED_RACE_ACCEPTANCE.md) now also passes:
-two AI-controlled stock cars finish the normal three-lap distance through all
-24 ordered gates each, with valid lap sums and ranks. It runs in CI and leaves
-the normal countdown, input admission and race time limit intact. This is a
-local unpaced session check with synthetic seats and no database writes;
-finished-lap real-account browser saving remains unverified.
-A [real loopback two-tab browser smoke](BROWSER_PREDICTION_SMOKE.md) also checks
-active prediction, driving, menus and drop/reauthentication/RTT recovery. It exposed
-and fixed permanent disablement when reconnect clears the RTT sample. Sixteen
-affected tests and the then-full run of **3,270 tests / 507 suites** pass after
-that fix. The browser racers are synthetic and Supabase was disabled.
-The new correction benchmark covers 1,800 real-track session ticks and 600 fully
-decoded/acknowledged corrections. It is unpaced and opens no sockets. Measured
-JSON payload/capture costs and short compiled memory samples have separate
-reports and fingerprints; none establishes hosted capacity.
+The approved target is one shared CPU / 1 GiB machine in Johannesburg, one 1 GiB
+encrypted persistent result volume, one process/room and two racers. The budget
+is a US$15/month target, not a hard provider spending cap. Server secrets remain
+server-only; the public frontend was uploaded from clean tracked source with
+checked-out LFS assets and no local credential files.
 
-## Launch scope update — 2026-10-24
+The [hosted receipt](measurements/hosted-private-racing-2026-10-24.json) records:
 
-The user approved completing #120 as the deployed, verified two-player private-
-racing foundation. Deferred competitive/account/social/ranked/advanced systems
-are tracked in #143–#147; they remain unfinished. See the
-[launch contract and runbook](PRIVATE_RACING_LAUNCH.md) and preserved
-[original roadmap](ISSUE_120_ORIGINAL_ROADMAP.md). The approved hosting target is
-one shared CPU / 1 GiB machine plus a 1 GiB encrypted volume on the existing Fly
-app, with a US$15/month budget target and no extra replica or region. Actual hosted
-acceptance remains necessary before closing #120.
+- Deployed image digest, machine/volume and production frontend deployment ID;
+  exact matching simulation fingerprint and prediction disabled.
+- Health/readiness, unsigned-admission denial, foreign-origin denial and exact
+  production CORS; private writable outbox owned by UID 1000 with 0700 permissions.
+- Live rejected-invalid-result RPC preflight, writing no synthetic race record.
+- Controlled idle SIGTERM restart: a private non-record volume marker survived,
+  was removed afterward, and readiness recovered. This is not actual queued-result
+  replay or a rollback drill.
+- Two real accounts joined/readied and launched one lap on separate physical Macs.
+  The user explicitly reported both finished with matching saved results. Server
+  metrics corroborate one finalized/saved result and no pending writes. The agent
+  did not independently inspect the finished standings/history rows.
+- Short active samples around 295–299 MiB RSS and simulation work p95 bounded by
+  2 ms. These are not peak/sustained capacity or a guarantee for other devices/
+  networks; earlier counters include an aborted start whose cause is not attributed.
 
-## Remaining gates and roadmap
+## Validation
 
-- Run browser network shaping and the broader device matrix. Loopback socket/
-  signal suites and the local two-tab prediction smoke now pass.
-- The separate ARM64 container now builds and boots locally. Both physics modes,
-  UID 1000, health/readiness and graceful shutdown pass with networking disabled.
-  Choose and profile hosted practice capacity within an approved budget; the
-  existing 256 MiB lobby allocation has not been approved as race capacity.
-- Deploy and verify the writer with approved hosted persistent storage. Local
-  saving now works: two real Chrome/Safari accounts drove and retired from one
-  practice; both read their matching private DNF entries and the outbox cleared.
-  See [the real-save receipt](measurements/local-result-storage-2026-10-24.json).
-  The user approved
-  and the CLI applied all three mapped practice-history, retirement and identity-
-  audit migrations to the existing Supabase project. Post-apply schema metadata
-  confirms the tables, retirement columns and RPCs. Migration history matches all four local versions and the dry run confirms no
-  pending migrations. Live SQL lint reports one UUID-array initializer cast warning;
-  the live result function now executes successfully. All six rollback-only
-  SQL-role/result acceptance checks passed against the live database after explicit
-  user approval. Both racers are isolated; anonymous/browser writes and backend
-  direct mutations are denied. The transaction rolled back all synthetic data.
-  Nine public HTTP probes also pass: the key/project is reachable, anonymous
-  table/RPC access is denied and missing/forged sessions are rejected. Valid Auth
-  token refresh and real owner reads now also pass in Chrome. The original and
-  refreshed sessions each passed local room admission; both test rooms were left.
-  Two real HTTP owners and a successful privileged result commit now pass locally.
-  A late-profile-load expiry bug is fixed with a regression test. Genuine terminal
-  expiry/revocation and the hosted/physical-device gates remain open. See [the real-session receipt](measurements/supabase-real-session-2026-10-24.json),
-  [the HTTP report](SUPABASE_HTTP_ACCEPTANCE.md),
-  [the live SQL receipt](measurements/supabase-acceptance-2026-10-24.json),
-  [the CLI workflow](SUPABASE_CLI.md) and
-  [deployment receipt](measurements/supabase-deployment-2026-10-24.json).
-- Complete two-account/two-physical-device racing, matching saved results/private
-  history, rematch and reconnect. A local offline container drill now preserves an
-  exact queued record across SIGKILL and a fresh process, with 0600/0700 permissions.
-  Exercise live DB outages, hosted process restart, rollback,
-  long sessions and low-memory/mobile devices.
-- Implement competitive track-limit/shortcut and recovery rules before verified
-  leaderboards. Current practice history stays ineligible for competitive boards.
-- Finish the separate account/email/password/reset and operational monitoring,
-  backup/restore, retention/deletion and moderation work.
-- The later public matchmaking, friends/parties/invites, cloud garage revision
-  sync, ranked/season/progression design, rewards ledger, crews, contact
-  collisions, spectating and replay projects remain open. Their acceptance and
-  policy decisions have not been met by the current practice implementation.
+The functional two-seat launch change passed 3,278 tests across 510 files, both
+builds, staging types/artifact checks, lint and a real-physics three-lap AI check.
+GitHub CI passed on #148. Six approved rollback-only live SQL role/result tests,
+nine public HTTP probes, local container/outbox crash checks and the earlier
+same-Mac real-account retirement/save test also pass within their stated scope.
 
-The [local container report](measurements/practice-container-2026-10-24.json)
-records the image ID, architecture, isolation limits and short memory samples.
-The new local SQL acceptance test and strict types pass; lint passes. The final
-full suite passes 3,278 tests across 510 files.
-Nine live public HTTP probes and an offline packaged outbox SIGKILL/restart drill
-also pass. The first full run overlapped browser initialization and had three
-timing-sensitive failures; all tests passed on the repeat after the temporary
-game tab was closed. No gameplay code or test timeouts changed in this chunk.
+The follow-up public menu wording build/lint passes. A new key-free hosted probe
+passes five live operational checks and three unit tests; its fifteen-minute
+GitHub Actions workflow is pending publication/activation on main. See
+[the launch runbook](PRIVATE_RACING_LAUNCH.md) for notification/scheduling limits
+and budget ownership. This probe does not test a player's race or monthly spend.
 
-The epic is not complete. Local code and synthetic tests do not close its hosted,
-physical-device or later-system acceptance gates.
+## Remaining before closing #120
+
+- Finish the requested hosted recovery/rematch/menu/hidden-tab and owner-history
+  confirmation. Record actual expiry/revocation behavior without claiming an
+  immediate-ban system or unsupported refresh recovery.
+- Complete a controlled rollback and actual pending-result replay check on the
+  hosted volume while players are out of active rooms.
+- Record the accepted device/network baseline and limits. Real two-Mac racing
+  at about 235 ms observed desktop RTT is reported; mobile and real TCP shaping
+  at 30/100/200 ms are not established by earlier synthetic prediction tests.
+- Publish/activate the public health monitor and final evidence, and update the
+  issue only for checks actually completed. #120 remains open until its remaining
+  launch gates are resolved; the deferred epic features are not marked complete.
