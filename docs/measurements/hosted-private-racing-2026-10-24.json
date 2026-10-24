@@ -1,0 +1,795 @@
+{
+  "recordedAt": "2026-10-24T14:38:09.156686+00:00",
+  "status": "two_physical_mac_finished_saved_acceptance_reported",
+  "sourceCommit": "920ff5633ad5493eeb49ce43c79aae39689f59bf",
+  "mergedPullRequest": 148,
+  "mergeCommit": "b004a4cee5d72c8e1e9bf461c25299eef7609777",
+  "backend": {
+    "url": "https://charly-racing-multiplayer.fly.dev",
+    "image": "registry.fly.io/charly-racing-multiplayer@sha256:eb3bf55e8cbdd062a36d999e076fea2c2ad02033200379118b380cf2638a7b77",
+    "region": "jnb",
+    "machineId": "890d14f605d968",
+    "machineCount": 1,
+    "sharedCpus": 1,
+    "memoryMiB": 1024,
+    "maxRooms": 1,
+    "maxRacers": 2,
+    "scheduledInputs": false,
+    "serverOnlyResultStorage": true
+  },
+  "volume": {
+    "id": "vol_vwno7m0g93o9zenv",
+    "sizeGiB": 1,
+    "encrypted": true,
+    "uid": 1000,
+    "owner": 1000,
+    "outboxMode": "0700",
+    "pendingAtPreflight": 0,
+    "rejectedAtPreflight": 0
+  },
+  "frontend": {
+    "url": "https://racing-game-jade.vercel.app",
+    "deploymentId": "dpl_3xKVtCyk1KaRtbio54d1YKE9CxXk",
+    "matchingFingerprint": "bb45039de6b0ee8539502ed6846b7d1368e647b602fee16c15322a5ce0ec35a8",
+    "predictionEnabled": false,
+    "cleanTrackedSourceUpload": true,
+    "localCredentialFilesExcluded": true,
+    "configuredServerCredentialAbsentFromUpload": true,
+    "publicRootStatus": 200,
+    "publicManifestStatus": 200
+  },
+  "httpChecks": [
+    {
+      "route": "/healthz",
+      "method": "GET",
+      "status": 200,
+      "passed": true
+    },
+    {
+      "route": "/readyz",
+      "method": "GET",
+      "status": 200,
+      "passed": true
+    },
+    {
+      "route": "/rooms",
+      "method": "POST",
+      "status": 401,
+      "passed": true
+    },
+    {
+      "route": "/rooms",
+      "method": "POST",
+      "status": 403,
+      "passed": true
+    },
+    {
+      "route": "/rooms",
+      "method": "OPTIONS",
+      "status": 204,
+      "passed": true
+    }
+  ],
+  "hostedAssetCheck": {
+    "realCars": 2,
+    "ticks": 12,
+    "fingerprintMatches": true,
+    "separateCheckProcessRssMiB": 147.51953125,
+    "capacityClaim": false
+  },
+  "resultRpcPreflight": {
+    "validationReached": true,
+    "invalidRecordRejected": true,
+    "recordsWritten": 0
+  },
+  "controlledIdleRestart": {
+    "signal": "SIGTERM",
+    "healthRecovered": true,
+    "privateVolumeMarkerSurvived": true,
+    "disposableMarkerRemoved": true,
+    "markerMode": "0600",
+    "raceRecordsCreated": 0,
+    "queuedRealResultReplayTested": false
+  },
+  "idleMetrics": {
+    "schema": 1,
+    "uptimeSeconds": 120.01041401200001,
+    "events": {
+      "admission_ok": 0,
+      "admission_rejected": 1,
+      "admission_rate_limited": 0,
+      "input_accepted": 0,
+      "input_rejected": 0,
+      "reconnect_started": 0,
+      "reconnect_succeeded": 0,
+      "reconnect_failed": 0,
+      "race_started": 0,
+      "race_finished": 0,
+      "race_aborted": 0,
+      "result_pending": 0,
+      "result_saved": 0,
+      "result_failed": 0
+    },
+    "gauges": {
+      "rooms": 0,
+      "racers": 0,
+      "heldSeats": 0,
+      "activeRaces": 0,
+      "admissionClaims": 0,
+      "pendingResultWrites": 0,
+      "rssMiB": 106.04296875,
+      "heapUsedMiB": 23.275283813476562
+    },
+    "histograms": {
+      "advance_ms": {
+        "count": 0,
+        "mean": null,
+        "max": null,
+        "p95Upper": null,
+        "bounds": [
+          0.125,
+          0.25,
+          0.5,
+          1,
+          2,
+          4,
+          8,
+          12,
+          16,
+          16.67,
+          20,
+          25,
+          33.34,
+          50,
+          100,
+          250,
+          500,
+          1000
+        ],
+        "buckets": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "callback_gap_ms": {
+        "count": 0,
+        "mean": null,
+        "max": null,
+        "p95Upper": null,
+        "bounds": [
+          0.125,
+          0.25,
+          0.5,
+          1,
+          2,
+          4,
+          8,
+          12,
+          16,
+          16.67,
+          20,
+          25,
+          33.34,
+          50,
+          100,
+          250,
+          500,
+          1000
+        ],
+        "buckets": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "input_age_ticks": {
+        "count": 0,
+        "mean": null,
+        "max": null,
+        "p95Upper": null,
+        "bounds": [
+          0,
+          1,
+          2,
+          3,
+          6,
+          15,
+          30,
+          60,
+          120,
+          600,
+          36000
+        ],
+        "buckets": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "snapshot_bytes": {
+        "count": 0,
+        "mean": null,
+        "max": null,
+        "p95Upper": null,
+        "bounds": [
+          256,
+          512,
+          1024,
+          2048,
+          4096,
+          8192,
+          16384,
+          32768
+        ],
+        "buckets": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "finalize_ms": {
+        "count": 0,
+        "mean": null,
+        "max": null,
+        "p95Upper": null,
+        "bounds": [
+          1,
+          10,
+          100,
+          1000,
+          5000,
+          10000,
+          30000,
+          60000
+        ],
+        "buckets": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    }
+  },
+  "twoDeviceAcceptance": {
+    "userReportedSecondPhysicalMac": true,
+    "realAccountsJoinedSameRoom": true,
+    "bothReady": true,
+    "laps": 1,
+    "observedDesktopRttMs": 237,
+    "observedDesktopVariationMs": 79,
+    "raceLaunched": true,
+    "finishedAndSaved": true,
+    "matchingSavedResults": true,
+    "confirmationMethod": "User explicitly reported both finished and matching saved results; two-Mac lobby/ready and active/save events corroborated by controlled desktop UI and hosted metrics. Finished standings/history rows were not read by the agent."
+  },
+  "validation": {
+    "fullTestsPassed": 3278,
+    "fullFilesPassed": 510,
+    "maxWorkers": 2,
+    "focusedSocketTestsPassed": 15,
+    "frontendServerBuildsPassed": true,
+    "stagingTypesAndArtifactChecksPassed": true,
+    "lintPassed": true,
+    "threeLapAiCheckPassed": true,
+    "githubLaunchCiPassed": true
+  },
+  "budget": {
+    "monthlyTargetUsd": 15,
+    "hardProviderCap": false,
+    "extraReplicaOrRegionCreated": false
+  },
+  "remaining": [
+    "Hosted rematch/reconnect/expiry/menu/device/network measurements",
+    "Real pending-result restart recovery and rollback drill",
+    "Budget/external monitoring ownership"
+  ],
+  "firstActiveRaceMetrics": {
+    "schema": 1,
+    "uptimeSeconds": 660.0157948279999,
+    "events": {
+      "admission_ok": 2,
+      "admission_rejected": 1,
+      "admission_rate_limited": 0,
+      "input_accepted": 1646,
+      "input_rejected": 0,
+      "reconnect_started": 0,
+      "reconnect_succeeded": 0,
+      "reconnect_failed": 0,
+      "race_started": 2,
+      "race_finished": 0,
+      "race_aborted": 1,
+      "result_pending": 0,
+      "result_saved": 0,
+      "result_failed": 0
+    },
+    "gauges": {
+      "rooms": 1,
+      "racers": 2,
+      "heldSeats": 0,
+      "activeRaces": 1,
+      "admissionClaims": 0,
+      "pendingResultWrites": 0,
+      "rssMiB": 295.25390625,
+      "heapUsedMiB": 24.58319854736328
+    },
+    "histograms": {
+      "advance_ms": {
+        "count": 2356,
+        "mean": 0.9038349694390749,
+        "max": 21.442579000024125,
+        "p95Upper": 2,
+        "bounds": [
+          0.125,
+          0.25,
+          0.5,
+          1,
+          2,
+          4,
+          8,
+          12,
+          16,
+          16.67,
+          20,
+          25,
+          33.34,
+          50,
+          100,
+          250,
+          500,
+          1000
+        ],
+        "buckets": [
+          105,
+          0,
+          37,
+          1652,
+          479,
+          70,
+          9,
+          2,
+          0,
+          1,
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "callback_gap_ms": {
+        "count": 2356,
+        "mean": 16.42190152801358,
+        "max": 352,
+        "p95Upper": 20,
+        "bounds": [
+          0.125,
+          0.25,
+          0.5,
+          1,
+          2,
+          4,
+          8,
+          12,
+          16,
+          16.67,
+          20,
+          25,
+          33.34,
+          50,
+          100,
+          250,
+          500,
+          1000
+        ],
+        "buckets": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1732,
+          0,
+          617,
+          5,
+          0,
+          0,
+          1,
+          0,
+          1,
+          0,
+          0
+        ]
+      },
+      "input_age_ticks": {
+        "count": 34,
+        "mean": 2.764705882352941,
+        "max": 7,
+        "p95Upper": 15,
+        "bounds": [
+          0,
+          1,
+          2,
+          3,
+          6,
+          15,
+          30,
+          60,
+          120,
+          600,
+          36000
+        ],
+        "buckets": [
+          0,
+          6,
+          13,
+          9,
+          3,
+          3,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "snapshot_bytes": {
+        "count": 38,
+        "mean": 1814.157894736842,
+        "max": 1874,
+        "p95Upper": 2048,
+        "bounds": [
+          256,
+          512,
+          1024,
+          2048,
+          4096,
+          8192,
+          16384,
+          32768
+        ],
+        "buckets": [
+          0,
+          0,
+          0,
+          38,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "finalize_ms": {
+        "count": 0,
+        "mean": null,
+        "max": null,
+        "p95Upper": null,
+        "bounds": [
+          1,
+          10,
+          100,
+          1000,
+          5000,
+          10000,
+          30000,
+          60000
+        ],
+        "buckets": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    }
+  },
+  "resourceMeasurementScope": "Short active sample, not peak/sustained capacity. Metrics include one prior aborted start; cause is not attributed without further evidence.",
+  "postRaceMetrics": {
+    "schema": 1,
+    "uptimeSeconds": 840.016539948,
+    "events": {
+      "admission_ok": 2,
+      "admission_rejected": 1,
+      "admission_rate_limited": 0,
+      "input_accepted": 7858,
+      "input_rejected": 1091,
+      "reconnect_started": 0,
+      "reconnect_succeeded": 0,
+      "reconnect_failed": 0,
+      "race_started": 2,
+      "race_finished": 1,
+      "race_aborted": 1,
+      "result_pending": 1,
+      "result_saved": 1,
+      "result_failed": 0
+    },
+    "gauges": {
+      "rooms": 1,
+      "racers": 1,
+      "heldSeats": 0,
+      "activeRaces": 0,
+      "admissionClaims": 0,
+      "pendingResultWrites": 0,
+      "rssMiB": 299.33203125,
+      "heapUsedMiB": 27.50585174560547
+    },
+    "histograms": {
+      "advance_ms": {
+        "count": 12332,
+        "mean": 0.6794861865067837,
+        "max": 21.442579000024125,
+        "p95Upper": 2,
+        "bounds": [
+          0.125,
+          0.25,
+          0.5,
+          1,
+          2,
+          4,
+          8,
+          12,
+          16,
+          16.67,
+          20,
+          25,
+          33.34,
+          50,
+          100,
+          250,
+          500,
+          1000
+        ],
+        "buckets": [
+          470,
+          0,
+          2180,
+          8755,
+          796,
+          110,
+          17,
+          2,
+          0,
+          1,
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "callback_gap_ms": {
+        "count": 12332,
+        "mean": 16.21861822899773,
+        "max": 352,
+        "p95Upper": 20,
+        "bounds": [
+          0.125,
+          0.25,
+          0.5,
+          1,
+          2,
+          4,
+          8,
+          12,
+          16,
+          16.67,
+          20,
+          25,
+          33.34,
+          50,
+          100,
+          250,
+          500,
+          1000
+        ],
+        "buckets": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          9068,
+          0,
+          3250,
+          10,
+          2,
+          0,
+          1,
+          0,
+          1,
+          0,
+          0
+        ]
+      },
+      "input_age_ticks": {
+        "count": 196,
+        "mean": 2.489795918367347,
+        "max": 8,
+        "p95Upper": 6,
+        "bounds": [
+          0,
+          1,
+          2,
+          3,
+          6,
+          15,
+          30,
+          60,
+          120,
+          600,
+          36000
+        ],
+        "buckets": [
+          0,
+          48,
+          67,
+          53,
+          22,
+          6,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "snapshot_bytes": {
+        "count": 200,
+        "mean": 1826.195,
+        "max": 1874,
+        "p95Upper": 2048,
+        "bounds": [
+          256,
+          512,
+          1024,
+          2048,
+          4096,
+          8192,
+          16384,
+          32768
+        ],
+        "buckets": [
+          0,
+          0,
+          0,
+          200,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "finalize_ms": {
+        "count": 1,
+        "mean": 277.6871129999636,
+        "max": 277.6871129999636,
+        "p95Upper": 1000,
+        "bounds": [
+          1,
+          10,
+          100,
+          1000,
+          5000,
+          10000,
+          30000,
+          60000
+        ],
+        "buckets": [
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    }
+  },
+  "publicMonitorProbe": {
+    "recordedAt": "2026-10-24T14:37:11.516Z",
+    "check": "hosted-private-practice",
+    "checks": [
+      {
+        "name": "health",
+        "status": 200
+      },
+      {
+        "name": "ready",
+        "status": 200
+      },
+      {
+        "name": "frontend-manifest",
+        "status": 200
+      },
+      {
+        "name": "unsigned-admission-denied",
+        "status": 401
+      },
+      {
+        "name": "foreign-origin-denied",
+        "status": 403
+      }
+    ],
+    "scope": "Public health/readiness, pinned frontend manifest and unauthenticated/origin denials; not an authenticated race or spending check."
+  },
+  "publicMonitorSchedule": "Prepared for 15-minute GitHub Actions checks after merge; not a continuous-uptime guarantee or spending check."
+}
