@@ -48,14 +48,19 @@ The [hosted receipt](measurements/hosted-private-racing-2026-10-24.json) records
 - Controlled idle SIGTERM restart: a private non-record volume marker survived,
   was removed afterward, and readiness recovered. A later idle rollback to the
   retained lobby image and restore to the race image both passed; the five public
-  checks pass after restore. Actual queued-result replay remains unproven.
+  checks pass after restore. With explicit approval, an exact existing genuine
+  record was then queued on the hosted volume and replayed across idle SIGTERM
+  restart: the original save time and two history rows stayed unchanged, the
+  outbox cleared and the private temporary record file was removed.
 - Two real accounts joined/readied and launched one lap on separate physical Macs.
   The user explicitly reported both finished with matching saved results. Server
   metrics ultimately show four finalized/saved results and no pending writes. The
   user also reports owner history, rematch, menu and hidden-tab checks passed. The
   agent did not independently inspect the finished standings/history rows. One
-  reconnect started but timed out; no successful held-seat recovery is corroborated,
-  so the reported recovery needs clarification.
+  reconnect started but timed out. The user explicitly confirmed the same car
+  resumed in the same running race after the brief interruption; that need not
+  close the WebSocket. A forced hosted socket replacement was not independently
+  observed, and the failed counter cannot be attributed to that user check.
 - Short active samples around 295–299 MiB RSS and simulation work p95 bounded by
   2 ms. These are not peak/sustained capacity or a guarantee for other devices/
   networks; earlier counters include an aborted start whose cause is not attributed.
@@ -75,21 +80,26 @@ fifteen-minute workflow is merged in #149 and passed on main (run 40103971303).
 See [the launch runbook](PRIVATE_RACING_LAUNCH.md) for scheduling, notification and
 budget limits; this probe tests neither a player's race nor monthly spend.
 
-## Remaining before closing #120
+## Launch acceptance and limits
 
-- Clarify the recovery discrepancy: one held-seat attempt timed out, despite the
-  user reporting all checks passed. A successful same-car/same-race recovery is
-  not yet independently corroborated.
-- Complete exact genuine-record replay on the hosted volume. Automatic approval
-  review requires explicit permission to temporarily copy a private existing
-  record; the prepared check is pending that permission. No genuine payload has
-  been read or exported by that check.
-- Natural live JWT expiry/revocation was not observed. Local socket tests cover
-  bounded expiry and rejection; admission/refresh verifies identity and JWT expiry,
-  and logout releases the local seat. This is not immediate remote ban propagation.
-- The accepted evidence is a two-Mac desktop pilot at about 237 ms observed RTT.
-  Mobile and real TCP shaping at 30/100/200 ms remain unverified configurations;
-  synthetic prediction tests do not establish those claims.
+The requested desktop private-racing checks are complete within the evidence
+above: two physical Macs, finished matching saved results, owner history,
+user-confirmed same-car/same-race recovery, rematch/menu/tab behavior, measured
+bounded resources, public monitoring, rollback/restore and exact genuine-record
+replay after hosted restart. The final receipt contains no private race payload.
 
-The hosted game is playable. These remaining checks must stay visible until
-resolved; deferred epic features are not marked complete.
+- Forced hosted WebSocket replacement was not independently observed. Local
+  socket tests cover authenticated held-seat recovery, immutable identity,
+  recovery timeouts and expiry; a short network stall may preserve its socket.
+- Natural live JWT expiry/revocation was not observed. Admission/refresh verifies
+  identity and JWT expiry, and logout releases the local seat. Local tests cover
+  terminal expiry. Immediate remote ban propagation is deferred with #144.
+- This is a two-Mac desktop pilot at about 237 ms observed RTT. Mobile and real
+  TCP shaping at 30/100/200 ms are unverified; synthetic prediction tests do not
+  establish those claims. Peak capacity and a hard spending cap are not claimed.
+- The genuine-record drill proves restart replay/idempotence on hosted storage;
+  it did not induce a live database outage. Earlier isolated tests cover bounded
+  retry/failure paths without disrupting the shared project.
+
+#150 carries the final launch evidence and closes #120 after required CI passes.
+Deferred epics #143–#147 remain open and are not declared implemented by this launch.

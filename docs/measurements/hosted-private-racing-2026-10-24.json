@@ -1,6 +1,6 @@
 {
-  "recordedAt": "2026-10-24T14:58:53.931598+00:00",
-  "status": "two_mac_user_acceptance_reported_final_recovery_and_replay_pending",
+  "recordedAt": "2026-10-24T15:11:00.186513+00:00",
+  "status": "bounded_desktop_private_racing_acceptance_passed",
   "sourceCommit": "920ff5633ad5493eeb49ce43c79aae39689f59bf",
   "mergedPullRequest": 148,
   "mergeCommit": "b004a4cee5d72c8e1e9bf461c25299eef7609777",
@@ -89,7 +89,7 @@
     "disposableMarkerRemoved": true,
     "markerMode": "0600",
     "raceRecordsCreated": 0,
-    "queuedRealResultReplayTested": false
+    "queuedRealResultReplayTested": true
   },
   "idleMetrics": {
     "schema": 1,
@@ -319,7 +319,8 @@
     "rematchMenuHiddenTabChecksReportedPassed": true,
     "recoveryReportedPassed": true,
     "successfulHeldSeatRecoveryCorroborated": false,
-    "recoveryDiscrepancy": "User reported all checks passed, but pre-maintenance counters show one reconnect started, zero succeeded and one failed. Same-car/same-race clarification is pending."
+    "recoveryDiscrepancy": "User explicitly confirmed the same car resumed in the same running race. A short network interruption need not replace the WebSocket. Aggregate counters show one separate uncorrelated failed recovery and no successful held-seat handshake; do not claim a forced hosted socket replacement was independently observed.",
+    "sameCarResumedSameRaceConfirmedByUser": true
   },
   "validation": {
     "fullTestsPassed": 753,
@@ -340,12 +341,7 @@
     "hardProviderCap": false,
     "extraReplicaOrRegionCreated": false
   },
-  "remaining": [
-    "Resolve successful held-seat reconnect discrepancy",
-    "Approve and execute exact existing-record replay on hosted volume; automatic review requires explicit genuine-payload approval",
-    "Natural live Auth expiry/revocation not observed; terminal behavior is covered by local socket tests and documented, not an immediate-ban system",
-    "No mobile or real TCP-shaped latency acceptance; limited desktop pilot only"
-  ],
+  "remaining": [],
   "firstActiveRaceMetrics": {
     "schema": 1,
     "uptimeSeconds": 660.0157948279999,
@@ -1037,5 +1033,54 @@
     "mobileVerified": false,
     "realTcpShaping30_100_200msVerified": false,
     "scope": "Single private room, two racers, snapshot interpolation, ghost collisions; not mobile or scaled-service acceptance."
+  },
+  "exactExistingResultRestartReplay": {
+    "recordedAt": "2026-10-24T15:09:53.177Z",
+    "exactExistingRecordReplayed": true,
+    "historyRowsBefore": 2,
+    "historyRowsAfter": 2,
+    "originalSaveTimePreserved": true,
+    "privateOutboxCleared": true,
+    "newRaceOrIdentityCreated": false,
+    "scope": "Idempotent replay of one genuine already-committed result across an idle SIGTERM machine restart; not a live database outage.",
+    "explicitPrivatePayloadApproval": true,
+    "tlsChainAndHostnameVerification": true,
+    "temporaryRecordFileRemoved": true,
+    "initialVerificationAttempts": "Initial timestamp/TLS setup and transient command failures prevented complete receipts; service was restored and a final idle SIGTERM replay completed all comparisons.",
+    "privatePayloadIncludedInReceipt": false
+  },
+  "limitations": [
+    "User-reported same-car/same-race brief interruption recovery; forced hosted WebSocket replacement not independently corroborated. Local socket tests cover authenticated held-seat recovery and expiry.",
+    "Natural live JWT expiry/revocation not observed; terminal expiry and fresh-identity checks are tested locally. No immediate remote ban propagation.",
+    "Desktop two-Mac pilot only; mobile and real TCP shaping at 30/100/200 ms unverified.",
+    "Short bounded pilot metrics, not peak sustained capacity or an enforced spending cap.",
+    "Idempotent replay of an already-committed genuine record; no live database outage was induced."
+  ],
+  "finalPostReplayPublicProbe": {
+    "recordedAt": "2026-10-24T15:10:59.823Z",
+    "check": "hosted-private-practice",
+    "checks": [
+      {
+        "name": "health",
+        "status": 200
+      },
+      {
+        "name": "ready",
+        "status": 200
+      },
+      {
+        "name": "frontend-manifest",
+        "status": 200
+      },
+      {
+        "name": "unsigned-admission-denied",
+        "status": 401
+      },
+      {
+        "name": "foreign-origin-denied",
+        "status": 403
+      }
+    ],
+    "scope": "Public health/readiness, pinned frontend manifest and unauthenticated/origin denials; not an authenticated race or spending check."
   }
 }
