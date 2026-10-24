@@ -46,40 +46,50 @@ The [hosted receipt](measurements/hosted-private-racing-2026-10-24.json) records
   production CORS; private writable outbox owned by UID 1000 with 0700 permissions.
 - Live rejected-invalid-result RPC preflight, writing no synthetic race record.
 - Controlled idle SIGTERM restart: a private non-record volume marker survived,
-  was removed afterward, and readiness recovered. This is not actual queued-result
-  replay or a rollback drill.
+  was removed afterward, and readiness recovered. A later idle rollback to the
+  retained lobby image and restore to the race image both passed; the five public
+  checks pass after restore. Actual queued-result replay remains unproven.
 - Two real accounts joined/readied and launched one lap on separate physical Macs.
   The user explicitly reported both finished with matching saved results. Server
-  metrics corroborate one finalized/saved result and no pending writes. The agent
-  did not independently inspect the finished standings/history rows.
+  metrics ultimately show four finalized/saved results and no pending writes. The
+  user also reports owner history, rematch, menu and hidden-tab checks passed. The
+  agent did not independently inspect the finished standings/history rows. One
+  reconnect started but timed out; no successful held-seat recovery is corroborated,
+  so the reported recovery needs clarification.
 - Short active samples around 295–299 MiB RSS and simulation work p95 bounded by
   2 ms. These are not peak/sustained capacity or a guarantee for other devices/
   networks; earlier counters include an aborted start whose cause is not attributed.
 
 ## Validation
 
-The functional two-seat launch change passed 3,278 tests across 510 files, both
-builds, staging types/artifact checks, lint and a real-physics three-lap AI check.
-GitHub CI passed on #148. Six approved rollback-only live SQL role/result tests,
-nine public HTTP probes, local container/outbox crash checks and the earlier
-same-Mac real-account retirement/save test also pass within their stated scope.
+The clean scoped suite passes **753 tests across 129 files**, matching GitHub CI
+on #149. Earlier local totals of 3,278/510 included nested worktree tests and are
+not unique coverage of this checkout. `vitest.config.ts` now restricts discovery
+to `tests/` while retaining the Vite configuration. Frontend build and lint pass.
+Earlier server/staging builds, real-physics three-lap AI checks, six approved
+rollback-only live SQL tests and local container/outbox checks remain supporting
+evidence within their stated scope.
 
-The follow-up public menu wording build/lint passes. A new key-free hosted probe
-passes five live operational checks and three unit tests; its fifteen-minute
-GitHub Actions workflow is pending publication/activation on main. See
-[the launch runbook](PRIVATE_RACING_LAUNCH.md) for notification/scheduling limits
-and budget ownership. This probe does not test a player's race or monthly spend.
+The key-free hosted probe passes five live checks and three unit tests. Its
+fifteen-minute workflow is merged in #149 and passed on main (run 40103971303).
+See [the launch runbook](PRIVATE_RACING_LAUNCH.md) for scheduling, notification and
+budget limits; this probe tests neither a player's race nor monthly spend.
 
 ## Remaining before closing #120
 
-- Finish the requested hosted recovery/rematch/menu/hidden-tab and owner-history
-  confirmation. Record actual expiry/revocation behavior without claiming an
-  immediate-ban system or unsupported refresh recovery.
-- Complete a controlled rollback and actual pending-result replay check on the
-  hosted volume while players are out of active rooms.
-- Record the accepted device/network baseline and limits. Real two-Mac racing
-  at about 235 ms observed desktop RTT is reported; mobile and real TCP shaping
-  at 30/100/200 ms are not established by earlier synthetic prediction tests.
-- Publish/activate the public health monitor and final evidence, and update the
-  issue only for checks actually completed. #120 remains open until its remaining
-  launch gates are resolved; the deferred epic features are not marked complete.
+- Clarify the recovery discrepancy: one held-seat attempt timed out, despite the
+  user reporting all checks passed. A successful same-car/same-race recovery is
+  not yet independently corroborated.
+- Complete exact genuine-record replay on the hosted volume. Automatic approval
+  review requires explicit permission to temporarily copy a private existing
+  record; the prepared check is pending that permission. No genuine payload has
+  been read or exported by that check.
+- Natural live JWT expiry/revocation was not observed. Local socket tests cover
+  bounded expiry and rejection; admission/refresh verifies identity and JWT expiry,
+  and logout releases the local seat. This is not immediate remote ban propagation.
+- The accepted evidence is a two-Mac desktop pilot at about 237 ms observed RTT.
+  Mobile and real TCP shaping at 30/100/200 ms remain unverified configurations;
+  synthetic prediction tests do not establish those claims.
+
+The hosted game is playable. These remaining checks must stay visible until
+resolved; deferred epic features are not marked complete.
