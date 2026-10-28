@@ -67,3 +67,28 @@ it('falls back when fresh corrections stop acknowledging scheduled commands', ()
   expect(f.predictor.advance(drive, 502)).toBe(false)
   expect(f.predictor.ready).toBe(false)
 })
+it('stays a fixed lead ahead of a server clock that drifts or jumps instead of letting inputs land late', () => {
+  const f = fixture(); f.predictor.accept(correction(200), 0)
+  let server = 200, now = 0, minGap = Infinity, maxGap = -Infinity
+  const run = (ticks: number, serverPerClient: number) => {
+    for (let i = 0; i < ticks; i++) {
+      now += 1000 / 60; server += serverPerClient
+      const tick = Math.floor(server)
+      if (tick % 6 === 0 && tick > 200) f.predictor.accept({ ...correction(tick), acknowledgedSequence: tick }, now)
+      expect(f.predictor.advance(drive, now)).toBe(true)
+      if (i > 60) { const gap = f.predictor.predictedTick - Math.floor(server); minGap = Math.min(minGap, gap); maxGap = Math.max(maxGap, gap) }
+    }
+  }
+  run(600, 1.03) // a client clock 3% slow would otherwise lose 18 ticks: every input late
+  expect(minGap).toBeGreaterThanOrEqual(12 - 4); expect(maxGap).toBeLessThanOrEqual(12 + 4)
+  server += 8 // a long frame drops eight local ticks; the next correction exposes the deficit
+  const sends = f.send.mock.calls.length
+  minGap = Infinity; maxGap = -Infinity; run(120, 1)
+  expect(minGap).toBeGreaterThanOrEqual(12 - 4); expect(maxGap).toBeLessThanOrEqual(12 + 4)
+  expect(f.send.mock.calls.length - sends).toBeGreaterThan(120) // caught up by stepping, not a neutral reboot
+})
+it('retargets the lead in place without rebooting prediction', () => {
+  const f = fixture(); f.predictor.accept(correction(200), 0)
+  f.predictor.setLeadTicks(20); f.predictor.setLeadTicks(99)
+  expect(f.predictor.leadTicks).toBe(20); expect(f.predictor.ready).toBe(true)
+})

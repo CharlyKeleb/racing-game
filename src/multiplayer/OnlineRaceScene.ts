@@ -53,6 +53,8 @@ export class OnlineRaceScene {
   private readonly previousPredictionRotation = new THREE.Quaternion()
   private readonly predictionQuaternion = new THREE.Quaternion()
   private readonly predictionOffset = new THREE.Vector3()
+  /** Predicted motion of one fixed tick, used to keep clock nudges from showing as a skip or a stall. */
+  private readonly tickDisplacement = new THREE.Vector3()
   /** Rotation error left by the last corrections, applied on top of the predicted pose and eased to identity. */
   private readonly rotationOffset = new THREE.Quaternion()
   private readonly beforeCorrection = emptyVehicleState('')
@@ -154,12 +156,11 @@ export class OnlineRaceScene {
         this.predictionWorld = new PredictionWorld(world, this.playerCar.config, (x, z) => this.context.track.surfaceAt(x, z))
       } catch { world?.free(); this.predictionDisabled = true; return false }
     }
-    if (!this.prediction || required > this.prediction.leadTicks) {
-      this.resetPrediction()
-      // Reserve a little RTT headroom rather than disabling local controls on the next sample.
-      const lead = Math.min(MAX_PREDICTION_LEAD_TICKS, required + 3)
-      this.prediction = new PredictionReconciler(this.predictionWorld, (tick, input) => sendScheduledRaceInput(tick, input) !== null, lead)
-    }
+    // Reserve a little RTT headroom rather than disabling local controls on the next sample.
+    const lead = Math.min(MAX_PREDICTION_LEAD_TICKS, required + 3)
+    if (!this.prediction) this.prediction = new PredictionReconciler(this.predictionWorld, (tick, input) => sendScheduledRaceInput(tick, input) !== null, lead)
+    // Retarget in place when ping moves: the predicted clock drifts to the new lead without a reboot.
+    else if (required > this.prediction.leadTicks || this.prediction.leadTicks - lead > 3) this.prediction.setLeadTicks(lead)
     return true
   }
 
@@ -232,7 +233,20 @@ export class OnlineRaceScene {
     this.previousPredictionRotation.set(this.predicted.rotation.x, this.predicted.rotation.y, this.predicted.rotation.z, this.predicted.rotation.w)
     const controls = this.buffer.latest?.phase === 'racing' ? input : RELEASED_ONLINE_INPUT
     this.predictedThrottle = controls.throttle
-    if (this.prediction.advance(controls, now)) return true
+    if (this.prediction.advance(controls, now)) {
+      this.predictionWorld.read(this.predicted)
+      const p = this.predicted.position, base = this.previousPredictionPosition, steps = this.prediction.lastSteps
+      if (steps === 1) this.tickDisplacement.set(p.x - base.x, p.y - base.y, p.z - base.z)
+      else if (this.playerCar.model.root.visible) {
+        // A clock nudge stepped 0 or 2+ ticks: draw one tick of motion and ease the remainder in like a correction.
+        if (steps > 1) this.tickDisplacement.set((p.x - base.x) / steps, (p.y - base.y) / steps, (p.z - base.z) / steps)
+        const d = this.tickDisplacement
+        this.predictionOffset.x += base.x + d.x - p.x; this.predictionOffset.y += base.y + d.y - p.y; this.predictionOffset.z += base.z + d.z - p.z
+        base.set(p.x - d.x, p.y - d.y, p.z - d.z)
+        if (this.predictionOffset.lengthSq() > MAX_BLEND_METRES * MAX_BLEND_METRES) this.snapPrediction()
+      }
+      return true
+    }
     restoreMailboxControls(); return false
   }
 
