@@ -1,7 +1,7 @@
 # Private-racing launch on the existing app. Deploy from the repository root.
 # Resource/volume changes require the launch budget decision recorded in #120.
 app = "charly-racing-multiplayer"
-primary_region = "jnb"
+primary_region = "lhr"
 kill_signal = "SIGTERM"
 kill_timeout = "25s"
 

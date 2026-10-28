@@ -3,7 +3,7 @@
 ## Current hosted launch — 2026-10-24
 
 The existing Fly app runs two-player private racing on one shared CPU / 1 GiB
-machine and an encrypted 1 GiB volume in Johannesburg. The matching frontend is
+machine and an encrypted 1 GiB volume in London (`lhr`; Johannesburg until 2026-10-28, moved because both racers reach Europe faster). The matching frontend is
 live at `https://racing-game-jade.vercel.app`. #120 closed after two-Mac finished/
 saved-history reports, documented recovery/rematch behavior, health/origin/Auth
 checks and controlled rollback/exact-record replay on hosted storage.
