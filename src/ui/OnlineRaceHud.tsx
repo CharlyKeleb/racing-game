@@ -8,8 +8,16 @@ import { startLightsLit } from '../racing/RaceManager'
 import { isTouchDevice } from '../engine/device'
 import { TouchControls } from './TouchControls'
 import { Button, Panel } from './kit'
+import { formatTime } from '../racing/LapTimer'
+import { Minimap } from './Minimap'
+import { Leaderboard, PositionBadge } from './RacePosition'
+import { NitroGauge, RpmGauge, Speedometer } from './Speedometer'
 
 const touch = isTouchDevice()
+/** Dial full scale, as offline. */
+const DIAL_MAX_KMH = 340
+
+/** The offline race HUD (position, lap times, leaderboard, minimap, gantry, gauges) on server timing. */
 export function OnlineRaceHud() {
   const state = useStore(onlineRaceStore)
   const recovering = useStore(lobbyStore, s => s.status === 'reconnecting')
@@ -19,34 +27,57 @@ export function OnlineRaceHud() {
   const roster = (lobby?.raceRacers ?? lobby?.racers)?.map(r => ({ ...r, connected: lobby?.racers.find(current => current.id === r.id)?.connected ?? false }))
   const race = lobby?.race
   const self = roster?.find(r => r.sessionId === sessionId)
-  const progress = frame?.progress?.find(p => p.id === self?.id)
   const result = frame?.result
   const ready = state.loaded && state.countdown === null && !state.finished && !recovering
   const lights = state.countdown !== null ? startLightsLit(state.countdown) : 0
-  return <div className="online-race" aria-label="Online practice">
-    <header className="online-race__header">
-      <div><span className="eyebrow">Private practice · Nürburgring GP</span><strong>Your crew. Same circuit.</strong><p>Ghost cars · Server timing · Session results</p><ConnectionStatus /></div>
-      <Button size="sm" onClick={() => onlineRaceStore.setState({ menuOpen: true })}>Race menu <kbd>Esc</kbd></Button>
-    </header>
-    <aside className="online-race__roster" aria-label="Racers">{roster?.map(r => {
-      const p = frame?.progress?.find(p => p.id === r.id)
-      const label = p?.retiredTicks !== undefined ? 'DNF' : r.connected === false ? 'Reconnecting…' : p?.finishTicks != null ? 'Finished' : `Lap ${Math.min((p?.completedLaps ?? 0) + 1, lobby?.laps ?? 1)} / ${lobby?.laps ?? 1}`
-      return <div key={r.id}><strong>{r.displayName}</strong><span>@{r.handle} · {label}</span></div>
-    })}</aside>
+  const player = state.standings.find(s => s.player)
+  const notices = roster?.filter(r => r.id !== self?.id).map(r => {
+    const p = frame?.progress?.find(p => p.id === r.id)
+    return p?.retiredTicks !== undefined ? `${r.displayName} · DNF` : r.connected === false ? `${r.displayName} · Reconnecting…` : null
+  }).filter(Boolean)
+  const shift = state.gear > 0 && state.rpm >= state.redlineRpm * .94
+  const sweep = state.countdown !== null
+  return <div className={`hud online-race${state.nitroActive ? ' hud--nitro' : ''}`} aria-label="Online practice">
+    {state.loaded && <>
+      <div className="hud-tl">
+        {state.standings.length > 1 && player && <PositionBadge position={player.position} total={state.standings.length} />}
+        <div className="hud-lap">
+          <span className="eyebrow">Lap</span>
+          <b>{state.lap}</b>
+          <span className="hud-lap__total">/{state.totalLaps}</span>
+        </div>
+        <div className="hud-times">
+          <div><span className="eyebrow">Time</span><span className="mono">{formatTime(state.currentLapMs)}</span></div>
+          <div><span className="eyebrow">Best</span><span className="mono">{formatTime(state.bestLapMs)}</span></div>
+        </div>
+      </div>
+      <div className="hud-tr">
+        {state.standings.length > 1 && <Leaderboard standings={state.standings} />}
+        {notices?.map(text => <p key={text} className="online-race__notice">{text}</p>)}
+      </div>
+      <div className="hud-bl">
+        <div className="online-race__bar">
+          <span className="eyebrow">Private practice</span>
+          <ConnectionStatus />
+          <Button size="sm" onClick={() => onlineRaceStore.setState({ menuOpen: true })}>Race menu <kbd>Esc</kbd></Button>
+        </div>
+        <Minimap />
+      </div>
+    </>}
     {!state.loaded && <div className="online-race__message" role="status"><strong>{race ? 'Loading your grid…' : 'Returning to the lobby…'}</strong><span>Waiting for both racers to load the circuit.</span></div>}
-    {state.loaded && state.countdown !== null && <div className="start-lights" role="img" aria-label={`${lights} of 5 start lights lit`}><div className="start-lights__gantry">{Array.from({ length: 5 }, (_, i) => <span key={i} className={`start-lights__pod${i < lights ? ' is-lit' : ''}`}><i /><i /></span>)}</div></div>}
-    {progress && !result && <div className="online-race__timing" aria-label="Race timing">
-      <strong>{progress.finishTicks !== null ? 'Finished · Waiting for your rival' : `Lap ${Math.min(progress.completedLaps + 1, lobby?.laps ?? 1)} / ${lobby?.laps ?? 1}`}</strong>
-      <span>{formatTicks(progress.finishTicks ?? Math.max(0, (frame?.tick ?? 0) - (race?.countdownTicks ?? 180)))}</span>
-      <small>{progress.finishTicks !== null ? 'Your rival has up to 60 seconds to finish.' : `Next gate ${progress.nextCheckpoint === 0 ? 'Finish' : progress.nextCheckpoint}`}</small>
+    {state.loaded && (state.countdown !== null || state.go) && <div className={`start-lights${state.go ? ' start-lights--go' : ''}`} role="img" aria-label={state.go ? 'Go' : `${lights} of 5 start lights lit`}>
+      <div className="start-lights__gantry">{Array.from({ length: 5 }, (_, i) => <span key={i} className={`start-lights__pod${!state.go && i < lights ? ' is-lit' : ''}`}><i /><i /></span>)}</div>
+      {state.go && <div className="start-lights__go">Go</div>}
     </div>}
+    {state.finished && !result && <div className="online-race__message" role="status"><strong>Finished</strong><span>Waiting for your rival · They have up to 60 seconds to finish.</span></div>}
     {(state.delayed || recovering || lobby?.draining) && !result && <p className="online-race__delay" role="status">{recovering ? 'Reconnecting · Your race continues · Controls released' : state.delayed ? 'Connection delayed · Controls released' : 'Server restarting · Finish before the shutdown window closes'}</p>}
-    <div className="online-race__gauges" aria-label={`${Math.round(state.speedKmh)} km/h, gear ${state.gear}`}>
-      <span className="eyebrow">{Math.round(state.rpm)} rpm <b>{state.gear < 0 ? 'R' : state.gear}</b></span>
-      <strong>{Math.round(state.speedKmh)}<small>km/h</small></strong>
-      <label>N₂O <meter min={0} max={1} value={state.nitro} /></label>
-    </div>
-    {ready && !touch && <p className="online-race__keys">WASD drive · Space drift · Shift nitro · Hold B rear view</p>}
+    {state.loaded && <div className="speedo">
+      <div className="speedo__side">
+        <RpmGauge rpm={state.rpm} redlineRpm={state.redlineRpm} shift={shift} sweep={sweep} />
+        <NitroGauge level={state.nitro} active={state.nitroActive} ready={state.nitro > .1} cue={0} windowOpen={false} perfect={false} sweep={sweep} />
+      </div>
+      <Speedometer speedKmh={state.speedKmh} maxKmh={DIAL_MAX_KMH} gear={state.gear < 0 ? 'R' : state.gear === 0 ? 'N' : String(state.gear)} shift={shift} nitro={state.nitroActive} sweep={sweep} />
+    </div>}
     {ready && touch && !state.menuOpen && <TouchControls online />}
     {state.menuOpen && !result && <OnlineMenu />}
     {result && <OnlineResults result={result} recovering={recovering} persistence={lobby?.resultPersistence?.raceId === result.raceId ? lobby.resultPersistence : undefined} host={self?.id === lobby?.hostId} names={new Map(roster?.map(r => [r.id, r.displayName]))} />}

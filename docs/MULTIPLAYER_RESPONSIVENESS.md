@@ -29,6 +29,25 @@ when unset); `0` is a rollback switch. The Fly config uses
 clients keep mailbox inputs. Protocol, simulation fingerprint and result schema
 are unchanged, and no hardware/region/replica or database migration is required.
 
+## Smoothness pass (2026-10-28)
+
+- **Prediction stays on under jitter.** `variationMs` is the max−min range of eight
+  RTT samples, so one loading hitch inflated it enough (203 ms RTT, 207 ms range →
+  29 ticks) to disable prediction and put a full round trip on every control. The lead
+  is now `(RTT + range/2) × 0.06 + 4` ticks, clamped to 24. Only an RTT beyond the
+  server's 24-tick input window (about 366 ms) falls back to snapshot controls.
+- **Corrections blend in.** A correction used to collapse the render interpolation
+  and turn the car to the server heading in one frame, 10 times a second. The scene
+  now shifts the interpolation base by the correction and eases the position
+  (0.18 s) and rotation (0.12 s) error away. Errors over 5 m still snap.
+- **Rivals follow a smoothed clock.** The snapshot playhead used to follow each
+  packet's arrival time, so late packets froze rivals and then jumped them forward. It
+  now runs at real time, nudged at most ±10% toward a target built from the earliest
+  arrival, plus up to 200 ms of extra buffer for the measured arrival spread.
+- **Same HUD as offline.** Online races use the offline position badge, lap and
+  times, leaderboard, minimap, start gantry with Go, and gauge cluster. Values come
+  from server progress and the drawn poses.
+
 ## Verification
 
 The [receipt](measurements/responsive-controls-2026-10-24.json) records two rendered

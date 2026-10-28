@@ -4,17 +4,30 @@ import { isInputApplication, type RaceSnapshot, type RaceVehicleState } from '..
 const TICK_MS = 1000 / 60
 const MAX_FRAMES = 32
 const DELAY_TICKS = 6
+/** Extra buffering added for measured arrival jitter, so late packets don't freeze and snap rivals. */
+const MAX_JITTER_TICKS = 12
 const MAX_EXTRAPOLATION_TICKS = 2
+/** The playhead runs at real time, nudged at most ±10% toward its target; larger drifts snap. */
+const CLOCK_GAIN = .05
+const CLOCK_MAX_RATE = .1
+const CLOCK_SNAP_TICKS = 12
 const VECTOR_FIELDS = ['position', 'velocity', 'angularVelocity'] as const
 const SCALAR_FIELDS = ['speed', 'steer', 'rpm', 'nitro'] as const
 const aQuat = new Quaternion(), bQuat = new Quaternion()
 const finiteVector = (v: { x: number; y: number; z: number }) => v && [v.x, v.y, v.z].every(Number.isFinite)
 
-/** Presentation only: a 100 ms interpolation buffer with at most 33 ms velocity extrapolation. */
+/**
+ * Presentation only: a 100 ms interpolation buffer (plus up to 200 ms for measured jitter) with at
+ * most 33 ms velocity extrapolation. The playhead follows a smoothed clock rather than each packet's
+ * arrival time, so uneven delivery doesn't make rival cars stutter.
+ */
 export class SnapshotBuffer {
   private readonly frames: RaceSnapshot[] = []
+  /** Arrival time minus server time per retained frame (ms). */
+  private readonly offsets: number[] = []
   private receivedAt = -Infinity
   private playhead = -Infinity
+  private sampledAt = -Infinity
   readonly raceId: string
   private readonly racerIds: readonly string[]
   constructor(raceId: string, racerIds: readonly string[]) { this.raceId = raceId; this.racerIds = racerIds }
@@ -38,20 +51,38 @@ export class SnapshotBuffer {
       seen.add(v.id)
     }
     this.frames.push(structuredClone(frame))
-    if (this.frames.length > MAX_FRAMES) this.frames.shift()
+    this.offsets.push(now - frame.tick * TICK_MS)
+    if (this.frames.length > MAX_FRAMES) { this.frames.shift(); this.offsets.shift() }
     this.receivedAt = now
     return true
   }
 
   get latest(): RaceSnapshot | undefined { return this.frames.at(-1) }
   delayed(now: number): boolean { return !this.latest || (this.latest.phase !== 'finished' && now - this.receivedAt > 500) }
-  resync(): void { this.frames.splice(0, Math.max(0, this.frames.length - 1)); this.playhead = -Infinity }
+  resync(): void {
+    const drop = Math.max(0, this.frames.length - 1)
+    this.frames.splice(0, drop); this.offsets.splice(0, drop); this.playhead = -Infinity
+  }
+
+  /** Advances the presentation clock once per frame time; every car sampled at that time shares it. */
+  private advance(now: number, latest: RaceSnapshot): void {
+    if (now === this.sampledAt) return
+    let early = Infinity, late = -Infinity
+    for (const offset of this.offsets) { early = Math.min(early, offset); late = Math.max(late, offset) }
+    const jitter = Math.min(MAX_JITTER_TICKS, Math.ceil((late - early) / TICK_MS))
+    // The earliest arrival is the best estimate of the server clock; late packets only add buffering.
+    const target = Math.min(latest.tick + MAX_EXTRAPOLATION_TICKS, (now - early) / TICK_MS - DELAY_TICKS - jitter)
+    const elapsed = Math.max(0, now - this.sampledAt) / TICK_MS
+    this.sampledAt = now
+    if (!Number.isFinite(this.playhead) || target - this.playhead > CLOCK_SNAP_TICKS) { this.playhead = target; return }
+    const rate = 1 + Math.max(-CLOCK_MAX_RATE, Math.min(CLOCK_MAX_RATE, (target - this.playhead) * CLOCK_GAIN))
+    this.playhead = Math.min(latest.tick + MAX_EXTRAPOLATION_TICKS, this.playhead + elapsed * rate)
+  }
 
   sample(id: string, now: number, out: RaceVehicleState): boolean {
     const latest = this.latest
     if (!latest) return false
-    const target = latest.tick + Math.max(0, now - this.receivedAt) / TICK_MS - DELAY_TICKS
-    this.playhead = Math.max(this.playhead, Math.min(latest.tick + MAX_EXTRAPOLATION_TICKS, target))
+    this.advance(now, latest)
     let before = this.frames[0], after = latest
     for (const frame of this.frames) {
       if (frame.tick <= this.playhead) before = frame
