@@ -38,6 +38,8 @@ export function isLobbyCar(value: unknown): value is LobbyCar {
 }
 
 export const RACE_PROTOCOL = 3
+/** Racing ticks the rest of the field has to finish after the first finisher. */
+export const FINISH_WINDOW_TICKS = 60 * 60
 export const CORRECTION_VERSION = 1
 export const MAX_CORRECTION_BYTES = 8192
 export const CORRECTION_INTERVAL_TICKS = 6

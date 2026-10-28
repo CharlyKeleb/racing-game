@@ -8,7 +8,7 @@ import type { QualityPreset } from '../../stores/gameStore'
 import { HAZE_STRENGTH } from '../../effects/HeatHaze'
 import { BOOST_BLUR_CENTER, BOOST_BLUR_INNER, BOOST_BLUR_OUTER, BOOST_BLUR_SPREAD, boostBlurSamples } from '../../effects/BoostBlur'
 import type { HazeSource } from '../../effects/PostFX'
-import { VIGNETTE_DARKNESS, VIGNETTE_OFFSET } from '../../effects/grade'
+import { MAX_SCENE_RADIANCE, VIGNETTE_DARKNESS, VIGNETTE_OFFSET } from '../../effects/grade'
 
 /**
  * The post stack for WebGPURenderer, as TSL nodes: the same chain as the
@@ -107,6 +107,9 @@ export class NodePostFX {
       })
       return output
     })()
+    // SanitizeEffect twin: bloom's mip chain spreads an overflowed pixel into black squares. TSL has no
+    // isnan, so this clamps Inf; min/max return the finite operand for NaN on most GPUs.
+    color = max(min(color, MAX_SCENE_RADIANCE), 0)
     const glow = bloom(color, 0.35, 0.5, 1.2)
     glow.smoothWidth.value = 0.2
     glow.setResolutionScale(quality === 'high' ? 0.5 : quality === 'medium' ? 0.35 : 0.25)

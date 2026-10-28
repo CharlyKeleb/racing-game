@@ -59,7 +59,7 @@ import { RaceCallouts } from '../racing/RaceCallouts'
 import { COUNTDOWN_SEC, RaceManager, START_LIGHTS, startLightsLit } from '../racing/RaceManager'
 import { draftingStrength } from '../racing/Drafting'
 import { Opponent } from '../racing/Opponent'
-import { RaceStandings, type RaceEntry } from '../racing/RaceStandings'
+import { MISSED_GATE_METRES, RaceStandings, type RaceEntry } from '../racing/RaceStandings'
 import { RecoveryMonitor } from '../racing/RecoveryMonitor'
 import type { TrafficCar } from '../racing/AiDriver'
 import { gameStore, type GamePhase, type Settings } from '../stores/gameStore'
@@ -157,8 +157,6 @@ function readTyres(ctrl: Vehicle['controller'], out: TyreBrakeInput): TyreBrakeI
 }
 /** Seconds of driving against the race direction before the HUD says so. */
 const WRONG_WAY_DELAY = 1.2
-/** Metres past an uncrossed gate before the HUD says the checkpoint was missed. */
-const MISSED_GATE_METRES = 40
 /** How long a Time Trial split / lap call stays on screen, ms of session time. */
 const TRIAL_SPLIT_SHOW_MS = 3000
 /** Garage turntable camera: distance (m) and lens (deg) when there's room. */

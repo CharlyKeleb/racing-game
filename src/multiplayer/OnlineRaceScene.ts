@@ -15,11 +15,11 @@ import { rigCarModel, type CarModel } from '../vehicles/CarModel'
 import { getCar } from '../vehicles/carRegistry'
 import { resolveVehicleConfig, type VehicleConfig } from '../vehicles/VehicleConfig'
 import type { Settings } from '../stores/gameStore'
-import { RACE_PROTOCOL, type LobbySnapshot, type RaceSnapshot, type RaceVehicleState } from '../../server/src/protocol'
+import { FINISH_WINDOW_TICKS, RACE_PROTOCOL, type LobbySnapshot, type RaceSnapshot, type RaceVehicleState } from '../../server/src/protocol'
 import { SIMULATION_VERSION } from '../simulation/HeadlessSimulation'
 import { SnapshotBuffer, emptyVehicleState } from './SnapshotBuffer'
 import { onlineRaceStore, RELEASED_ONLINE_INPUT } from './onlineRaceStore'
-import { RaceStandings, type RaceEntry } from '../racing/RaceStandings'
+import { MISSED_GATE_METRES, RaceStandings, type RaceEntry } from '../racing/RaceStandings'
 import { TrackProgress } from '../racing/TrackProgress'
 import { telemetryStore } from '../stores/telemetryStore'
 
@@ -325,16 +325,22 @@ export class OnlineRaceScene {
         carX: self.x ?? 0, carZ: self.z ?? 0, heading: Math.atan2(2 * (forward.w * forward.y + forward.x * forward.z), 1 - 2 * (forward.y * forward.y + forward.x * forward.x)),
         trackIndex: self.index, distanceLeft: self.finishMs !== null ? 0 : Math.max(0, this.laps * this.standings.lapLength - this.standings.distance(self)),
         opponents: rival.filter(car => car.model.root.visible).map(car => ({ id: car.entry.id, x: car.model.root.position.x, z: car.model.root.position.z })),
+        // The server only counts ordered gates: without this a cut gate silently stops lap progress.
+        missedCheckpoint: latest.phase === 'racing' && self.finishMs === null && this.standings.overrun(self) > MISSED_GATE_METRES,
       })
     }
     const finished = latest?.phase === 'finished'
+    let firstFinish = Infinity
+    for (const row of latest?.progress ?? []) if (row.finishTicks !== null) firstFinish = Math.min(firstFinish, row.finishTicks)
+    const finishWindowMs = latest?.phase === 'racing' && progress?.finishTicks == null && Number.isFinite(firstFinish)
+      ? Math.max(0, firstFinish + FINISH_WINDOW_TICKS - racingTicks) * 1000 / 60 : null
     onlineRaceStore.setState({ resultsOpen: finished, finished: finished || progress?.finishTicks != null, loaded: true, delayed: this.buffer.delayed(now), speedKmh: Math.abs(state.speed) * 3.6,
       rpm: state.rpm, redlineRpm: config.engine.redlineRpm, gear: state.gear, nitro: state.nitro, nitroActive: (state.nitroIntensity ?? 0) > .01,
       countdown: latest?.phase === 'countdown' ? latest.countdownTicks / 60 : null,
       go: latest?.phase === 'racing' && racingTicks < GO_TICKS,
       lap: Math.min(this.laps, (progress?.completedLaps ?? 0) + 1), totalLaps: this.laps,
       currentLapMs: (progress?.finishTicks != null ? lapTicks.at(-1) ?? 0 : racingTicks - lapTicks.reduce((a, b) => a + b, 0)) * 1000 / 60,
-      bestLapMs: lapTicks.length ? Math.min(...lapTicks) * 1000 / 60 : null, standings })
+      bestLapMs: lapTicks.length ? Math.min(...lapTicks) * 1000 / 60 : null, standings, finishWindowMs })
   }
 
   dispose(): void {

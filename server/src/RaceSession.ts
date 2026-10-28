@@ -1,7 +1,7 @@
 import { ScheduledInputs } from './ScheduledInputs.js'
 import { RaceProgress, type RaceGate, type RacePosition } from './RaceProgress.js'
 import { randomUUID } from 'node:crypto'
-import { CORRECTION_VERSION, MAX_CORRECTION_BYTES, type CorrectionPhysicsState, type CorrectionEnvelope, RACE_PROTOCOL, type LobbyCar, type RaceDescriptor, type RaceInput, type RaceSnapshot, type RaceVehicleState, type RaceResult, type RetirementReason } from './protocol.js'
+import { CORRECTION_VERSION, MAX_CORRECTION_BYTES, type CorrectionPhysicsState, type CorrectionEnvelope, RACE_PROTOCOL, FINISH_WINDOW_TICKS, type LobbyCar, type RaceDescriptor, type RaceInput, type RaceSnapshot, type RaceVehicleState, type RaceResult, type RetirementReason } from './protocol.js'
 
 export const SERVER_TICK_MS = 1000 / 60
 export const INPUT_TIMEOUT_TICKS = 15
@@ -229,7 +229,7 @@ export class RaceSession {
       }
       if (this.phase === 'countdown' && elapsed >= 0) this.phase = 'racing'
       if (racing && allFinished) { this.finish(this.retirements.size ? 'all-resolved' : 'all-finished'); return }
-      if (this.firstFinishTick !== null && elapsed - this.firstFinishTick >= 60 * 60) { this.finish('finish-window'); return }
+      if (this.firstFinishTick !== null && elapsed - this.firstFinishTick >= FINISH_WINDOW_TICKS) { this.finish('finish-window'); return }
       if (elapsed >= 60 * 600) { this.finish('time-limit'); return }
     }
     // Never silently discard simulation debt and pretend the race stayed synchronized.
