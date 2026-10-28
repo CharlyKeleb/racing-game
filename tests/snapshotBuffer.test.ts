@@ -17,6 +17,16 @@ describe('online snapshot presentation', () => {
     expect(other.position.x).toBeCloseTo(-6)
     expect(Math.abs(out.rotation.w)).toBeCloseTo(1)
   })
+  it('shows a server respawn at its new pose instead of sliding the car across the course', () => {
+    const b = new SnapshotBuffer('race', ['one', 'two'])
+    const respawned = frame(12)
+    respawned.vehicles[0].position.x = 300
+    b.push(frame(0), 0); b.push(respawned, 200)
+    const out = emptyVehicleState('one'), other = emptyVehicleState('two')
+    b.sample('one', 200, out); b.sample('two', 200, other)
+    expect(out.position.x).toBe(300)
+    expect(other.position.x).toBeCloseTo(-6) // the rival still interpolates
+  })
   it('bounds velocity extrapolation and freezes through an extended network gap', () => {
     const b = new SnapshotBuffer('race', ['one', 'two']), out = emptyVehicleState('one')
     b.push(frame(12), 200)

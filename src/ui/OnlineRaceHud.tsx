@@ -4,7 +4,7 @@ import { useStore } from 'zustand'
 import { lobbyStore, leaveLobby, returnToLobby, setRematchReady } from '../multiplayer/LobbyClient'
 import { onlineRaceStore } from '../multiplayer/onlineRaceStore'
 import { telemetryStore } from '../stores/telemetryStore'
-import type { RaceResult, ResultPersistence } from '../../server/src/protocol'
+import { RESET_VERSION, type RaceResult, type ResultPersistence } from '../../server/src/protocol'
 import { startLightsLit } from '../racing/RaceManager'
 import { isTouchDevice } from '../engine/device'
 import { TouchControls } from './TouchControls'
@@ -37,6 +37,7 @@ export function OnlineRaceHud() {
     return p?.retiredTicks !== undefined ? `${r.displayName} · DNF` : r.connected === false ? `${r.displayName} · Reconnecting…` : null
   }).filter(Boolean)
   const missed = useStore(telemetryStore, s => s.missedCheckpoint)
+  const canReset = race?.resetVersion === RESET_VERSION
   const shift = state.gear > 0 && state.rpm >= state.redlineRpm * .94
   const sweep = state.countdown !== null
   return <div className={`hud online-race${state.nitroActive ? ' hud--nitro' : ''}`} aria-label="Online practice">
@@ -71,7 +72,7 @@ export function OnlineRaceHud() {
       <div className="start-lights__gantry">{Array.from({ length: 5 }, (_, i) => <span key={i} className={`start-lights__pod${!state.go && i < lights ? ' is-lit' : ''}`}><i /><i /></span>)}</div>
       {state.go && <div className="start-lights__go">Go</div>}
     </div>}
-    {ready && missed && <div className="hud-wrongway hud-wrongway--missed" role="alert">Missed checkpoint<small>Turn back and drive through it · laps only count through every gate</small></div>}
+    {ready && missed && <div className="hud-wrongway hud-wrongway--missed" role="alert">Missed checkpoint<small>{canReset ? touch ? 'Tap ↺ to go back' : 'Press R to go back' : 'Turn back and drive through it · laps only count through every gate'}</small></div>}
     {ready && state.finishWindowMs !== null && <p className="online-race__delay" role="status">Your rival has finished · {Math.ceil(state.finishWindowMs / 1000)} s left to cross the line</p>}
     {state.finished && !result && <div className="online-race__message" role="status"><strong>Finished</strong><span>Waiting for your rival · They have up to 60 seconds to finish.</span></div>}
     {(state.delayed || recovering || lobby?.draining) && !result && <p className="online-race__delay" role="status">{recovering ? 'Reconnecting · Your race continues · Controls released' : state.delayed ? 'Connection delayed · Controls released' : 'Server restarting · Finish before the shutdown window closes'}</p>}
@@ -82,7 +83,7 @@ export function OnlineRaceHud() {
       </div>
       <Speedometer speedKmh={state.speedKmh} maxKmh={DIAL_MAX_KMH} gear={state.gear < 0 ? 'R' : state.gear === 0 ? 'N' : String(state.gear)} shift={shift} nitro={state.nitroActive} sweep={sweep} />
     </div>}
-    {ready && touch && !state.menuOpen && <TouchControls online />}
+    {ready && touch && !state.menuOpen && <TouchControls online onlineReset={canReset} />}
     {state.menuOpen && !result && <OnlineMenu />}
     {result && <OnlineResults result={result} recovering={recovering} persistence={lobby?.resultPersistence?.raceId === result.raceId ? lobby.resultPersistence : undefined} host={self?.id === lobby?.hostId} names={new Map(roster?.map(r => [r.id, r.displayName]))} />}
   </div>

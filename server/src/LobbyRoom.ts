@@ -85,6 +85,7 @@ export class LobbyRoom extends Room {
     this.control('loaded', (client, value: unknown) => {
       if (this.race?.acknowledge(client.sessionId, value)) this.publish()
     })
+    this.control('reset', (client, value: unknown) => { this.race?.reset(client.sessionId, value, performance.now()) })
     this.control('inputMode', (client, value: unknown) => { this.race?.useMailbox(client.sessionId, value) })
     this.onMessage('scheduledInput', (client, value: unknown) => {
       const accepted = this.racers.get(client.sessionId)?.connected === true && this.race?.scheduledInput(client.sessionId, value, performance.now())

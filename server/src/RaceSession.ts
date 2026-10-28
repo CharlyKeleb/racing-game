@@ -1,12 +1,14 @@
 import { ScheduledInputs } from './ScheduledInputs.js'
 import { RaceProgress, type RaceGate, type RacePosition } from './RaceProgress.js'
 import { randomUUID } from 'node:crypto'
-import { CORRECTION_VERSION, MAX_CORRECTION_BYTES, type CorrectionPhysicsState, type CorrectionEnvelope, RACE_PROTOCOL, FINISH_WINDOW_TICKS, type LobbyCar, type RaceDescriptor, type RaceInput, type RaceSnapshot, type RaceVehicleState, type RaceResult, type RetirementReason } from './protocol.js'
+import { CORRECTION_VERSION, MAX_CORRECTION_BYTES, type CorrectionPhysicsState, type CorrectionEnvelope, RACE_PROTOCOL, FINISH_WINDOW_TICKS, RESET_INTERVAL_MS, RESET_VERSION, type LobbyCar, type RaceDescriptor, type RaceInput, type RaceSnapshot, type RaceVehicleState, type RaceResult, type RetirementReason } from './protocol.js'
 
 export const SERVER_TICK_MS = 1000 / 60
 export const INPUT_TIMEOUT_TICKS = 15
 const HOLD: RaceInput = { raceId: '', sequence: 0, throttle: 0, brake: 0, steer: 0, handbrake: true, nitro: false }
 const NEUTRAL: RaceInput = { ...HOLD, handbrake: false }
+/** A reset lands this far before the last counted gate, so the racer drives back through it. */
+export const RESET_BACK_METRES = 6
 
 /** Numeric adapter: server rooms never load render assets or accept racer-authored transforms/configs. */
 export interface ServerRaceSimulation {
@@ -14,13 +16,17 @@ export interface ServerRaceSimulation {
   setInput(id: string, input: RaceInput): void
   position(id: string, out: RacePosition): void
   correction?(id: string): CorrectionPhysicsState
+  /** Stationary, upright placement on the road under (x, z); y is the course height near that point. */
+  respawn?(id: string, spawn: RaceSpawn): void
   states(): RaceVehicleState[]
   dispose(): void
 }
+export interface RaceSpawn { x: number; y: number; z: number; heading: number }
 export interface RaceSeat { sessionId: string; id: string; carId: LobbyCar }
 export interface RaceFactory {
   correctionVersion?: typeof CORRECTION_VERSION
   scheduledInputVersion?: 1
+  resetVersion?: typeof RESET_VERSION
   checkpoints: readonly RaceGate[]
   fingerprint: string
   simulationVersion: number
@@ -41,6 +47,7 @@ interface SeatInput {
   rateAt: number
   rateCount: number
   scheduledRateCount: number
+  resetAt: number
 }
 const INPUT_KEYS = new Set(['raceId', 'sequence', 'throttle', 'brake', 'steer', 'steerSource', 'handbrake', 'nitro'])
 function isInput(value: unknown, raceId: string): value is RaceInput {
@@ -68,6 +75,8 @@ export class RaceSession {
   private accumulator = 0
   private readonly progress = new Map<string, RaceProgress>()
   private readonly position = { x: 0, y: 0, z: 0 }
+  private readonly spawn: RaceSpawn = { x: 0, y: 0, z: 0, heading: 0 }
+  private readonly gates: readonly RaceGate[]
   private firstFinishTick: number | null = null
   private finalSnapshot: RaceSnapshot | null = null
   private loadingResolved = false
@@ -76,11 +85,12 @@ export class RaceSession {
   readonly laps: number
 
   constructor(racers: readonly RaceSeat[], factory: RaceFactory, laps = 3) {
-    this.racers = racers; this.laps = laps
+    this.racers = racers; this.laps = laps; this.gates = factory.checkpoints
     if (racers.length !== 2 || new Set(racers.map(r => r.id)).size !== 2 || new Set(racers.map(r => r.sessionId)).size !== 2) throw new Error('A race needs two distinct authenticated seats')
     for (const r of racers) this.progress.set(r.id, new RaceProgress(factory.checkpoints, laps))
-    this.descriptor = { protocol: RACE_PROTOCOL, id: randomUUID(), fingerprint: factory.fingerprint, simulationVersion: factory.simulationVersion, tickRate: 60, snapshotRate: 20, countdownTicks: 180, ...(factory.correctionVersion === CORRECTION_VERSION ? { correctionVersion: CORRECTION_VERSION, ...(factory.scheduledInputVersion === 1 ? { scheduledInputVersion: 1 as const } : {}) } : {}) }
-    for (const r of racers) this.seats.set(r.sessionId, { id: r.id, scheduled: false, schedule: new ScheduledInputs(), connected: true, received: -1, applied: -1, appliedMode: 'hold', firstAppliedTick: null, lastAppliedTick: null, tick: -Infinity, command: { ...NEUTRAL }, rateAt: -Infinity, rateCount: 0, scheduledRateCount: 0 })
+    this.descriptor = { protocol: RACE_PROTOCOL, id: randomUUID(), fingerprint: factory.fingerprint, simulationVersion: factory.simulationVersion, tickRate: 60, snapshotRate: 20, countdownTicks: 180, ...(factory.correctionVersion === CORRECTION_VERSION ? { correctionVersion: CORRECTION_VERSION, ...(factory.scheduledInputVersion === 1 ? { scheduledInputVersion: 1 as const } : {}) } : {}),
+      ...(factory.resetVersion === RESET_VERSION ? { resetVersion: RESET_VERSION } : {}) }
+    for (const r of racers) this.seats.set(r.sessionId, { id: r.id, scheduled: false, schedule: new ScheduledInputs(), connected: true, received: -1, applied: -1, appliedMode: 'hold', firstAppliedTick: null, lastAppliedTick: null, tick: -Infinity, command: { ...NEUTRAL }, rateAt: -Infinity, rateCount: 0, scheduledRateCount: 0, resetAt: -Infinity })
   }
 
   /** A late-loading simulation is freed even when the room was cancelled/disposed meanwhile. */
@@ -185,6 +195,32 @@ export class RaceSession {
       || v.raceId !== this.descriptor.id || v.version !== 1 || v.mode !== 'mailbox') return false
     seat.schedule.clear(); seat.scheduled = false; seat.tick = -Infinity
     seat.command = { ...NEUTRAL }
+    return true
+  }
+
+  /**
+   * Racer-requested recovery, as offline R: back on the course a few metres before the last gate
+   * the server counted, facing along it, stopped. Progress and lap times are kept, and the sweep is
+   * reseeded so the jump is neither a discontinuity nor a credited crossing.
+   */
+  reset(sessionId: string, value: unknown, nowMs: number): boolean {
+    const seat = this.seats.get(sessionId)
+    if (this.descriptor.resetVersion !== RESET_VERSION || this.phase !== 'racing' || !this.simulation?.respawn || !seat?.connected
+      || this.retirements.has(seat.id) || !value || typeof value !== 'object' || Array.isArray(value)) return false
+    const progress = this.progress.get(seat.id)!
+    const v = value as { version: number; raceId: string }
+    if (progress.finishTicks !== null || Object.keys(v).length !== 2 || v.version !== RESET_VERSION || v.raceId !== this.descriptor.id
+      || !Number.isFinite(nowMs) || nowMs - seat.resetAt < RESET_INTERVAL_MS) return false
+    const gate = this.gates[(progress.nextCheckpoint - 1 + this.gates.length) % this.gates.length]
+    const tx = gate.tangent[0], tz = gate.tangent[2], length = Math.hypot(tx, tz)
+    this.spawn.x = gate.position[0] - tx / length * RESET_BACK_METRES
+    this.spawn.y = gate.position[1]
+    this.spawn.z = gate.position[2] - tz / length * RESET_BACK_METRES
+    this.spawn.heading = Math.atan2(tx, tz)
+    this.simulation.respawn(seat.id, this.spawn)
+    this.simulation.position(seat.id, this.position)
+    progress.seed(this.position)
+    seat.resetAt = nowMs
     return true
   }
 

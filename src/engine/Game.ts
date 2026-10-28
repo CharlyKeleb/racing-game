@@ -1,6 +1,6 @@
 import { OnlineRaceScene } from '../multiplayer/OnlineRaceScene'
 import { onlineRaceStore, RELEASED_ONLINE_INPUT } from '../multiplayer/onlineRaceStore'
-import { lobbyStore, acknowledgeRaceLoaded, leaveLobby, sendRaceInput } from '../multiplayer/LobbyClient'
+import { lobbyStore, acknowledgeRaceLoaded, leaveLobby, sendRaceInput, sendRaceReset } from '../multiplayer/LobbyClient'
 import { CockpitRig } from '../vehicles/CockpitRig'
 import { AwarenessRoute, ProximityRadar, type AwarenessCar } from '../racing/ProximityRadar'
 import { proximityStore } from '../stores/proximityStore'
@@ -1532,8 +1532,10 @@ export class Game {
     if (this.onlineRaceId || this.onlineEnding) {
       this.input.poll(onlineRaceStore.getState().menuOpen || onlineRaceStore.getState().resultsOpen)
       if (this.input.consume('pause')) this.togglePause()
-      for (const action of ['camera', 'reset', 'restart', 'shiftUp', 'shiftDown', 'skip'] as const) this.input.consume(action)
+      for (const action of ['camera', 'restart', 'shiftUp', 'shiftDown', 'skip'] as const) this.input.consume(action)
       const active = this.onlineScene && !onlineRaceStore.getState().finished && !onlineRaceStore.getState().menuOpen && !document.hidden && !this.onlineScene.buffer.delayed(performance.now())
+      // The server owns the respawn (servers without resetVersion ignore it); the next correction or snapshot snaps the car.
+      if (this.input.consume('reset') && active) sendRaceReset()
       const controls = active ? this.input.state : RELEASED_ONLINE_INPUT
       if (!this.onlineScene?.fixedUpdate?.(controls, performance.now())) sendRaceInput(controls)
       return

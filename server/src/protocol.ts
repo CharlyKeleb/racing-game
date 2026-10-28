@@ -41,6 +41,10 @@ export const RACE_PROTOCOL = 3
 /** Racing ticks the rest of the field has to finish after the first finisher. */
 export const FINISH_WINDOW_TICKS = 60 * 60
 export const CORRECTION_VERSION = 1
+/** Additive capability: `{ version: 1, raceId }` puts the racer back before its last counted gate. */
+export const RESET_VERSION = 1
+/** Minimum wall time between accepted resets for one racer. */
+export const RESET_INTERVAL_MS = 2000
 export const MAX_CORRECTION_BYTES = 8192
 export const CORRECTION_INTERVAL_TICKS = 6
 
@@ -55,6 +59,7 @@ export interface RaceDescriptor {
   countdownTicks: number
   correctionVersion?: typeof CORRECTION_VERSION
   scheduledInputVersion?: 1
+  resetVersion?: typeof RESET_VERSION
 }
 export interface RaceInput {
   raceId: string

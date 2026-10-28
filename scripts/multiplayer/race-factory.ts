@@ -2,7 +2,7 @@ import { HeadlessSimulation, SIMULATION_VERSION, type SimulationTrack } from '..
 import { startingGrid } from '../../src/racing/StartingGrid'
 import { resolveVehicleConfig, type VehicleConfig } from '../../src/vehicles/VehicleConfig'
 import type { RaceFactory, ServerRaceSimulation } from '../../server/src/RaceSession'
-import { CORRECTION_VERSION, LOBBY_CARS, type RaceVehicleState } from '../../server/src/protocol'
+import { CORRECTION_VERSION, LOBBY_CARS, RESET_VERSION, type RaceVehicleState } from '../../server/src/protocol'
 
 export interface SimulationBundle {
   format: number
@@ -21,6 +21,7 @@ export function createRaceFactory(bundle: SimulationBundle, options: { scheduled
   let active = false
   return {
     correctionVersion: CORRECTION_VERSION,
+    resetVersion: RESET_VERSION,
     ...(options.scheduledInputs ? { scheduledInputVersion: 1 as const } : {}),
     checkpoints: bundle.track.checkpoints,
     fingerprint: bundle.fingerprint,
@@ -48,6 +49,11 @@ export function createRaceFactory(bundle: SimulationBundle, options: { scheduled
             out.x = p.x; out.y = p.y; out.z = p.z
           },
           setInput: (id, input) => world.setInput(id, input),
+          respawn: (id, spawn) => {
+            if (disposed) throw new Error('Respawn after dispose')
+            const y = world.physics.floorHeight(spawn.x, spawn.y + .6, spawn.z)
+            world.respawn(id, { position: { x: spawn.x, y: (y ?? spawn.y) + .6, z: spawn.z }, heading: spawn.heading })
+          },
           correction: id => {
             const vehicle = world.vehicles.get(id)
             if (!vehicle || disposed) throw new Error('Unknown active correction seat')

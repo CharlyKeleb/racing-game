@@ -75,6 +75,13 @@ export class HeadlessSimulation {
     current.nitro = input.nitro
   }
 
+  /** Trusted recovery placement: stopped and upright, as offline R. */
+  respawn(id: string, spawn: PhysicsSpawn): void {
+    const vehicle = this.vehicles.get(id)
+    if (!vehicle || !Number.isFinite(spawn.position.x + spawn.position.y + spawn.position.z + spawn.heading)) throw new Error('Invalid simulation respawn')
+    vehicle.respawn(spawn)
+  }
+
   step(): void {
     for (const [id, vehicle] of this.vehicles) vehicle.fixedUpdate(this.inputs.get(id)!, SIMULATION_DT)
     this.physics.step(SIMULATION_DT)
