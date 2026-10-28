@@ -1,6 +1,7 @@
 import { expect, it, vi } from 'vitest'
 import { RaceSession, SERVER_TICK_MS, type RaceFactory, type ServerRaceSimulation } from '../server/src/RaceSession'
 import { emptyVehicleState } from '../src/multiplayer/SnapshotBuffer'
+import { INPUT_HOLD_TICKS } from '../server/src/ScheduledInputs'
 function fixture(enabled = true) {
   const inputs = new Map<string, unknown>(), sim: ServerRaceSimulation = { setInput: (id, value) => { inputs.set(id, { ...value }) },
     position: (_id, out) => Object.assign(out, { x: 0, y: 0, z: 0 }), states: () => ['one', 'two'].map(emptyVehicleState),
@@ -15,7 +16,7 @@ function fixture(enabled = true) {
     throttle: 1, brake: 0, steer: -.3, nitro: true, handbrake: false, ...extra })
   return { race, inputs, sim, start, command }
 }
-it('applies controls once at their exact server tick, neutralizes gaps and never advances from packets', async () => {
+it('applies controls at their exact server tick, holds the newest one across gaps and never advances from packets', async () => {
   const f = fixture(); await f.start()
   try {
     expect(f.race.scheduledInput('a', f.command(0, 182), 0)).toBe(true)
@@ -24,10 +25,14 @@ it('applies controls once at their exact server tick, neutralizes gaps and never
     f.race.advance(SERVER_TICK_MS); expect(f.inputs.get('one')).toMatchObject({ throttle: 0 })
     f.race.advance(SERVER_TICK_MS); expect(f.inputs.get('one')).toMatchObject({ throttle: 1, nitro: true, steer: -.3 })
     expect(f.race.snapshot()!.vehicles[0]).toMatchObject({ acknowledgedSequence: 0, inputApplication: { firstTick: 182, lastTick: 182, mode: 'command' } })
-    f.race.advance(SERVER_TICK_MS); expect(f.inputs.get('one')).toMatchObject({ throttle: 0, nitro: false })
+    f.race.advance(SERVER_TICK_MS); expect(f.inputs.get('one')).toMatchObject({ throttle: 1, nitro: true, steer: -.3 })
     f.race.advance(SERVER_TICK_MS); expect(f.inputs.get('one')).toMatchObject({ steer: .8 })
     expect(f.race.snapshot()!.vehicles[0].acknowledgedSequence).toBe(1)
-    f.race.advance(SERVER_TICK_MS); expect(f.inputs.get('one')).toMatchObject({ throttle: 0 })
+    for (let tick = 185; tick <= 184 + INPUT_HOLD_TICKS; tick++) {
+      f.race.advance(SERVER_TICK_MS); expect(f.inputs.get('one')).toMatchObject({ throttle: 1, steer: .8 })
+    }
+    f.race.advance(SERVER_TICK_MS); expect(f.inputs.get('one')).toMatchObject({ throttle: 0, steer: 0 })
+    expect(f.race.snapshot()!.vehicles[0].inputApplication.mode).toBe('neutral')
   } finally { f.race.close('done') }
 })
 it('rejects late/far/rewritten ticks, malformed controls, stale races and mixed mailbox commands', async () => {
@@ -41,6 +46,21 @@ it('rejects late/far/rewritten ticks, malformed controls, stale races and mixed 
     expect(f.race.input('a', mailbox, 1010)).toBe(false)
     expect(f.race.scheduledInput('other', f.command(1, 182), 1010)).toBe(false)
     expect(f.race.scheduledInput('b', f.command(0, 182), 1010)).toBe(true)
+  } finally { f.race.close('done') }
+})
+it('drives with a late control instead of dropping it, but never with an older or stale one', async () => {
+  const f = fixture(); await f.start()
+  try {
+    expect(f.race.scheduledInput('a', f.command(0, 182), 0)).toBe(true)
+    for (let i = 0; i < 8; i++) f.race.advance(SERVER_TICK_MS)
+    expect(f.race.scheduledInput('a', f.command(1, 186, { steer: .6 }), 10)).toBe(true) // already simulated
+    expect(f.race.scheduledInput('a', f.command(2, 185), 10)).toBe(false) // older than what it drives with
+    f.race.advance(SERVER_TICK_MS); expect(f.inputs.get('one')).toMatchObject({ steer: .6 })
+    expect(f.race.snapshot()!.vehicles[0]).toMatchObject({ acknowledgedSequence: 1, inputApplication: { mode: 'command', firstTick: 189 } })
+    expect(f.race.scheduledInput('a', f.command(2, f.race.tick + 2, { steer: -1 }), 20)).toBe(true) // a queued tick still wins
+    f.race.advance(SERVER_TICK_MS); expect(f.inputs.get('one')).toMatchObject({ steer: .6 })
+    f.race.advance(SERVER_TICK_MS); expect(f.inputs.get('one')).toMatchObject({ steer: -1 })
+    expect(f.race.scheduledInput('a', f.command(3, f.race.tick - INPUT_HOLD_TICKS), 30)).toBe(false)
   } finally { f.race.close('done') }
 })
 it('clears scheduled commands on loss/recovery and explicit fallback without rewinding sequence or car state', async () => {
@@ -67,12 +87,12 @@ it('leaves the legacy path unchanged without an advertised scheduled-input versi
 it('bounds high-rate scheduling while simulation still executes only its own fixed ticks', async () => {
   const f = fixture(); await f.start()
   try {
-    for (let sequence = 0; sequence < 72; sequence++) {
+    for (let sequence = 0; sequence < 120; sequence++) {
       expect(f.race.scheduledInput('a', f.command(sequence, f.race.tick + 1), 0)).toBe(true)
       f.race.advance(SERVER_TICK_MS)
     }
-    expect(f.race.scheduledInput('a', f.command(72, f.race.tick + 1), 0)).toBe(false)
-    expect(f.race.nextInputSequence('a')).toBe(72)
-    expect(f.race.scheduledInput('a', f.command(72, f.race.tick + 1), 1000)).toBe(true)
+    expect(f.race.scheduledInput('a', f.command(120, f.race.tick + 1), 0)).toBe(false)
+    expect(f.race.nextInputSequence('a')).toBe(120)
+    expect(f.race.scheduledInput('a', f.command(120, f.race.tick + 1), 1000)).toBe(true)
   } finally { f.race.close('done') }
 })

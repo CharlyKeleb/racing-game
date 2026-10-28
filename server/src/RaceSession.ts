@@ -1,4 +1,4 @@
-import { ScheduledInputs } from './ScheduledInputs.js'
+import { INPUT_HOLD_TICKS, ScheduledInputs } from './ScheduledInputs.js'
 import { RaceProgress, type RaceGate, type RacePosition } from './RaceProgress.js'
 import { randomUUID } from 'node:crypto'
 import { CORRECTION_VERSION, MAX_CORRECTION_BYTES, type CorrectionPhysicsState, type CorrectionEnvelope, RACE_PROTOCOL, FINISH_WINDOW_TICKS, RESET_INTERVAL_MS, RESET_VERSION, type LobbyCar, type RaceDescriptor, type RaceInput, type RaceSnapshot, type RaceVehicleState, type RaceResult, type RetirementReason } from './protocol.js'
@@ -44,6 +44,8 @@ interface SeatInput {
   lastAppliedTick: number | null
   tick: number
   command: RaceInput
+  /** Scheduled tick `command` was sent for; a gap in the schedule repeats it until it is this stale. */
+  commandTick: number
   rateAt: number
   rateCount: number
   scheduledRateCount: number
@@ -90,7 +92,7 @@ export class RaceSession {
     for (const r of racers) this.progress.set(r.id, new RaceProgress(factory.checkpoints, laps))
     this.descriptor = { protocol: RACE_PROTOCOL, id: randomUUID(), fingerprint: factory.fingerprint, simulationVersion: factory.simulationVersion, tickRate: 60, snapshotRate: 20, countdownTicks: 180, ...(factory.correctionVersion === CORRECTION_VERSION ? { correctionVersion: CORRECTION_VERSION, ...(factory.scheduledInputVersion === 1 ? { scheduledInputVersion: 1 as const } : {}) } : {}),
       ...(factory.resetVersion === RESET_VERSION ? { resetVersion: RESET_VERSION } : {}) }
-    for (const r of racers) this.seats.set(r.sessionId, { id: r.id, scheduled: false, schedule: new ScheduledInputs(), connected: true, received: -1, applied: -1, appliedMode: 'hold', firstAppliedTick: null, lastAppliedTick: null, tick: -Infinity, command: { ...NEUTRAL }, rateAt: -Infinity, rateCount: 0, scheduledRateCount: 0, resetAt: -Infinity })
+    for (const r of racers) this.seats.set(r.sessionId, { id: r.id, scheduled: false, schedule: new ScheduledInputs(), connected: true, received: -1, applied: -1, appliedMode: 'hold', firstAppliedTick: null, lastAppliedTick: null, tick: -Infinity, command: { ...NEUTRAL }, commandTick: -Infinity, rateAt: -Infinity, rateCount: 0, scheduledRateCount: 0, resetAt: -Infinity })
   }
 
   /** A late-loading simulation is freed even when the room was cancelled/disposed meanwhile. */
@@ -125,7 +127,7 @@ export class RaceSession {
     seat.connected = connected
     seat.schedule.clear(); seat.scheduled = false
     seat.tick = -Infinity
-    seat.command = { ...NEUTRAL }
+    seat.command = { ...NEUTRAL }; seat.commandTick = -Infinity
     if (!connected && this.phase === 'loading') this.loaded.delete(sessionId)
   }
 
@@ -180,7 +182,17 @@ export class RaceSession {
     if (!isInput(command, this.descriptor.id) || tick <= this.descriptor.countdownTicks || tick > this.descriptor.countdownTicks + 36_000
       || command.sequence <= seat.received || command.sequence > seat.received + 120 || !Number.isFinite(nowMs)) return false
     if (nowMs - seat.rateAt >= 1000) { seat.rateAt = nowMs; seat.rateCount = 0; seat.scheduledRateCount = 0 }
-    if (++seat.scheduledRateCount > 72 || !seat.schedule.enqueue(this.tick, tick, command)) return false
+    // Accepted ticks only ever increase and stay within the lookahead, so this only bounds junk.
+    if (++seat.scheduledRateCount > 120) return false
+    if (!seat.schedule.enqueue(this.tick, tick, command)) {
+      // Late (a network stall): dropping it left the car on neutral controls for that tick, which
+      // in a corner sends it straight on and drags the predicting racer back with a correction.
+      if (!seat.schedule.late(this.tick, tick)) return false
+      const held = seat.command
+      held.sequence = command.sequence; held.throttle = command.throttle; held.brake = command.brake; held.steer = command.steer
+      held.steerSource = command.steerSource; held.handbrake = command.handbrake; held.nitro = command.nitro
+      seat.commandTick = tick
+    }
     seat.received = command.sequence; seat.tick = this.tick; seat.scheduled = true; seat.command.raceId = this.descriptor.id
     return true
   }
@@ -194,7 +206,7 @@ export class RaceSession {
     if (Object.keys(v).length !== 3 || !Object.keys(v).every(key => ['raceId', 'version', 'mode'].includes(key))
       || v.raceId !== this.descriptor.id || v.version !== 1 || v.mode !== 'mailbox') return false
     seat.schedule.clear(); seat.scheduled = false; seat.tick = -Infinity
-    seat.command = { ...NEUTRAL }
+    seat.command = { ...NEUTRAL }; seat.commandTick = -Infinity
     return true
   }
 
@@ -241,7 +253,13 @@ export class RaceSession {
       for (const r of this.racers) {
         const seat = this.seats.get(r.sessionId)!
         const driving = racing && !this.retirements.has(r.id) && this.progress.get(r.id)!.finishTicks === null
-        const fresh = driving && seat.connected && (seat.scheduled ? seat.schedule.take(this.tick + 1, seat.command) : this.tick - seat.tick < INPUT_TIMEOUT_TICKS)
+        let fresh = false
+        if (driving && seat.connected) {
+          if (!seat.scheduled) fresh = this.tick - seat.tick < INPUT_TIMEOUT_TICKS
+          else if (seat.schedule.take(this.tick + 1, seat.command)) { seat.commandTick = this.tick + 1; fresh = true }
+          // A missing tick repeats the newest control, which is far closer to what the racer pressed than neutral.
+          else fresh = this.tick + 1 - seat.commandTick <= INPUT_HOLD_TICKS
+        }
         this.simulation!.setInput(r.id, driving ? fresh ? seat.command : NEUTRAL : HOLD)
         seat.appliedMode = !driving ? 'hold' : fresh ? 'command' : 'neutral'
         if (fresh) {
