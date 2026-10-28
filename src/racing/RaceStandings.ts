@@ -11,6 +11,8 @@ export interface RaceEntry {
   x?: number
   z?: number
 }
+/** Metres past an uncrossed gate before the HUD says the checkpoint was missed. */
+export const MISSED_GATE_METRES = 40
 /** A tracked index within this many metres of the car is trusted to narrow the projection. */
 const HINT_RADIUS = 30
 /** Centreline metres either side of the tracked index searched for the exact projection. */

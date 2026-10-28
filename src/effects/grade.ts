@@ -5,3 +5,6 @@
  */
 export const VIGNETTE_OFFSET = 0.32
 export const VIGNETTE_DARKNESS = 0.38
+
+/** Largest scene radiance the post stack passes on before blurs and bloom. Half floats overflow to Inf above 65504. */
+export const MAX_SCENE_RADIANCE = 256
