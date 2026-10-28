@@ -44,6 +44,9 @@ export class OnlineRaceScene {
   private readonly materials = new Set<THREE.Material>()
   private readonly visibility = new Map<THREE.Object3D, boolean>()
   private readonly velocity = new THREE.Vector3()
+  /** Own car's last drawn position; a jump beyond normal motion (a reset or a snapped correction) snaps the camera. */
+  private readonly drawnPosition = new THREE.Vector3()
+  private drawn = false
   private readonly sound: CarSoundState = { rpm: 900, gear: 1, throttle: 0, nitro: 0, nitroActive: false, nitroPerfect: false }
   private publishedAt = -Infinity
   private prediction: PredictionReconciler | null = null
@@ -282,6 +285,9 @@ export class OnlineRaceScene {
     const player = this.playerCar
     if (player.model.root.visible) {
       const state = player.state
+      const jump = MAX_BLEND_METRES + Math.abs(state.speed) * h * 2
+      if (this.drawn && this.drawnPosition.distanceToSquared(player.model.root.position) > jump * jump) this.camera.snap()
+      this.drawnPosition.copy(player.model.root.position); this.drawn = true
       this.camera.lookBack = lookBack
       this.camera.update(player.model.root, Math.abs(state.speed) * 3.6, h, state.nitroIntensity ?? 0)
       this.velocity.set(state.velocity.x, state.velocity.y, state.velocity.z)

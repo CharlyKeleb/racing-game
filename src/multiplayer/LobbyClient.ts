@@ -3,7 +3,7 @@ import type { VehicleConfig } from '../vehicles/VehicleConfig'
 import { ConnectionLatency } from './ConnectionLatency'
 import { Client, type Room } from '@colyseus/sdk'
 import { accountStore } from '../stores/accountStore'
-import { LOBBY_PROTOCOL, RACE_PROTOCOL, ROOM_CLOSED_CODE, type LobbyCar, type LobbySnapshot, type RaceSnapshot, type RaceInput, type RaceDescriptor, type RaceResume } from '../../server/src/protocol'
+import { LOBBY_PROTOCOL, RACE_PROTOCOL, RESET_INTERVAL_MS, RESET_VERSION, ROOM_CLOSED_CODE, type LobbyCar, type LobbySnapshot, type RaceSnapshot, type RaceInput, type RaceDescriptor, type RaceResume } from '../../server/src/protocol'
 
 import { lobbyStore } from './lobbyStore'
 export { lobbyStore } from './lobbyStore'
@@ -56,6 +56,7 @@ let refresh: ReturnType<typeof setInterval> | undefined
 let stopAccountWatch: (() => void) | undefined
 let generation = 0
 let lastInputAt = -Infinity
+let lastResetAt = -Infinity
 let scheduledSending = false
 let lastScheduledTick = -1
 let inputSequence = 0
@@ -266,6 +267,16 @@ export function sendScheduledRaceInput(tick: number, input: Omit<RaceInput, 'rac
 export function restoreMailboxControls(): void {
   if (scheduledSending && inputRaceId) sendControl('inputMode', { version: 1, raceId: inputRaceId, mode: 'mailbox' })
   scheduledSending = false; lastScheduledTick = -1; lastInputAt = -Infinity
+}
+/** R in an online race. The server validates phase, seat and rate; this only avoids sending rejects. */
+export function sendRaceReset(): boolean {
+  const snapshot = lobbyStore.getState().snapshot
+  const now = performance.now()
+  if (!room?.connection.isOpen || lobbyStore.getState().status !== 'connected' || !inputRaceId || snapshot?.phase !== 'racing'
+    || snapshot.race?.id !== inputRaceId || snapshot.race.resetVersion !== RESET_VERSION || now - lastResetAt < RESET_INTERVAL_MS) return false
+  lastResetAt = now
+  room.send('reset', { version: RESET_VERSION, raceId: inputRaceId })
+  return true
 }
 export function sendRaceInput(input: Omit<RaceInput, 'raceId' | 'sequence'>): number | null {
   if (scheduledSending || !room?.connection.isOpen || lobbyStore.getState().status !== 'connected' || !inputRaceId || lobbyStore.getState().snapshot?.phase !== 'racing') return null

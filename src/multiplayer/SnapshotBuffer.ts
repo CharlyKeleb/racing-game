@@ -11,6 +11,8 @@ const MAX_EXTRAPOLATION_TICKS = 2
 const CLOCK_GAIN = .05
 const CLOCK_MAX_RATE = .1
 const CLOCK_SNAP_TICKS = 12
+/** Two frames this far apart (m) are a server respawn, not motion: show the later pose instead of sliding across. */
+const TELEPORT_METRES = 20
 const VECTOR_FIELDS = ['position', 'velocity', 'angularVelocity'] as const
 const SCALAR_FIELDS = ['speed', 'steer', 'rpm', 'nitro'] as const
 const aQuat = new Quaternion(), bQuat = new Quaternion()
@@ -94,7 +96,9 @@ export class SnapshotBuffer {
     for (let i = 0; i < after.vehicles.length; i++) if (after.vehicles[i].id === id) afterIndex = i
     if (index < 0 || afterIndex < 0) return false
     const a = before.vehicles[index], b = after.vehicles[afterIndex]
-    const t = before.tick === after.tick ? 0 : Math.max(0, Math.min(1, (this.playhead - before.tick) / (after.tick - before.tick)))
+    const dx = b.position.x - a.position.x, dy = b.position.y - a.position.y, dz = b.position.z - a.position.z
+    const t = dx * dx + dy * dy + dz * dz > TELEPORT_METRES * TELEPORT_METRES ? 1
+      : before.tick === after.tick ? 0 : Math.max(0, Math.min(1, (this.playhead - before.tick) / (after.tick - before.tick)))
     for (const key of VECTOR_FIELDS) {
       out[key].x = a[key].x + (b[key].x - a[key].x) * t
       out[key].y = a[key].y + (b[key].y - a[key].y) * t

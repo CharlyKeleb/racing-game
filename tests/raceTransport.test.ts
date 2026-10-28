@@ -13,10 +13,12 @@ const lobby = new Map<string, LobbySnapshot>()
 const frames = new Map<string, Map<number, RaceSnapshot>>()
 const origin = 'http://localhost:5173'
 const disposed = vi.fn()
+let startGate: SimulationBundle['track']['checkpoints'][number]
 
 beforeAll(async () => {
   const bundle = await buildSimulationAssets() as SimulationBundle
   const factory = createRaceFactory(bundle)
+  startGate = bundle.track.checkpoints[0]
   // Warm WASM outside the clocked server session (startup work is not race time).
   const warmup = await factory.create([{ id: 'warm1', sessionId: 'warm1', carId: 'porsche911' }, { id: 'warm2', sessionId: 'warm2', carId: 'porsche911' }])
   warmup.dispose()
@@ -104,6 +106,18 @@ it('runs a server-authoritative two-client grid/countdown/input/snapshot lifecyc
     const end = state.vehicles[0].position
     expect(Math.hypot(end.x - start.x, end.z - start.z)).toBeGreaterThan(.1)
     expect(state.vehicles[0].acknowledgedSequence).toBe(5)
+  })
+  // R: the server puts the car back before its last counted gate (the start line here), stopped.
+  expect(current(host).race?.resetVersion).toBe(1)
+  host.send('reset', { version: 1, raceId, position: { x: 1e9 } })
+  host.send('reset', { version: 1, raceId })
+  const [tx, , tz] = startGate.tangent, length = Math.hypot(tx, tz)
+  const spawnX = startGate.position[0] - tx / length * 6, spawnZ = startGate.position[2] - tz / length * 6
+  const before = [...frames.get(host.sessionId)!.values()].at(-1)!.vehicles[0].position
+  expect(Math.hypot(before.x - spawnX, before.z - spawnZ)).toBeGreaterThan(5)
+  await vi.waitFor(() => {
+    const car = [...frames.get(host.sessionId)!.values()].at(-1)!.vehicles[0]
+    expect(Math.hypot(car.position.x - spawnX, car.position.z - spawnZ)).toBeLessThan(1)
   })
   host.send('cancelRace'); host.send('sync')
   await vi.waitFor(() => expect(current(host).phase).toBe('racing'))

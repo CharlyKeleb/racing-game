@@ -12,7 +12,7 @@ const RELEASED: InputState = { throttle: 0, brake: 0, steer: 0, handbrake: false
  * Every control captures its own pointer, so steering + throttle + nitro work
  * simultaneously with three fingers.
  */
-export function TouchControls({ online = false }: { online?: boolean }) {
+export function TouchControls({ online = false, onlineReset = false }: { online?: boolean; onlineReset?: boolean }) {
   const game = useGameInstance()
   const manual = useGame((s) => !online && s.settings.transmission === 'manual')
 
@@ -44,6 +44,9 @@ export function TouchControls({ online = false }: { online?: boolean }) {
           ↺
         </button>
         </>}
+        {onlineReset && <button className="touch-icon" aria-label="Reset car" onPointerDown={() => game?.triggerAction('reset')}>
+          ↺
+        </button>}
         <button className="touch-icon" aria-label={online ? 'Race menu' : 'Pause'} onPointerDown={() => game?.triggerAction('pause')}>
           ❚❚
         </button>
