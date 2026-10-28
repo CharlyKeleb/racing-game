@@ -19,9 +19,18 @@ import { RACE_PROTOCOL, type LobbySnapshot, type RaceSnapshot, type RaceVehicleS
 import { SIMULATION_VERSION } from '../simulation/HeadlessSimulation'
 import { SnapshotBuffer, emptyVehicleState } from './SnapshotBuffer'
 import { onlineRaceStore, RELEASED_ONLINE_INPUT } from './onlineRaceStore'
+import { RaceStandings, type RaceEntry } from '../racing/RaceStandings'
+import { TrackProgress } from '../racing/TrackProgress'
+import { telemetryStore } from '../stores/telemetryStore'
 
 interface SceneContext { renderer: Renderer; assets: AssetManager; environment: Environment; track: RaceTrack; audio: AudioManager; settings: Settings }
-interface VisualCar { model: CarModel; config: VehicleConfig; state: RaceVehicleState; spin: number }
+interface VisualCar { model: CarModel; config: VehicleConfig; state: RaceVehicleState; spin: number; entry: RaceEntry; progress: TrackProgress | null }
+/** Correction error larger than this (m) is a real divergence: snap instead of sliding the car across. */
+const MAX_BLEND_METRES = 5
+/** Time constants (s) for blending a correction's position and rotation error away. */
+const POSITION_BLEND = .18
+const ROTATION_BLEND = .12
+const GO_TICKS = 54
 interface BrowserManifest { protocol: number; simulationVersion: number; fingerprint: string; track: string; cars: string[] }
 
 /** Server-owned race presentation, with optional isolated own-car prediction. Never runs local race rules or results. */
@@ -44,6 +53,15 @@ export class OnlineRaceScene {
   private readonly previousPredictionRotation = new THREE.Quaternion()
   private readonly predictionQuaternion = new THREE.Quaternion()
   private readonly predictionOffset = new THREE.Vector3()
+  /** Rotation error left by the last corrections, applied on top of the predicted pose and eased to identity. */
+  private readonly rotationOffset = new THREE.Quaternion()
+  private readonly beforeCorrection = emptyVehicleState('')
+  private readonly correctionDelta = new THREE.Quaternion()
+  private readonly scratchQuaternion = new THREE.Quaternion()
+  private readonly identity = new THREE.Quaternion()
+  private predictedThrottle = 0
+  private readonly standings: RaceStandings | null
+  private readonly laps: number
   private stopCorrections?: () => void
   private predictionEpoch = -1
   private predictionDisabled = false
@@ -77,6 +95,9 @@ export class OnlineRaceScene {
     this.context = context
     this.race = { ...lobby.race! }
     this.playerCarId = lobby.racers.find(r => r.id === playerId)!.carId
+    this.laps = Math.max(1, lobby.laps ?? 1)
+    const line = context.track.line, checkpoints = context.track.checkpoints
+    this.standings = line?.length && checkpoints?.length ? new RaceStandings(line, checkpoints) : null
     this.buffer = new SnapshotBuffer(lobby.race!.id, lobby.racers.map(r => r.id))
     this.camera = new ChaseCamera(context.renderer.camera)
     this.camera.cameraMotion = context.settings.cameraMotion
@@ -91,7 +112,10 @@ export class OnlineRaceScene {
       })
       const model = rigCarModel(car.scene, car.config)
       model.root.visible = false
-      this.cars.push({ model, config: car.config, state: emptyVehicleState(car.id), spin: 0 })
+      const racer = lobby.racers.find(r => r.id === car.id)
+      this.cars.push({ model, config: car.config, state: emptyVehicleState(car.id), spin: 0,
+        entry: { id: this.cars.length, name: racer?.displayName ?? 'Racer', player: car.id === playerId, lap: 1, checkpoint: 0, index: 0, finishMs: null },
+        progress: this.standings ? new TrackProgress(context.track.line) : null })
       const reflections = context.environment.carEnvironment
       applyCarReflections(model.root, reflections.map, reflections.intensity)
       this.group.add(model.root)
@@ -117,8 +141,12 @@ export class OnlineRaceScene {
   private ensurePrediction(latency: ConnectionLatencySample): boolean {
     if (this.predictionDisabled || import.meta.env.VITE_ONLINE_PREDICTION === '0' || this.race.scheduledInputVersion !== 1
       || this.race.correctionVersion !== 1 || !this.context.track.createPredictionWorld) return false
-    const required = Math.max(6, Math.ceil((latency.rttMs + latency.variationMs) * .06) + 4)
-    if (!Number.isFinite(required) || required > MAX_PREDICTION_LEAD_TICKS) return false
+    // variationMs is the max-min range of eight samples (one loading hitch inflates it), so half of it
+    // covers typical jitter. A rare late input only costs a smoothed correction; giving up on prediction
+    // puts a full round trip on every control, so only an RTT beyond the server's input window disables it.
+    if (!Number.isFinite(latency.rttMs) || !Number.isFinite(latency.variationMs)
+      || Math.ceil(latency.rttMs * .06) + 2 > MAX_PREDICTION_LEAD_TICKS) return false
+    const required = Math.min(MAX_PREDICTION_LEAD_TICKS, Math.max(6, Math.ceil((latency.rttMs + latency.variationMs / 2) * .06) + 4))
     if (!this.predictionWorld) {
       let world: ReturnType<NonNullable<RaceTrack['createPredictionWorld']>> | undefined
       try {
@@ -135,6 +163,18 @@ export class OnlineRaceScene {
     return true
   }
 
+  private snapPrediction(): void {
+    const p = this.predicted.position, q = this.predicted.rotation
+    this.previousPredictionPosition.set(p.x, p.y, p.z)
+    this.previousPredictionRotation.set(q.x, q.y, q.z, q.w)
+    this.predictionOffset.set(0, 0, 0); this.rotationOffset.identity()
+  }
+
+  private get predicting(): boolean {
+    const phase = this.buffer.latest?.phase
+    return !!this.prediction?.ready && !!this.predictionWorld && (phase === 'racing' || phase === 'countdown')
+  }
+
   push(snapshot: RaceSnapshot, now: number): void { this.buffer.push(snapshot, now) }
 
   /** Read-only development fixture diagnostics; not used by the player HUD or physics loop. */
@@ -147,7 +187,7 @@ export class OnlineRaceScene {
 
   resetPrediction(): void {
     this.stopCorrections?.(); this.stopCorrections = undefined
-    this.prediction?.suspend(); this.predictionOffset.set(0, 0, 0)
+    this.prediction?.suspend(); this.predictionOffset.set(0, 0, 0); this.rotationOffset.identity()
     if (this.prediction) restoreMailboxControls()
   }
 
@@ -165,14 +205,22 @@ export class OnlineRaceScene {
       this.stopCorrections = openCorrectionStream(this.race, this.playerCarId, this.playerCar.config, state => {
         if (!this.prediction || !this.predictionWorld) return
         const wasReady = this.prediction.ready
+        if (wasReady) this.predictionWorld.read(this.beforeCorrection)
         if (!this.prediction.accept(state, performance.now())) return
         this.predictionWorld.read(this.predicted)
-        this.previousPredictionPosition.set(this.predicted.position.x, this.predicted.position.y, this.predicted.position.z)
-        this.previousPredictionRotation.set(this.predicted.rotation.x, this.predicted.rotation.y, this.predicted.rotation.z, this.predicted.rotation.w)
+        const p = this.predicted.position, q = this.predicted.rotation, before = this.beforeCorrection.position
         if (wasReady && this.playerCar.model.root.visible) {
-          this.predictionOffset.copy(this.playerCar.model.root.position).sub(this.previousPredictionPosition)
-          if (this.predictionOffset.lengthSq() > 25) this.predictionOffset.set(0, 0, 0)
-        } else this.predictionOffset.set(0, 0, 0)
+          // Keep the drawn car where it was: shift the interpolation base by the correction, carry the
+          // difference as an offset and ease it away over a few frames instead of snapping 10 times a second.
+          const dx = before.x - p.x, dy = before.y - p.y, dz = before.z - p.z
+          this.predictionOffset.x += dx; this.predictionOffset.y += dy; this.predictionOffset.z += dz
+          this.previousPredictionPosition.x -= dx; this.previousPredictionPosition.y -= dy; this.previousPredictionPosition.z -= dz
+          const r = this.beforeCorrection.rotation
+          this.correctionDelta.set(r.x, r.y, r.z, r.w).multiply(this.scratchQuaternion.set(q.x, q.y, q.z, q.w).invert())
+          this.rotationOffset.multiply(this.correctionDelta)
+          this.previousPredictionRotation.premultiply(this.correctionDelta.invert())
+          if (this.predictionOffset.lengthSq() > MAX_BLEND_METRES * MAX_BLEND_METRES) this.snapPrediction()
+        } else this.snapPrediction()
       })
     }
     if (!this.prediction.ready) {
@@ -183,6 +231,7 @@ export class OnlineRaceScene {
     this.previousPredictionPosition.set(this.predicted.position.x, this.predicted.position.y, this.predicted.position.z)
     this.previousPredictionRotation.set(this.predicted.rotation.x, this.predicted.rotation.y, this.predicted.rotation.z, this.predicted.rotation.w)
     const controls = this.buffer.latest?.phase === 'racing' ? input : RELEASED_ONLINE_INPUT
+    this.predictedThrottle = controls.throttle
     if (this.prediction.advance(controls, now)) return true
     restoreMailboxControls(); return false
   }
@@ -191,15 +240,16 @@ export class OnlineRaceScene {
     const h = Math.min(.1, Math.max(0, dt))
     for (let index = 0; index < this.cars.length; index++) {
       const car = this.cars[index]
-      if (car === this.playerCar && this.prediction?.ready && this.predictionWorld && this.buffer.latest?.phase === 'racing') {
-        this.predictionWorld.read(car.state)
+      if (car === this.playerCar && this.predicting) {
+        this.predictionWorld!.read(car.state)
         const a = Math.max(0, Math.min(1, alpha))
-        this.predictionOffset.multiplyScalar(Math.exp(-h / .1))
+        this.predictionOffset.multiplyScalar(Math.exp(-h / POSITION_BLEND))
+        this.rotationOffset.slerp(this.identity, 1 - Math.exp(-h / ROTATION_BLEND))
         car.state.position.x = this.previousPredictionPosition.x + (car.state.position.x - this.previousPredictionPosition.x) * a + this.predictionOffset.x
         car.state.position.y = this.previousPredictionPosition.y + (car.state.position.y - this.previousPredictionPosition.y) * a + this.predictionOffset.y
         car.state.position.z = this.previousPredictionPosition.z + (car.state.position.z - this.previousPredictionPosition.z) * a + this.predictionOffset.z
         this.predictionQuaternion.set(car.state.rotation.x, car.state.rotation.y, car.state.rotation.z, car.state.rotation.w)
-          .slerp(this.previousPredictionRotation, 1 - a)
+          .slerp(this.previousPredictionRotation, 1 - a).premultiply(this.rotationOffset)
         car.state.rotation.x = this.predictionQuaternion.x; car.state.rotation.y = this.predictionQuaternion.y
         car.state.rotation.z = this.predictionQuaternion.z; car.state.rotation.w = this.predictionQuaternion.w
       } else if (!this.buffer.sample(car.state.id, now, car.state)) continue
@@ -224,18 +274,53 @@ export class OnlineRaceScene {
       this.context.track.update(player.model.root.position, this.velocity, h)
       this.context.environment.follow(player.model.root.position)
       this.sound.rpm = state.rpm; this.sound.gear = state.gear
-      this.sound.throttle = state.rpm > player.config.engine.idleRpm + 500 ? .6 : 0
+      this.sound.throttle = this.predicting ? this.predictedThrottle : state.rpm > player.config.engine.idleRpm + 500 ? .6 : 0
       this.sound.nitro = state.nitroIntensity ?? 0; this.sound.nitroActive = this.sound.nitro > .01
       this.context.audio.update(this.sound)
       this.context.audio.setRaceMusicActive(this.buffer.latest?.phase === 'racing')
       if (now - this.publishedAt >= 50) {
         this.publishedAt = now
-        onlineRaceStore.setState({ resultsOpen: this.buffer.latest?.phase === 'finished', finished: this.buffer.latest?.phase === 'finished' || this.buffer.latest?.progress?.find(p => p.id === state.id)?.finishTicks != null, loaded: true, delayed: this.buffer.delayed(now), speedKmh: Math.abs(state.speed) * 3.6,
-          rpm: state.rpm, gear: state.gear, nitro: state.nitro,
-          countdown: this.buffer.latest?.phase === 'countdown' ? this.buffer.latest.countdownTicks / 60 : null })
+        this.publish(now)
       }
     }
     this.context.renderer.render()
+  }
+
+  /** HUD state at 20 Hz, in the same shape the offline HUD reads, from server timing and drawn poses. */
+  private publish(now: number): void {
+    const latest = this.buffer.latest, state = this.playerCar.state, config = this.playerCar.config
+    const progress = latest?.progress?.find(p => p.id === state.id)
+    const racingTicks = latest ? Math.max(0, latest.tick - this.race.countdownTicks) : 0
+    const lapTicks = progress?.lapTicks ?? []
+    let standings = onlineRaceStore.getState().standings
+    if (this.standings && latest?.progress) {
+      const count = this.context.track.checkpoints.length
+      for (const car of this.cars) {
+        const p = latest.progress.find(row => row.id === car.state.id), entry = car.entry
+        if (!p || !car.progress) continue
+        entry.x = car.model.root.position.x; entry.z = car.model.root.position.z
+        entry.index = car.progress.update(entry.x, entry.z)
+        entry.lap = Math.min(this.laps, p.completedLaps + 1)
+        entry.checkpoint = ((p.nextCheckpoint - 1) % count + count) % count
+        entry.finishMs = p.finishTicks !== null ? p.finishTicks * 1000 / 60 : null
+      }
+      standings = this.standings.snapshot(this.cars.map(car => car.entry))
+      const self = this.playerCar.entry, rival = this.cars.filter(car => car !== this.playerCar)
+      const forward = this.playerCar.model.root.quaternion
+      telemetryStore.setState({
+        carX: self.x ?? 0, carZ: self.z ?? 0, heading: Math.atan2(2 * (forward.w * forward.y + forward.x * forward.z), 1 - 2 * (forward.y * forward.y + forward.x * forward.x)),
+        trackIndex: self.index, distanceLeft: self.finishMs !== null ? 0 : Math.max(0, this.laps * this.standings.lapLength - this.standings.distance(self)),
+        opponents: rival.filter(car => car.model.root.visible).map(car => ({ id: car.entry.id, x: car.model.root.position.x, z: car.model.root.position.z })),
+      })
+    }
+    const finished = latest?.phase === 'finished'
+    onlineRaceStore.setState({ resultsOpen: finished, finished: finished || progress?.finishTicks != null, loaded: true, delayed: this.buffer.delayed(now), speedKmh: Math.abs(state.speed) * 3.6,
+      rpm: state.rpm, redlineRpm: config.engine.redlineRpm, gear: state.gear, nitro: state.nitro, nitroActive: (state.nitroIntensity ?? 0) > .01,
+      countdown: latest?.phase === 'countdown' ? latest.countdownTicks / 60 : null,
+      go: latest?.phase === 'racing' && racingTicks < GO_TICKS,
+      lap: Math.min(this.laps, (progress?.completedLaps ?? 0) + 1), totalLaps: this.laps,
+      currentLapMs: (progress?.finishTicks != null ? lapTicks.at(-1) ?? 0 : racingTicks - lapTicks.reduce((a, b) => a + b, 0)) * 1000 / 60,
+      bestLapMs: lapTicks.length ? Math.min(...lapTicks) * 1000 / 60 : null, standings })
   }
 
   dispose(): void {

@@ -20,6 +20,7 @@ it.each([
   { rttMs: 30, variationMs: 0, lateSample: false, flag: '' },
   { rttMs: 237, variationMs: 79, lateSample: false, flag: '1' },
   { rttMs: 300, variationMs: 33, lateSample: false, flag: '' },
+  { rttMs: 203, variationMs: 207, lateSample: false, flag: '' }, // one slow sample in the range must not drop local controls
   { rttMs: 237, variationMs: 79, lateSample: true, flag: '' },
   { rttMs: 30, variationMs: 0, lateSample: false, flag: '0' },
 ])('responds on the next local step at $rttMs ms RTT, late sample=$lateSample, override=$flag', async ({rttMs, variationMs, lateSample, flag}) => {
@@ -118,4 +119,47 @@ it.each([
     expect(scene.debugPrediction()).toMatchObject({ready:true,disabled:false,streamOpen:true})
   } finally {scene.dispose()}
   expect(free).toHaveBeenCalledTimes(1);expect(offline.visible).toBe(true)
+})
+it('blends a server correction into the drawn car instead of snapping it', async () => {
+  const now = vi.spyOn(performance,'now').mockReturnValue(0)
+  transport.open.mockReset();transport.open.mockReturnValue(vi.fn());transport.send.mockClear()
+  const race={id:'race',protocol:3 as const,fingerprint:'a'.repeat(64),simulationVersion:1,tickRate:60 as const,snapshotRate:20 as const,countdownTicks:180,correctionVersion:1 as const,scheduledInputVersion:1 as const}
+  const racers=[{id:'one',sessionId:'a',carId:'porsche911' as const},{id:'two',sessionId:'b',carId:'porsche911' as const}]
+  const lobby={race,racers,phase:'racing',track:'nurburgring'}
+  lobbyStore.setState({status:'connected',snapshot:lobby as never,sessionId:'a',connectionLatency:{rttMs:30,variationMs:0,samples:2}})
+  const root=new THREE.Scene(),track=new THREE.Group(),environment=new THREE.Group();root.add(track,environment)
+  const ground=()=>{const w=new RAPIER.World({x:0,y:-9.81,z:0});w.createCollider(RAPIER.ColliderDesc.cuboid(500,.1,500).setTranslation(0,-.1,0));w.step();return w}
+  const context={renderer:{scene:root,camera:new THREE.PerspectiveCamera(),render:vi.fn(),setHaze:vi.fn(),setMotionBlur:vi.fn(),setBoostBlur:vi.fn()},
+    assets:{loadJson:vi.fn(async(url:string)=>url.includes('manifest')?{protocol:3,simulationVersion:1,fingerprint:race.fingerprint,track:'nurburgring',cars:['porsche911']}:config),loadModel:vi.fn(async()=>buildPlaceholderCar(config))},
+    track:{id:'nurburgring',group:track,update:vi.fn(),surfaceAt:()=>1,createPredictionWorld:ground},
+    environment:{group:environment,follow:vi.fn(),carEnvironment:{map:null,intensity:1}},settings:{quality:'low',cameraMotion:false,fovEffects:false},
+    audio:{setCarAudio:vi.fn(),setScene:vi.fn(),setMenuEngine:vi.fn(),resume:vi.fn(),update:vi.fn(),setRaceMusicActive:vi.fn()}}
+  const scene=await OnlineRaceScene.load(context as never,lobby as never,'one')
+  try {
+    scene.push({raceId:race.id,tick:181,countdownTicks:0,phase:'racing',vehicles:[{...emptyVehicleState('one'),position:{x:20,y:.3,z:20},acknowledgedSequence:-1},
+      {...emptyVehicleState('two'),position:{x:25,y:.3,z:30},acknowledgedSequence:-1}]},0)
+    const drive={throttle:1,brake:0,steer:0,handbrake:false,nitro:false}
+    expect(scene.fixedUpdate(drive,0)).toBe(true)
+    const world=ground(),car=new VehiclePhysics(config,world,{position:{x:20,y:.3,z:20},heading:0},true)
+    for(let tick=0;tick<180;tick++){car.fixedUpdate({throttle:0,brake:0,steer:0,handbrake:true,nitro:false},1/60);world.step()}
+    const body=car.body,state={controller:car.controller.captureState(),body:{position:{...body.translation()},rotation:{...body.rotation()},velocity:{...body.linvel()},angularVelocity:{...body.angvel()},sleeping:body.isSleeping()}}
+    world.free()
+    const correction:CorrectionState={...state,version:1,raceProtocol:3,raceId:race.id,racerId:'one',carId:'porsche911',fingerprint:race.fingerprint,simulationVersion:1,tick:181,acknowledgedSequence:-1,
+      inputApplication:{mode:'neutral',firstTick:null,lastTick:null}}
+    const deliver=transport.open.mock.calls[0][3]
+    deliver(correction)
+    for(let t=1;t<=6;t++){now.mockReturnValue(t*17);expect(scene.fixedUpdate(drive,t*17)).toBe(true)}
+    const player=()=>{const cars:THREE.Object3D[]=[];root.traverse(o=>{if(o.name===config.id)cars.push(o)});return cars[0]}
+    scene.render(102,1/60,false,.5)
+    const drawn=player().position.clone(),turned=player().quaternion.clone()
+    // The server disagrees by a metre and a few degrees: the next frame must not jump.
+    const yaw=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0),.05).multiply(new THREE.Quaternion(state.body.rotation.x,state.body.rotation.y,state.body.rotation.z,state.body.rotation.w))
+    now.mockReturnValue(103)
+    deliver({...correction,tick:183,body:{...state.body,position:{...state.body.position,x:state.body.position.x+1},rotation:{x:yaw.x,y:yaw.y,z:yaw.z,w:yaw.w}}})
+    scene.render(103,0,false,.5)
+    expect(player().position.distanceTo(drawn)).toBeLessThan(1e-6)
+    expect(player().quaternion.angleTo(turned)).toBeLessThan(1e-6)
+    for(let t=0;t<60;t++)scene.render(103+t*17,1/60,false,.5)
+    expect(player().position.x-drawn.x).toBeGreaterThan(.95) // eased onto the corrected line
+  } finally {scene.dispose()}
 })

@@ -40,6 +40,23 @@ describe('online snapshot presentation', () => {
     expect(b.push(duplicate, 140)).toBe(false)
     expect(b.latest?.tick).toBe(6)
   })
+  it('moves rivals at an even pace when snapshots arrive with jitter', () => {
+    const b = new SnapshotBuffer('race', ['one', 'two']), out = emptyVehicleState('one')
+    const late = (tick: number) => (tick / 3) % 2 ? 70 : (tick / 3) % 5 === 0 ? 40 : 0
+    const steps: number[] = []
+    let last = NaN
+    for (let ms = 0; ms < 4000; ms += 1000 / 60) {
+      for (let tick = 0; tick <= 300; tick += 3) {
+        const at = tick * 1000 / 60 + late(tick)
+        if (at <= ms && at > ms - 1000 / 60) b.push(frame(tick), at)
+      }
+      if (!b.latest || !b.sample('one', ms, out)) continue
+      if (ms > 1500 && Number.isFinite(last)) steps.push(out.position.x - last)
+      last = out.position.x
+    }
+    expect(Math.min(...steps)).toBeGreaterThan(.85)
+    expect(Math.max(...steps)).toBeLessThan(1.15)
+  })
   it('resyncs after a backgrounded tab without replaying its old interpolation history', () => {
     const b = new SnapshotBuffer('race', ['one', 'two']), out = emptyVehicleState('one')
     for (let tick = 0; tick < 300; tick += 3) b.push(frame(tick), tick * 1000 / 60)
