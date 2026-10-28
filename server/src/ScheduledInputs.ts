@@ -1,5 +1,7 @@
 import type { RaceInput } from './protocol.js'
 export const INPUT_LOOKAHEAD_TICKS = 24
+/** A network stall up to this long (ticks) keeps the racer's newest control applied instead of neutral. */
+export const INPUT_HOLD_TICKS = 30
 /** Fixed storage for at most 400 ms of server-tick controls. Never advances simulation time. */
 export class ScheduledInputs {
   private readonly ticks = new Float64Array(INPUT_LOOKAHEAD_TICKS).fill(-1)
@@ -16,6 +18,15 @@ export class ScheduledInputs {
     this.throttle[index] = command.throttle; this.brake[index] = command.brake; this.steer[index] = command.steer
     this.flags[index] = (command.handbrake ? 1 : 0) | (command.nitro ? 2 : 0)
       | (command.steerSource === 'keyboard' ? 4 : command.steerSource === 'analog' ? 8 : 0)
+    this.lastTick = tick
+    return true
+  }
+  /**
+   * A command whose tick the server already simulated. It can't be replayed, but it is the newest
+   * control the racer sent, so the seat keeps driving with it rather than with neutral.
+   */
+  late(now: number, tick: number): boolean {
+    if (!Number.isSafeInteger(tick) || tick > now || tick <= now - INPUT_HOLD_TICKS || tick <= this.lastTick) return false
     this.lastTick = tick
     return true
   }

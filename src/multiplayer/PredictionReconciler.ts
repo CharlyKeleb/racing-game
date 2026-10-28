@@ -8,7 +8,11 @@ export interface PredictedPhysics {
 const HOLD: InputState = Object.freeze({ throttle: 0, brake: 0, steer: 0, handbrake: true, nitro: false })
 const NEUTRAL: InputState = Object.freeze({ ...HOLD, handbrake: false })
 export const MAX_PREDICTION_LEAD_TICKS = 24
-export const MAX_REPLAY_TICKS = 36
+/**
+ * A correction this far behind is still replayed. Prediction suspends after 500 ms without one, so this
+ * covers the full lead plus a 30-tick stall; past it prediction reboots, jumps and resends old ticks.
+ */
+export const MAX_REPLAY_TICKS = 60
 /** Lead error (ticks) tolerated before the local clock is nudged; corrections jitter by a few ticks. */
 const LEAD_DEADBAND = 2
 /** Fixed steps between one-tick nudges, so a nudge reads as a ~4% speed change rather than a hitch. */
