@@ -75,7 +75,7 @@ import { Environment } from '../world/Environment'
 import type { RaceTrack } from '../world/RaceTrack'
 import { Surface } from '../vehicles/Surface'
 import { measureRoadEdges } from '../world/SurfaceMap'
-import { planSafetyWalls } from '../world/SafetyWalls'
+import { addSafetyWalls } from '../world/SafetyWallBody'
 import { Showroom } from '../world/Showroom'
 import { StreamedTrack } from '../world/StreamedTrack'
 import { Track } from '../world/Track'
@@ -676,11 +676,11 @@ export class Game {
   /** Invisible walls where the track's collision floor ends, so a car can't drop off the world (see SafetyWalls). */
   private buildSafetyWalls(): void {
     this.removeSafetyWalls()
-    const walls = planSafetyWalls(this.track.line, (x, y, z) => this.physics.floorHeight(x, y, z))
-    if (walls.segments === 0) return
-    const body = this.physics.world.createRigidBody(RAPIER.RigidBodyDesc.fixed())
-    this.physics.world.createCollider(RAPIER.ColliderDesc.trimesh(walls.vertices, walls.indices).setFriction(0.2).setRestitution(0.1), body)
-    this.safetyWalls = body
+    const track = this.track
+    // A race started straight after a track switch can come before any step: the new colliders
+    // wouldn't answer the planner's rays yet, and that race had no walls. A zero step moves nothing.
+    this.physics.step(0)
+    this.safetyWalls = addSafetyWalls(this.physics.world, track.line, (c) => track.isBarrierCollider(c))
   }
 
   private removeSafetyWalls(): void {

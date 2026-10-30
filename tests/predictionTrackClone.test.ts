@@ -8,7 +8,7 @@ it('copies only track static collision and preserves the original world when the
   const body=source.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(10,0,20))
   source.createCollider(RAPIER.ColliderDesc.cuboid(5,.1,5).setFriction(.9).setTranslation(0,-.1,0),body)
   source.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(0,2,0));source.step()
-  const copy=StreamedTrack.prototype.createPredictionWorld.call({body,disposed:false} as never)
+  const copy=StreamedTrack.prototype.createPredictionWorld.call({body,disposed:false,barrierColliders:new Set(),line:[]} as never)
   const ray=new RAPIER.Ray({x:10,y:5,z:20},{x:0,y:-1,z:0})
   try {
     expect(copy.colliders.len()).toBe(1);expect(copy.bodies.len()).toBe(0)

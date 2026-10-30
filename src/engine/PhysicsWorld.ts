@@ -3,8 +3,31 @@ import RAPIER from '@dimforge/rapier3d-compat'
 export type Rapier = typeof RAPIER
 
 const _down = new RAPIER.Ray({ x: 0, y: 0, z: 0 }, { x: 0, y: -1, z: 0 })
+const _up = new RAPIER.Ray({ x: 0, y: 0, z: 0 }, { x: 0, y: 1, z: 0 })
 
 let initPromise: Promise<void> | null = null
+
+/** PhysicsWorld.groundHeight on any world (online prediction has its own). */
+export function groundHeightIn(world: RAPIER.World, x: number, nearY: number, z: number, only?: (collider: RAPIER.Collider) => boolean): number | null {
+  const top = nearY + 4
+  _down.origin = { x, y: top, z }
+  const hit = world.castRay(_down, 12, true, RAPIER.QueryFilterFlags.EXCLUDE_DYNAMIC, undefined, undefined, undefined, only)
+  return hit ? top - hit.timeOfImpact : null
+}
+
+/** PhysicsWorld.floorHeight on any world. */
+export function floorHeightIn(world: RAPIER.World, x: number, nearY: number, z: number, only?: (collider: RAPIER.Collider) => boolean, headroom = 1.5): number | null {
+  let h = groundHeightIn(world, x, nearY, z, only)
+  for (let i = 0; i < 3 && h !== null && h > nearY + headroom; i++) h = groundHeightIn(world, x, h - 4.05, z, only)
+  return h !== null && h > nearY + headroom ? null : h
+}
+
+/** PhysicsWorld.headroom on any world. */
+export function headroomIn(world: RAPIER.World, x: number, floorY: number, z: number, max: number): number | null {
+  _up.origin = { x, y: floorY + 0.05, z }
+  const hit = world.castRay(_up, max, true, RAPIER.QueryFilterFlags.EXCLUDE_DYNAMIC)
+  return hit ? hit.timeOfImpact + 0.05 : null
+}
 
 /** Rapier ships as WASM; initialise once per page. */
 export function initRapier(): Promise<void> {
@@ -33,10 +56,7 @@ export class PhysicsWorld {
    * the hit to some colliders (e.g. road surfaces, not the coarse terrain).
    */
   groundHeight(x: number, nearY: number, z: number, only?: (collider: RAPIER.Collider) => boolean): number | null {
-    const top = nearY + 4
-    _down.origin = { x, y: top, z }
-    const hit = this.world.castRay(_down, 12, true, RAPIER.QueryFilterFlags.EXCLUDE_DYNAMIC, undefined, undefined, undefined, only)
-    return hit ? top - hit.timeOfImpact : null
+    return groundHeightIn(this.world, x, nearY, z, only)
   }
 
   /**
@@ -45,9 +65,12 @@ export class PhysicsWorld {
    * it, up to three roofs deep. A roof with nothing under it is no floor at all.
    */
   floorHeight(x: number, nearY: number, z: number, only?: (collider: RAPIER.Collider) => boolean, headroom = 1.5): number | null {
-    let h = this.groundHeight(x, nearY, z, only)
-    for (let i = 0; i < 3 && h !== null && h > nearY + headroom; i++) h = this.groundHeight(x, h - 4.05, z, only)
-    return h !== null && h > nearY + headroom ? null : h
+    return floorHeightIn(this.world, x, nearY, z, only, headroom)
+  }
+
+  /** Free height above a floor point up to `max` (m), or null when nothing static is that close. */
+  headroom(x: number, floorY: number, z: number, max: number): number | null {
+    return headroomIn(this.world, x, floorY, z, max)
   }
 
   step(dt: number): void {

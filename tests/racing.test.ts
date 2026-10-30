@@ -84,4 +84,33 @@ describe('GameLoop', () => {
     expect(loop.advance(0)).toBe(5)
     expect(fixed).toHaveBeenCalledTimes(18)
   })
+
+  it('runs in slow motion on a slow machine instead of banking time to fast-forward later', () => {
+    const fixed = vi.fn()
+    const loop = new GameLoop({ fixedUpdate: fixed, render: () => {} })
+    // A minute at 10 fps: each frame owes 6 ticks but may run only 5.
+    for (let i = 0; i < 600; i++) loop.advance(0.1)
+    fixed.mockClear()
+    // Back at 60 fps, the catch-up is at most the 0.25 s backlog, not ~10 s at 5x speed.
+    let steps = 0
+    for (let i = 0; i < 60; i++) steps += loop.advance(1 / 60)
+    expect(steps).toBeLessThanOrEqual(60 + 16)
+  })
+
+  it('keeps scheduling frames after one throws', () => {
+    const frames: FrameRequestCallback[] = []
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => { frames.push(cb); return frames.length })
+    vi.stubGlobal('cancelAnimationFrame', () => {})
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    let calls = 0
+    const loop = new GameLoop({ fixedUpdate: () => {}, render: () => { calls++; if (calls === 1) throw new Error('driver') } })
+    try {
+      loop.start()
+      frames.shift()!(performance.now() + 16)
+      frames.shift()!(performance.now() + 32)
+      expect(calls).toBe(2)
+      expect(frames).toHaveLength(1)
+      expect(error).toHaveBeenCalledTimes(1)
+    } finally { loop.stop(); vi.unstubAllGlobals(); error.mockRestore() }
+  })
 })

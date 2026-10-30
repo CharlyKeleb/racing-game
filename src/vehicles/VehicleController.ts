@@ -95,6 +95,14 @@ const TRAIL_BRAKE_ROTATION = 0.35
 /** Body slip angle (rad) above which a countersteered slide counts as a drift. */
 const DRIFT_MIN_ANGLE = 0.1
 const _ray = new RAPIER.Ray({ x: 0, y: 0, z: 0 }, { x: 0, y: -1, z: 0 })
+const _linvel = { x: 0, y: 0, z: 0 }
+/**
+ * Most upward speed (m/s) one physics step's contacts may add. Grazing a barrier at speed, the
+ * chassis met a flared wall foot, a kerb lip or a seam with a steep upward normal and was thrown
+ * 2-6 m into the air. Wheels and landings never need it: suspension lifts the car through
+ * update() (before this is measured), and stopping a fall only brings vertical speed up to zero.
+ */
+const MAX_CONTACT_LIFT = 0.5
 
 /** Moves `value` toward `target` by at most `step`. */
 function approach(value: number, target: number, step: number): number {
@@ -161,6 +169,8 @@ export class VehicleController {
   private readonly body: RAPIER.RigidBody
   private readonly world: RAPIER.World
   private readonly ghost: boolean
+  /** Vertical speed as update() left it, to tell what the following step's contacts added. Not checkpointed. */
+  private stepVelocityY = NaN
 
   constructor(cfg: VehicleConfig, body: RAPIER.RigidBody, world: RAPIER.World, ghost = false) {
     this.cfg = cfg
@@ -218,6 +228,13 @@ export class VehicleController {
     _up.set(0, 1, 0).applyQuaternion(_q)
     _fwd.set(0, 0, 1).applyQuaternion(_q)
     _right.set(-1, 0, 0).applyQuaternion(_q)
+
+    const contact = body.linvel()
+    const lift = Math.max(this.stepVelocityY + this.world.gravity.y * dt, 0) + MAX_CONTACT_LIFT
+    if (contact.y > lift) {
+      _linvel.x = contact.x; _linvel.y = lift; _linvel.z = contact.z
+      body.setLinvel(_linvel, true)
+    }
 
     const lv = body.linvel()
     _vel.set(lv.x, lv.y, lv.z)
@@ -488,6 +505,7 @@ export class VehicleController {
       _point.set(0, comY, this.rearAxleZ).applyQuaternion(_q).add(_pos)
       body.applyImpulseAtPoint(_impulse.copy(_up).multiplyScalar(-down * (1 - cfg.downforceFrontShare)), _point, true)
     }
+    this.stepVelocityY = body.linvel().y
   }
 
   /** Grounded arcade yaw and trajectory support, bounded by the authored tune. */
@@ -654,6 +672,8 @@ export class VehicleController {
     this.drivetrain.restoreState(state.drivetrain); this.nitro.restoreState(state.nitro)
     this.drift.restoreState(state.drift); this.burnout.restoreState(state.burnout); this.backfire.restoreState(state.backfire)
     this.setDriftMode(state.driftMode)
+    // The restored body's velocity didn't come from this controller's last step.
+    this.stepVelocityY = NaN
     this.drafting = state.drafting
     this.launchPush = state.launchPush
     this.steerAngle = state.steerAngle
@@ -674,6 +694,7 @@ export class VehicleController {
   }
 
   reset(): void {
+    this.stepVelocityY = NaN
     this.forwardSpeed = 0
     this.steerAngle = this.wheelAngle = 0
     this.gripTurnRate = this.driftThrottle = 0

@@ -99,6 +99,10 @@ export class Track implements RaceTrack {
     return collider.handle === this.groundCollider.handle
   }
 
+  isBarrierCollider(): boolean {
+    return false
+  }
+
   setQuality(quality: QualityPreset): void { this.atmosphere.setQuality(quality) }
 
   viewDistance(): ViewDistance {

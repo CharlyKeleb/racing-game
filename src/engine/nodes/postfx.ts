@@ -1,6 +1,6 @@
 import * as THREE from 'three/webgpu'
 import { MotionVectors } from '../../effects/MotionVectors'
-import { Fn, Loop, convertToTexture, float, pass, renderOutput, screenUV, uniform, uv, texture, length, min, max, abs, step, smoothstep, vec2, vec4, distance, If } from 'three/tsl'
+import { Fn, Loop, convertToTexture, float, pass, renderOutput, screenUV, uniform, uv, texture, length, min, max, abs, step, smoothstep, vec2, vec3, vec4, distance, If, select, floatBitsToUint, bitAnd, uint } from 'three/tsl'
 import { bloom } from 'three/addons/tsl/display/BloomNode.js'
 import { fxaa } from 'three/addons/tsl/display/FXAANode.js'
 import { smaa } from 'three/addons/tsl/display/SMAANode.js'
@@ -107,9 +107,13 @@ export class NodePostFX {
       })
       return output
     })()
-    // SanitizeEffect twin: bloom's mip chain spreads an overflowed pixel into black squares. TSL has no
-    // isnan, so this clamps Inf; min/max return the finite operand for NaN on most GPUs.
-    color = max(min(color, MAX_SCENE_RADIANCE), 0)
+    // SanitizeEffect twin: bloom's mip chain spreads a NaN/Inf pixel into black squares. Fast-math
+    // shader compilers fold NaN comparisons away, so test the exponent bits (all ones = NaN or Inf).
+    const exponent = uint(0x7f800000)
+    const nonFinite = (v: Parameters<typeof floatBitsToUint>[0]) => bitAnd(floatBitsToUint(v) as unknown as typeof exponent, exponent).equal(exponent) // BitcastNode is untyped
+    const raw = color
+    const bad = nonFinite(raw.r).or(nonFinite(raw.g)).or(nonFinite(raw.b))
+    color = vec4(select(bad, vec3(0), max(min(raw.rgb, MAX_SCENE_RADIANCE), 0)), raw.a)
     const glow = bloom(color, 0.35, 0.5, 1.2)
     glow.smoothWidth.value = 0.2
     glow.setResolutionScale(quality === 'high' ? 0.5 : quality === 'medium' ? 0.35 : 0.25)
