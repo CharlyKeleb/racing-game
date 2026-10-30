@@ -26,6 +26,7 @@
     "supabase:prepare-existing": "node scripts/multiplayer/prepare-existing-supabase.mjs",
     "benchmark:transport": "npm run build:simulation && node --import ./server/node_modules/tsx/dist/loader.mjs scripts/multiplayer/benchmark-transport.ts",
     "benchmark:corrections": "npm run build:simulation && node --import ./server/node_modules/tsx/dist/loader.mjs scripts/multiplayer/benchmark-corrections.ts",
+    "audit:tracks": "node --import ./server/node_modules/tsx/dist/loader.mjs scripts/track/audit-drivability.ts",
     "benchmark:prediction": "npm run build:simulation && node --import ./server/node_modules/tsx/dist/loader.mjs scripts/multiplayer/benchmark-prediction.ts",
     "benchmark:simulation": "npm run build:simulation && server/node_modules/.bin/tsx scripts/multiplayer/benchmark.ts",
     "test:simulation": "vitest run tests/headlessSimulation.test.ts tests/handling.test.ts",

@@ -676,7 +676,7 @@ export class Game {
   /** Invisible walls where the track's collision floor ends, so a car can't drop off the world (see SafetyWalls). */
   private buildSafetyWalls(): void {
     this.removeSafetyWalls()
-    const walls = planSafetyWalls(this.track.line, (x, y, z) => this.physics.floorHeight(x, y, z))
+    const walls = planSafetyWalls(this.track.line, (x, y, z) => this.physics.floorHeight(x, y, z), (x, y, z, max) => this.physics.headroom(x, y, z, max))
     if (walls.segments === 0) return
     const body = this.physics.world.createRigidBody(RAPIER.RigidBodyDesc.fixed())
     this.physics.world.createCollider(RAPIER.ColliderDesc.trimesh(walls.vertices, walls.indices).setFriction(0.2).setRestitution(0.1), body)

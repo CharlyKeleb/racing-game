@@ -3,6 +3,7 @@ import RAPIER from '@dimforge/rapier3d-compat'
 export type Rapier = typeof RAPIER
 
 const _down = new RAPIER.Ray({ x: 0, y: 0, z: 0 }, { x: 0, y: -1, z: 0 })
+const _up = new RAPIER.Ray({ x: 0, y: 0, z: 0 }, { x: 0, y: 1, z: 0 })
 
 let initPromise: Promise<void> | null = null
 
@@ -48,6 +49,13 @@ export class PhysicsWorld {
     let h = this.groundHeight(x, nearY, z, only)
     for (let i = 0; i < 3 && h !== null && h > nearY + headroom; i++) h = this.groundHeight(x, h - 4.05, z, only)
     return h !== null && h > nearY + headroom ? null : h
+  }
+
+  /** Free height above a floor point up to `max` (m), or null when nothing static is that close. */
+  headroom(x: number, floorY: number, z: number, max: number): number | null {
+    _up.origin = { x, y: floorY + 0.05, z }
+    const hit = this.world.castRay(_up, max, true, RAPIER.QueryFilterFlags.EXCLUDE_DYNAMIC)
+    return hit ? hit.timeOfImpact + 0.05 : null
   }
 
   step(dt: number): void {
