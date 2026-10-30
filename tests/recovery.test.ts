@@ -73,7 +73,7 @@ describe('safety walls', () => {
   }
   it('stand where the floor ends and nowhere it carries on', () => {
     // Floor ends 9 m outside the line; inside it carries on across the infield.
-    const walls = planSafetyWalls(line, (x, _y, z) => (Math.hypot(x, z) <= 109 ? 0 : null))
+    const walls = planSafetyWalls(line, { floor: (x, _y, z) => (Math.hypot(x, z) <= 109 ? 0 : null) })
     expect(walls.segments).toBe(n)
     for (const r of radiusOf(walls)) {
       expect(r).toBeGreaterThanOrEqual(108)
@@ -81,7 +81,7 @@ describe('safety walls', () => {
     }
   })
   it('step over a one-probe seam in the floor', () => {
-    const walls = planSafetyWalls(line, (x, _y, z) => (Math.abs(Math.hypot(x, z) - 110) < 1 || Math.hypot(x, z) > 150 ? null : 0))
+    const walls = planSafetyWalls(line, { floor: (x, _y, z) => (Math.abs(Math.hypot(x, z) - 110) < 1 || Math.hypot(x, z) > 150 ? null : 0) })
     expect(walls.segments).toBe(n)
     for (const r of radiusOf(walls)) expect(r).toBeGreaterThan(145)
   })
@@ -90,7 +90,7 @@ describe('safety walls', () => {
 describe('safety walls before the floor is there', () => {
   it('builds nothing when even the road under the line is missing', () => {
     const line = Array.from({ length: 50 }, (_, i) => ({ x: 100 * Math.cos(i / 8), y: 0, z: 100 * Math.sin(i / 8) }))
-    expect(planSafetyWalls(line, () => null).segments).toBe(0)
+    expect(planSafetyWalls(line, { floor: () => null }).segments).toBe(0)
   })
 })
 
@@ -99,7 +99,7 @@ describe('safety walls at a drop', () => {
     const n = Math.round((2 * Math.PI * 100) / 4)
     const line = Array.from({ length: n }, (_, i) => ({ x: 100 * Math.cos((i / n) * 2 * Math.PI), y: 0, z: 100 * Math.sin((i / n) * 2 * Math.PI) }))
     // Quay edge 9 m outside the line, then the harbour floor 8 m down.
-    const walls = planSafetyWalls(line, (x, _y, z) => (Math.hypot(x, z) <= 109 ? 0 : -8))
+    const walls = planSafetyWalls(line, { floor: (x, _y, z) => (Math.hypot(x, z) <= 109 ? 0 : -8) })
     expect(walls.segments).toBe(n)
     for (let i = 0; i < walls.vertices.length; i += 3) expect(Math.hypot(walls.vertices[i], walls.vertices[i + 2])).toBeLessThan(111)
   })

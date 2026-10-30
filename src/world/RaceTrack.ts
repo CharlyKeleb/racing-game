@@ -34,6 +34,8 @@ export interface RaceTrack {
   mapOverview?(): MinimapRaster | null
   /** True for colliders that are the paved road itself (not terrain, run-off or barriers). */
   isRoadCollider(collider: RAPIER.Collider): boolean
+  /** True for barrier colliders (walls, armco, fences, buildings): SafetyWalls stand at their face. */
+  isBarrierCollider(collider: RAPIER.Collider): boolean
   /** Below this height the car has fallen out of the world. */
   readonly killY: number
   /** Where to put the car after a reset past checkpoint `index`. */

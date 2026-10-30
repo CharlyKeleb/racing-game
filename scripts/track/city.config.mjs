@@ -92,8 +92,16 @@ export default {
     { at: [186, 60], dir: [0, -1] }, // south link back to the avenue
   ],
   checkpointRadius: 14,
-  /** Keep the line in the open alley, not the wider parking deck beside it (lower floor, ramp inside). */
-  lineVia: { 6: [-40, -30, -20, -10, 0].map((z) => [337, z, 1]) },
+  lineVia: {
+    /**
+     * The middle of the avenue runs 1 m past the end of a tram-stop shelter just after the grid:
+     * cars on the line clipped it and stuck. Keep the line in the clear lane between the shelter
+     * and the railings along the tram bed.
+     */
+    0: [[195, -122, 1], [195.5, -130, 1], [195, -138, 1]],
+    /** Keep the line in the open alley, not the wider parking deck beside it (lower floor, ramp inside). */
+    6: [-40, -30, -20, -10, 0].map((z) => [337, z, 1]),
+  },
 
   /**
    * At ×32 the source's small level mismatches become 0.5–0.6 m slabs, kerb

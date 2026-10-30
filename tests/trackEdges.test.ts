@@ -30,7 +30,7 @@ it.each(['singapore', 'nurburgring', 'u2city', 'city', 'canyon'])('%s: a car run
   }
   const track = await StreamedTrack.load(`/models/tracks/${id}/track.json`, { assets: assets as never, world: physics.world, renderer: {} as THREE.WebGLRenderer, camera: new THREE.PerspectiveCamera(), scene: new THREE.Scene(), quality: 'low' })
   physics.step(1 / 60)
-  const walls = planSafetyWalls(track.line, (x, y, z) => physics.floorHeight(x, y, z))
+  const walls = planSafetyWalls(track.line, { floor: (x, y, z) => physics.floorHeight(x, y, z) })
   physics.world.createCollider(RAPIER.ColliderDesc.trimesh(walls.vertices, walls.indices), physics.world.createRigidBody(RAPIER.RigidBodyDesc.fixed()))
   physics.step(1 / 60)
   const config = resolveVehicleConfig(JSON.parse(await readFile('public/models/cars/porsche911/vehicle-config.json', 'utf8')))

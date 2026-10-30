@@ -19,6 +19,9 @@ export function createRaceFactory(bundle: SimulationBundle, options: { scheduled
     return [id, resolveVehicleConfig(bundle.cars[id])] as const
   }))
   let active = false
+  // Ready before the first race is created (see HeadlessSimulation.prepare).
+  const prepared = HeadlessSimulation.prepare(bundle.track)
+  prepared.catch(() => {}) // create() awaits it and reports the failure there
   return {
     correctionVersion: CORRECTION_VERSION,
     resetVersion: RESET_VERSION,
@@ -31,6 +34,7 @@ export function createRaceFactory(bundle: SimulationBundle, options: { scheduled
       active = true
       let simulation: HeadlessSimulation | undefined
       try {
+        await prepared
         simulation = await HeadlessSimulation.create(bundle.track)
         const grid = startingGrid(bundle.track.line, bundle.track.spawn.position, seats.length)
         for (let i = 0; i < seats.length; i++) {

@@ -212,11 +212,19 @@ dirt section beside it. Check junctions on the top-down render for such
 blockers and pin the line past them with `lineVia`.
 
 Collision is checked by `tests/trackEdges.test.ts`, which throws a car off
-the road 60 times per track. The runtime safety walls (`world/SafetyWalls.ts`)
-probe the floor with `PhysicsWorld.floorHeight`, which looks under roofs
-(canopies, decks) and treats a roof over nothing as no floor. Where the edge
-distance jumps between two line points (a side street), they also wall the
-side street's edge, which runs along the probes. Missing floor near the road edge is almost
+the road 60 times per track, and by `npm run audit:tracks [ids] [--crash]`,
+which scans every track's road for holes, steps and obstacles, drives it on
+five lines across the road and (with `--crash`) fires cars at the barriers at
+220 km/h. The runtime safety walls (`world/SafetyWalls.ts`, built by
+`world/SafetyWallBody.ts` offline, on the race server and in online
+prediction) probe the floor with `PhysicsWorld.floorHeight`, which looks under
+roofs (canopies, decks) and treats a roof over nothing as no floor. They wall
+where the floor ends, drops away or runs under something lower than 2.6 m, and
+just in front of any barrier collider that runs on along the road (a
+horizontal ray finds thin walls the floor probes step over, and a flared foot).
+Where the edge distance jumps between two line points (a side street), they
+also wall the side street's edge, which runs along the probes; a barrier's wall
+just ends at a gap. Missing floor near the road edge is almost
 always a kerb, edge line or gutter material that fell through to `prop`.
 Run a gap scan against the source and add those materials to `road`, or to
 `collide`.

@@ -10,6 +10,7 @@ import type { QualityPreset } from '../stores/gameStore'
 import { Surface } from '../vehicles/Surface'
 import type { SpawnPoint } from '../vehicles/Vehicle'
 import type { RaceTrack, ViewDistance } from './RaceTrack'
+import { addSafetyWalls } from './SafetyWallBody'
 import { decodeSurfaceRle, SurfaceMap, type SurfaceGridInfo } from './SurfaceMap'
 import { NOT_LOADED, planLods, type ChunkInfo, type StreamRadii } from './streaming/ChunkPlanner'
 import type { Checkpoint } from './Track'
@@ -130,6 +131,7 @@ export class StreamedTrack implements RaceTrack {
   private body: RAPIER.RigidBody | null = null
   /** Handles of the paved-road collision meshes (vs run-off, barriers, terrain). */
   private readonly roadColliders = new Set<number>()
+  private readonly barrierColliders = new Set<number>()
   private surfaces: SurfaceMap | null = null
   private backdrop: THREE.Object3D | null = null
   private disposed = false
@@ -328,12 +330,17 @@ export class StreamedTrack implements RaceTrack {
     if (!this.body || this.disposed) throw new Error('Track collision is unavailable')
     const world = new RAPIER.World({ x: 0, y: -9.81, z: 0 })
     try {
+      const barriers = new Set<number>()
       for (let i = 0; i < this.body.numColliders(); i++) {
         const collider = this.body.collider(i), p = collider.translation(), q = collider.rotation()
-        world.createCollider(new RAPIER.ColliderDesc(collider.shape).setTranslation(p.x, p.y, p.z).setRotation(q)
+        const copy = world.createCollider(new RAPIER.ColliderDesc(collider.shape).setTranslation(p.x, p.y, p.z).setRotation(q)
           .setFriction(collider.friction()).setRestitution(collider.restitution()).setCollisionGroups(collider.collisionGroups()))
+        if (this.barrierColliders.has(collider.handle)) barriers.add(copy.handle)
       }
       world.timestep = 1 / 60; world.step()
+      // The race server simulates with the same walls (HeadlessSimulation).
+      addSafetyWalls(world, this.line, (c) => barriers.has(c.handle))
+      world.step()
       return world
     } catch (error) { world.free(); throw error }
   }
@@ -366,6 +373,7 @@ export class StreamedTrack implements RaceTrack {
         .setRestitution(barrier ? 0.2 : 0)
       const collider = this.world.createCollider(desc, this.body!)
       if (mesh.name.startsWith('road')) this.roadColliders.add(collider.handle)
+      if (barrier) this.barrierColliders.add(collider.handle)
     })
     disposeGltf(gltf)
   }
@@ -613,6 +621,10 @@ export class StreamedTrack implements RaceTrack {
   }
 
   // ── RaceTrack ───────────────────────────────────────────────────────────
+
+  isBarrierCollider(collider: RAPIER.Collider): boolean {
+    return this.barrierColliders.has(collider.handle)
+  }
 
   isRoadCollider(collider: RAPIER.Collider): boolean {
     return this.roadColliders.has(collider.handle)

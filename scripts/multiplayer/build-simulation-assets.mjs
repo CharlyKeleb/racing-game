@@ -75,7 +75,7 @@ export async function buildSimulationAssets() {
   for (const dir of ['src/vehicles', 'src/simulation']) {
     for (const name of (await readdir(path.join(root, dir))).filter((name) => name.endsWith('.ts')).sort()) await source(`${dir}/${name}`)
   }
-  for (const file of ['src/engine/PhysicsWorld.ts', 'src/racing/LaunchControl.ts', 'src/world/SurfaceMap.ts', 'package-lock.json']) await source(file)
+  for (const file of ['src/engine/PhysicsWorld.ts', 'src/racing/LaunchControl.ts', 'src/world/SurfaceMap.ts', 'src/world/SafetyWalls.ts', 'src/world/SafetyWallBody.ts', 'package-lock.json']) await source(file)
   return {
     format: 1,
     fingerprint: hash.digest('hex'),

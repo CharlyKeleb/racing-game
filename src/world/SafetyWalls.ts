@@ -4,7 +4,8 @@
  * floor stops a few metres past the kerb with no barrier, so a car that ran
  * wide dropped off the edge of the world. This marches out from the
  * centreline on both sides until the floor runs out, drops away or runs
- * under something too low to drive under, and stands a wall at that edge. Where the
+ * under something too low to drive under, and stands a wall at that edge. A barrier gets one at its
+ * face too, taller than the barrier, so a car hitting it at an angle can't ride up and over. Where the
  * floor carries on (run-off, paddock, another stretch of track) there's no
  * wall, so nothing drivable is ever closed off.
  *
@@ -21,6 +22,14 @@ export interface WallPoint {
 export type FloorProbe = (x: number, nearY: number, z: number) => number | null
 /** Free height (m) above the floor at (x, floorY, z) up to `max`, or null when nothing is that close. */
 export type HeadroomProbe = (x: number, floorY: number, z: number, max: number) => number | null
+/** Distance along (dx, 0, dz) from (x, y, z) to the face of a track barrier (wall, armco, fence) within `max`, or null. */
+export type BarrierProbe = (x: number, y: number, z: number, dx: number, dz: number, max: number) => number | null
+
+export interface SafetyWallProbes {
+  floor: FloorProbe
+  headroom?: HeadroomProbe
+  barrier?: BarrierProbe
+}
 
 const STEP = 2
 /** Start probing here: inside this the road itself is always solid. */
@@ -38,11 +47,24 @@ const DROP = 2
  * Less free height than this over the floor is solid, not a roof to drive under: an edge too. The
  * floor probe looks under anything 1.5 m up (station canopies), and Canyon's road mesh runs on
  * beneath the rock, so the cliff read as a roof over more road, got no wall, and cars rode up its
- * 30-45° face into the air.
+ * 30-45° face into the air. City's tram-stop canopies, ~2.9 m over the road, are roofs.
  */
-const CLEARANCE = 3
+const CLEARANCE = 2.6
 /** Halvings that place an obstruction's wall within STEP / 2^n of where it starts. */
 const REFINE = 3
+/**
+ * Barriers are found at this height over the floor: higher than a kerb. Marina Bay's are 1.4 m
+ * concrete only ~0.5 m thick, which the floor probes step straight over, so they got no wall.
+ */
+const BARRIER_RISE = 0.5
+/** A barrier must carry on this far along the road either side: a lamp post or bollard gets no wall. */
+const BARRIER_RUN = 2
+/** How far the barrier's face may wander either side of that (a barrier on a curve, a kink in it). */
+const BARRIER_SLACK = 1.5
+/** A barrier's foot can flare out like a ramp (Marina Bay's do): the wall stands in front of it, found at this height. */
+const BARRIER_FOOT = 0.1
+/** The wall stands this far in front of the barrier's face, so the car meets it first. */
+const BARRIER_GAP = 0.05
 /** Neighbouring edges further apart than this aren't joined (the wall would cut across the floor). */
 const MAX_JUMP = 6
 /** Longest wall standing a side street's edge (where it runs on past MAX, or for good). */
@@ -55,32 +77,61 @@ export interface SafetyWallMesh {
   segments: number
 }
 
+interface Edge {
+  d: number
+  y: number
+  /** A barrier's face, where the floor carries on beyond (vs the floor ending or running under rock). */
+  barrier: boolean
+}
+
 /** Distance to the floor's edge along one side, and the floor height there; null when it carries on. */
-function edgeAt(p: WallPoint, nx: number, nz: number, probe: FloorProbe, headroom?: HeadroomProbe): { d: number; y: number } | null {
+function edgeAt(p: WallPoint, nx: number, nz: number, { floor: probe, headroom, barrier }: SafetyWallProbes): Edge | null {
   // No floor under the centreline itself means the collision isn't there (or
   // isn't queryable yet), not that the world ends: never wall in the road.
   const road = probe(p.x, p.y, p.z)
   if (road === null) return null
   let y = road
   let misses = 0
+  /** Where `blocked` starts between the last clear probe and d, so the wall takes no road. */
+  const start = (d: number, blocked: (x: number, z: number) => boolean): Edge => {
+    let clear = d - STEP, far = d
+    for (let k = 0; k < REFINE; k++) {
+      const m = (clear + far) / 2
+      if (blocked(p.x + nx * m, p.z + nz * m)) far = m
+      else clear = m
+    }
+    return { d: Math.max(FIRST - STEP, clear), y, barrier: false }
+  }
+  const low = (x: number, z: number) => {
+    const f = probe(x, y, z)
+    return f === null || headroom!(x, f, z, CLEARANCE) !== null
+  }
+  /** The face of a barrier between `from` and `to` (m out), if it runs on along the road; null otherwise. */
+  const face = (from: number, to: number) => {
+    const x = p.x + nx * from, z = p.z + nz * from, at = barrier!(x, y + BARRIER_RISE, z, nx, nz, to - from)
+    if (at === null) return null
+    // Along the road (the normal turned a quarter) either side, so a post or a bollard is no wall.
+    for (const s of [-BARRIER_RUN, BARRIER_RUN]) {
+      const t = barrier!(x - nz * s, y + BARRIER_RISE, z + nx * s, nx, nz, at + BARRIER_SLACK)
+      if (t === null || t < at - BARRIER_SLACK) return null
+    }
+    const foot = barrier!(x, y + BARRIER_FOOT, z, nx, nz, at)
+    return { d: Math.max(1, from + Math.min(at, foot ?? at) - BARRIER_GAP), y, barrier: true }
+  }
   for (let d = FIRST; d <= MAX; d += STEP) {
-    const h = probe(p.x + nx * d, y, p.z + nz * d)
+    const x = p.x + nx * d, z = p.z + nz * d
+    if (barrier) {
+      const hit = face(d === FIRST ? 0 : d - STEP, d)
+      if (hit) return hit
+    }
+    const h = probe(x, y, z)
     // Marina Bay's promenade falls away to the ground plane by the water: the
     // floor carries on 8 m down, which is still falling off the track.
-    if (h !== null && h < y - DROP) return { d: Math.max(FIRST - STEP, d - STEP) + PAST, y }
-    if (h !== null && headroom && headroom(p.x + nx * d, h, p.z + nz * d, CLEARANCE) !== null) {
-      // It starts somewhere since the last clear probe: find where, so the wall takes no road.
-      let clear = d - STEP, blocked = d
-      for (let k = 0; k < REFINE; k++) {
-        const m = (clear + blocked) / 2, x = p.x + nx * m, z = p.z + nz * m, f = probe(x, y, z)
-        if (f !== null && headroom(x, f, z, CLEARANCE) === null) clear = m
-        else blocked = m
-      }
-      return { d: Math.max(FIRST - STEP, clear), y }
-    }
+    if (h !== null && h < y - DROP) return { d: Math.max(FIRST - STEP, d - STEP) + PAST, y, barrier: false }
+    if (h !== null && headroom && headroom(x, h, z, CLEARANCE) !== null) return start(d, low)
     if (h === null) {
       // Two misses in a row: a one-probe hole is a seam, not the end of the world.
-      if (++misses === 2) return { d: Math.max(FIRST - STEP, d - 2 * STEP) + PAST, y }
+      if (++misses === 2) return { d: Math.max(FIRST - STEP, d - 2 * STEP) + PAST, y, barrier: false }
     } else {
       misses = 0
       y = h
@@ -89,10 +140,12 @@ function edgeAt(p: WallPoint, nx: number, nz: number, probe: FloorProbe, headroo
   return null
 }
 
-export function planSafetyWalls(line: readonly WallPoint[], probe: FloorProbe, headroom?: HeadroomProbe): SafetyWallMesh {
+export function planSafetyWalls(line: readonly WallPoint[], probes: SafetyWallProbes): SafetyWallMesh {
+  const probe = probes.floor
   const n = line.length
-  // Per point and side: wall foot position and floor height, or NaN for none.
-  const foot = new Float32Array(n * 2 * 4).fill(NaN)
+  // Per point and side: wall foot position, floor height, distance and 1 for a barrier; NaN for none.
+  const S = 5
+  const foot = new Float32Array(n * 2 * S).fill(NaN)
   for (let i = 0; i < n; i++) {
     const a = line[(i - 1 + n) % n], b = line[(i + 1) % n], p = line[i]
     const l = Math.hypot(b.x - a.x, b.z - a.z) || 1
@@ -100,13 +153,14 @@ export function planSafetyWalls(line: readonly WallPoint[], probe: FloorProbe, h
     const lx = (b.z - a.z) / l, lz = -(b.x - a.x) / l
     for (let side = 0; side < 2; side++) {
       const sign = side === 0 ? 1 : -1
-      const edge = edgeAt(p, lx * sign, lz * sign, probe, headroom)
+      const edge = edgeAt(p, lx * sign, lz * sign, probes)
       if (!edge) continue
-      const o = (i * 2 + side) * 4
+      const o = (i * 2 + side) * S
       foot[o] = p.x + lx * sign * edge.d
       foot[o + 1] = edge.y
       foot[o + 2] = p.z + lz * sign * edge.d
       foot[o + 3] = edge.d
+      foot[o + 4] = edge.barrier ? 1 : 0
     }
   }
   const vertices: number[] = []
@@ -122,8 +176,11 @@ export function planSafetyWalls(line: readonly WallPoint[], probe: FloorProbe, h
   for (let i = 0; i < n; i++) {
     const j = (i + 1) % n
     for (let side = 0; side < 2; side++) {
-      const a = (i * 2 + side) * 4, b = (j * 2 + side) * 4
+      const a = (i * 2 + side) * S, b = (j * 2 + side) * S
       if (Number.isNaN(foot[a]) && Number.isNaN(foot[b])) continue
+      // Where a barrier stops (a pit entry, a gap onto run-off) the floor carries on: end its wall
+      // there, never join it to the floor's edge further out (that would cut across the gap).
+      if ((foot[a + 4] === 1 || foot[b + 4] === 1) && (foot[a + 4] !== foot[b + 4] || Math.abs(foot[a + 3] - foot[b + 3]) > MAX_JUMP)) continue
       // No edge on one side means the floor carries on past MAX (a side street).
       const da = Number.isNaN(foot[a]) ? MAX : foot[a + 3], db = Number.isNaN(foot[b]) ? MAX : foot[b + 3]
       if (Math.abs(da - db) > MAX_JUMP) {

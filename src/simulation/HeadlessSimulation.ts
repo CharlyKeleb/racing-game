@@ -5,6 +5,8 @@ import { Surface } from '../vehicles/Surface'
 import type { VehicleConfig } from '../vehicles/VehicleConfig'
 import { VehiclePhysics, type PhysicsSpawn } from '../vehicles/VehiclePhysics'
 import { SurfaceMap, type SurfaceGridInfo } from '../world/SurfaceMap'
+import { addSafetyWallMesh, planTrackSafetyWalls } from '../world/SafetyWallBody'
+import type { SafetyWallMesh } from '../world/SafetyWalls'
 
 export const SIMULATION_VERSION = 1
 export const SIMULATION_DT = 1 / 60
@@ -18,6 +20,9 @@ export interface SimulationTrack {
   meshes: { vertices: number[] | Float32Array; indices: number[] | Uint32Array; barrier: boolean }[]
   surface: { info: SurfaceGridInfo; cells: number[] | Uint8Array } | null
 }
+
+/** Planning a track's walls takes ~0.3 s of ray casts, and every race on a server runs the same track. */
+const plannedWalls = new WeakMap<SimulationTrack, SafetyWallMesh>()
 
 const NEUTRAL: InputState = Object.freeze({ throttle: 0, brake: 0, steer: 0, handbrake: false, nitro: false })
 
@@ -34,16 +39,28 @@ export class HeadlessSimulation {
     return new HeadlessSimulation(track)
   }
 
+  /** Plans the track's walls ahead of the first race (server boot), so creating a race doesn't stall on them. */
+  static async prepare(track: SimulationTrack): Promise<void> {
+    if (!plannedWalls.has(track)) (await HeadlessSimulation.create(track)).dispose()
+  }
+
   private constructor(track: SimulationTrack) {
     this.surface = track.surface ? new SurfaceMap(track.surface.info, track.surface.cells instanceof Uint8Array
       ? track.surface.cells : Uint8Array.from(track.surface.cells)) : null
     const ground = this.physics.world.createRigidBody(RAPIER.RigidBodyDesc.fixed())
+    const barriers = new Set<number>()
     for (const mesh of track.meshes) {
-      this.physics.world.createCollider(RAPIER.ColliderDesc.trimesh(mesh.vertices instanceof Float32Array ? mesh.vertices : Float32Array.from(mesh.vertices),
+      const collider = this.physics.world.createCollider(RAPIER.ColliderDesc.trimesh(mesh.vertices instanceof Float32Array ? mesh.vertices : Float32Array.from(mesh.vertices),
         mesh.indices instanceof Uint32Array ? mesh.indices : Uint32Array.from(mesh.indices))
         .setFriction(mesh.barrier ? 0.25 : 0.9).setRestitution(mesh.barrier ? 0.2 : 0), ground)
+      if (mesh.barrier) barriers.add(collider.handle)
     }
-    // Populate Rapier's query pipeline before the first suspension/ground query.
+    // Populate Rapier's query pipeline before the walls' and the first suspension/ground query.
+    this.physics.step(SIMULATION_DT)
+    // The same walls as offline and client prediction (see SafetyWalls).
+    let walls = plannedWalls.get(track)
+    if (!walls) plannedWalls.set(track, walls = planTrackSafetyWalls(this.physics.world, track.line, (c) => barriers.has(c.handle)))
+    addSafetyWallMesh(this.physics.world, walls)
     this.physics.step(SIMULATION_DT)
   }
 

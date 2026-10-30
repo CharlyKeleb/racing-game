@@ -1,7 +1,9 @@
 // Offline drivability audit for every shipped track: the real collision GLB plus the same
 // SafetyWalls the game builds, scanned for holes, steps and obstacles in the road, then driven
 // on several lines across the road. Reports where a car would launch, fall, flip, hit or stick.
-// Usage: audit-drivability.ts [trackId ...] [--json out.json]
+// --crash also fires a settled car at the barriers on both sides at 220 km/h and 40° every ~24 m,
+// and reports each one thrown more than 1.5 m up.
+// Usage: audit-drivability.ts [trackId ...] [--crash] [--json out.json]
 import { NodeIO } from '@gltf-transform/core'
 import { ALL_EXTENSIONS } from '@gltf-transform/extensions'
 import { MeshoptDecoder } from 'meshoptimizer'
@@ -13,13 +15,15 @@ import RAPIER from '@dimforge/rapier3d-compat'
 import { PhysicsWorld, initRapier } from '../../src/engine/PhysicsWorld'
 import { VehiclePhysics } from '../../src/vehicles/VehiclePhysics'
 import { resolveVehicleConfig, type VehicleConfig } from '../../src/vehicles/VehicleConfig'
-import { planSafetyWalls } from '../../src/world/SafetyWalls'
+import { addSafetyWalls } from '../../src/world/SafetyWallBody'
 import { RecoveryMonitor } from '../../src/racing/RecoveryMonitor'
 
 const root = fileURLToPath(new URL('../../', import.meta.url))
 const args = process.argv.slice(2)
 const jsonAt = args.indexOf('--json')
 const jsonOut = jsonAt >= 0 ? args.splice(jsonAt, 2)[1] : null
+const crashAt = args.indexOf('--crash')
+const crashTest = crashAt >= 0 && args.splice(crashAt, 1).length > 0
 const tracks = args.length ? args : (await readdir(path.join(root, 'public/models/tracks'))).filter((name) => !name.startsWith('.')).sort()
 
 interface Point { x: number; y: number; z: number }
@@ -61,21 +65,23 @@ export async function loadCollision(track: string) {
 export function buildWorld(meshes: Awaited<ReturnType<typeof loadCollision>>['meshes'], line: Point[], flags?: RAPIER.TriMeshFlags) {
   const physics = new PhysicsWorld()
   const body = physics.world.createRigidBody(RAPIER.RigidBodyDesc.fixed())
-  const road = new Set<number>()
+  const road = new Set<number>(), barriers = new Set<number>()
   const names = new Map<number, string>()
   for (const mesh of meshes) {
     const barrier = mesh.name.startsWith('barrier')
     const collider = physics.world.createCollider(RAPIER.ColliderDesc.trimesh(mesh.vertices, mesh.indices, flags)
       .setFriction(barrier ? 0.25 : 0.9).setRestitution(barrier ? 0.2 : 0), body)
     if (mesh.name.startsWith('road')) road.add(collider.handle)
+    if (barrier) barriers.add(collider.handle)
     names.set(collider.handle, mesh.name)
   }
   physics.step(1 / 60)
-  const walls = planSafetyWalls(line, (x, y, z) => physics.floorHeight(x, y, z), (x, y, z, max) => physics.headroom(x, y, z, max))
-  if (walls.segments) names.set(physics.world.createCollider(RAPIER.ColliderDesc.trimesh(walls.vertices, walls.indices).setFriction(0.2).setRestitution(0.1),
-    physics.world.createRigidBody(RAPIER.RigidBodyDesc.fixed())).handle, 'safety-walls')
+  const walls = addSafetyWalls(physics.world, line, (c) => barriers.has(c.handle))
+  const wallTris = walls ? walls.collider(0).shape.indices.length / 3 : 0
+  if (walls) names.set(walls.collider(0).handle, 'safety-walls')
   physics.step(1 / 60)
-  return { physics, road, names, wallSegments: walls.segments }
+  // Four triangles (both windings) per wall segment.
+  return { physics, road, names, wallSegments: wallTris / 4 }
 }
 
 /** Evenly spaced points (m) along the closed centreline, with unit tangents. */
@@ -94,14 +100,22 @@ function resample(line: Point[], spacing: number) {
   return out
 }
 
-/** Paved extent (m) either side of a centreline point: where the road collider stops under the line. */
+/**
+ * Paved extent (m) either side of a centreline point: where the road collider stops under the line,
+ * or sooner where something solid stands across the way (a street circuit's barrier, with the city's
+ * pavement carrying on behind it).
+ */
 function band(world: ReturnType<typeof buildWorld>, p: Point, tx: number, tz: number): [number, number] {
   const onlyRoad = (c: RAPIER.Collider) => world.road.has(c.handle)
   const side = (sign: number) => {
-    let last = 0, misses = 0
+    let last = 0, misses = 0, y = p.y
     for (let o = 0.5; o <= 15; o += 0.5) {
-      if (world.physics.groundHeight(p.x + tz * o * sign, p.y, p.z - tx * o * sign, onlyRoad) === null) { if (++misses >= 2) break }
-      else { last = o; misses = 0 }
+      const x = p.x + tz * o * sign, z = p.z - tx * o * sign, h = world.physics.groundHeight(x, y, z, onlyRoad)
+      if (h === null) { if (++misses >= 2) break; continue }
+      const wall = world.physics.world.castRay(new RAPIER.Ray({ x: p.x + tz * last * sign, y: y + 0.5, z: p.z - tx * last * sign }, { x: tz * sign, y: 0, z: -tx * sign }),
+        o - last, true, RAPIER.QueryFilterFlags.EXCLUDE_DYNAMIC)
+      if (wall) break
+      last = o; misses = 0; y = h
     }
     return last
   }
@@ -217,12 +231,39 @@ function drive(world: ReturnType<typeof buildWorld>, line: Point[], config: Vehi
   return findings
 }
 
+/** Settled, then fired at the barriers either side: a hard hit may stop or spin the car, never throw it up. */
+function crash(world: ReturnType<typeof buildWorld>, line: Point[], config: VehicleConfig): Finding[] {
+  const { physics } = world
+  const findings: Finding[] = [], n = line.length, idle = { throttle: 0, brake: 1, steer: 0, handbrake: false, nitro: false }
+  for (let i = 0; i < n; i += 6) {
+    const p = line[i], a = line[(i - 1 + n) % n], b = line[(i + 1) % n]
+    const l = Math.hypot(b.x - a.x, b.z - a.z) || 1, fx = (b.x - a.x) / l, fz = (b.z - a.z) / l
+    for (const sign of [1, -1]) {
+      const lx = fz * sign, lz = -fx * sign, c = Math.cos(40 * Math.PI / 180), s = Math.sin(40 * Math.PI / 180)
+      const hx = fx * c + lx * s, hz = fz * c + lz * s, y = physics.floorHeight(p.x, p.y + 1, p.z) ?? p.y
+      const car = new VehiclePhysics(config, physics.world, { position: { x: p.x, y: y + 0.6, z: p.z }, heading: Math.atan2(hx, hz) })
+      for (let t = 0; t < 60; t++) { car.fixedUpdate(idle, 1 / 60); physics.step(1 / 60) }
+      car.body.setLinvel({ x: hx * 61, y: 0, z: hz * 61 }, true)
+      let up = 0
+      for (let t = 0; t < 120; t++) {
+        car.fixedUpdate({ throttle: 1, brake: 0, steer: 0, handbrake: false, nitro: false }, 1 / 60)
+        physics.step(1 / 60)
+        const q = car.body.translation(), g = physics.groundHeight(q.x, q.y, q.z)
+        if (g !== null) up = Math.max(up, q.y - g)
+      }
+      if (up > 1.5) findings.push({ kind: 'thrown', index: i, x: Math.round(p.x), z: Math.round(p.z), detail: `${up.toFixed(1)} m up after a 220 km/h, 40° hit on the ${sign > 0 ? 'left' : 'right'}` })
+      physics.world.removeRigidBody(car.body)
+    }
+  }
+  return findings
+}
+
 await initRapier()
 if (process.argv[1] === fileURLToPath(import.meta.url)) await main()
 
 async function main() {
 const config = resolveVehicleConfig(JSON.parse(await readFile(path.join(root, 'public/models/cars/porsche911/vehicle-config.json'), 'utf8')))
-const report: Record<string, { wallSegments: number; surface: Finding[]; driving: Finding[] }> = {}
+const report: Record<string, { wallSegments: number; surface: Finding[]; driving: Finding[]; crashes?: Finding[] }> = {}
 for (const track of tracks) {
   const { manifest, meshes } = await loadCollision(track)
   const line: Point[] = manifest.line.map((p: number[] | Point) => Array.isArray(p) ? { x: p[0], y: p[1], z: p[2] } : p)
@@ -230,9 +271,10 @@ for (const track of tracks) {
   const surface = scanSurface(world, line)
   const s = manifest.spawn, spawn = { position: Array.isArray(s.position) ? { x: s.position[0], y: s.position[1], z: s.position[2] } : s.position, heading: s.heading ?? 0 }
   const driving = OFFSETS.flatMap((offset) => drive(world, line, config, spawn, offset, 1))
-  report[track] = { wallSegments: world.wallSegments, surface, driving }
+  const crashes = crashTest ? crash(world, line, config) : undefined
+  report[track] = { wallSegments: world.wallSegments, surface, driving, crashes }
   const count = (list: Finding[]) => Object.entries(list.reduce<Record<string, number>>((m, f) => ({ ...m, [f.kind]: (m[f.kind] ?? 0) + 1 }), {})).map(([k, v]) => `${k} ${v}`).join(', ') || 'none'
-  console.log(`${track.padEnd(12)} walls ${String(world.wallSegments).padStart(4)} | surface: ${count(surface)} | driving: ${count(driving)}`)
+  console.log(`${track.padEnd(12)} walls ${String(world.wallSegments).padStart(4)} | surface: ${count(surface)} | driving: ${count(driving)}${crashes ? ` | crashes: ${count(crashes)}` : ''}`)
   world.physics.dispose()
 }
 if (jsonOut) await writeFile(jsonOut, JSON.stringify(report, null, 2))

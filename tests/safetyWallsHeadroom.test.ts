@@ -7,7 +7,7 @@ const floor = () => 0
 const rock = (x: number, _y: number, _z: number, max: number) => Math.abs(x) >= 7.3 && max >= 1 ? 1 : null
 
 it('stands a wall where rock comes down over the road mesh, at the foot of it', () => {
-  const walls = planSafetyWalls(line, floor, rock)
+  const walls = planSafetyWalls(line, { floor, headroom: rock })
   expect(walls.segments).toBeGreaterThan(0)
   const xs = new Set<number>()
   for (let i = 0; i < walls.vertices.length; i += 3) xs.add(Math.round(Math.abs(walls.vertices[i]) * 4) / 4)
@@ -17,6 +17,6 @@ it('stands a wall where rock comes down over the road mesh, at the foot of it', 
 })
 
 it('leaves open run-off alone, as before, when nothing hangs low over it', () => {
-  expect(planSafetyWalls(line, floor, () => null).segments).toBe(0)
-  expect(planSafetyWalls(line, floor).segments).toBe(0)
+  expect(planSafetyWalls(line, { floor, headroom: () => null, barrier: () => null }).segments).toBe(0)
+  expect(planSafetyWalls(line, { floor }).segments).toBe(0)
 })
