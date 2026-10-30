@@ -7,6 +7,7 @@ import { MAX_SCENE_RADIANCE, VIGNETTE_DARKNESS, VIGNETTE_OFFSET } from './grade'
 import type { QualityPreset } from '../stores/gameStore'
 import * as THREE from 'three'
 import {
+  BlendFunction,
   Effect,
   EffectAttribute,
   EffectComposer,
@@ -22,16 +23,21 @@ import {
 /**
  * Drops NaN/Inf pixels and clamps extreme radiance before any blur reads the scene.
  * Bloom's mip pyramid spreads one bad pixel into growing black squares (seen on Safari).
+ * Metal and ANGLE's D3D backend compile with fast math, which folds isnan()/isinf() and
+ * x == x to false, so the test reads the exponent bits instead (all ones = NaN or Inf).
  */
 class SanitizeEffect extends Effect {
   constructor() {
     super('SanitizeEffect', /* glsl */ `
+      bool nonFinite(float v) { return (floatBitsToUint(v) & 0x7f800000u) == 0x7f800000u; }
       void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor) {
         vec3 c = inputColor.rgb;
-        bool bad = any(isnan(c)) || any(isinf(c)) || !(c.r == c.r && c.g == c.g && c.b == c.b);
-        outputColor = vec4(bad ? vec3(0.) : clamp(c, 0., ${MAX_SCENE_RADIANCE.toFixed(1)}), inputColor.a);
+        bool bad = nonFinite(c.r) || nonFinite(c.g) || nonFinite(c.b);
+        outputColor = vec4(bad ? vec3(0.) : clamp(c, 0., ${MAX_SCENE_RADIANCE.toFixed(1)}), nonFinite(inputColor.a) ? 1. : inputColor.a);
       }
-    `)
+    `, { blendFunction: BlendFunction.SRC })
+    // SRC, not the default NORMAL: NORMAL mixes the result with the input, and mix(NaN, c, 1.) is
+    // still NaN, so the bad pixel went straight on to bloom. That is why the first version did nothing.
   }
 }
 

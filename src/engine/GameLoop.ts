@@ -11,6 +11,12 @@ export const FIXED_DT = 1 / 60
 const MAX_FRAME_TIME = 0.25
 /** Spread stall recovery across frames without changing the 60 Hz simulation step. */
 const MAX_STEPS_PER_FRAME = 5
+/**
+ * Most simulation time ever owed. Below ~12 fps the 5-step cap can't keep up; an unbounded backlog
+ * grew ~10 s per minute and, once the frame rate recovered, fast-forwarded at 5x (cars launched).
+ * Past this the game runs in slow motion instead, which is what a slow machine should look like.
+ */
+const MAX_BACKLOG = MAX_FRAME_TIME
 
 export interface LoopCallbacks {
   fixedUpdate(dt: number): void
@@ -25,6 +31,7 @@ export class GameLoop {
   private lastTime = 0
   private rafId = 0
   private running = false
+  private failed = false
   private readonly callbacks: LoopCallbacks
 
   constructor(callbacks: LoopCallbacks) {
@@ -50,7 +57,7 @@ export class GameLoop {
     const started = profiling ? performance.now() : 0
     const clamped = Number.isFinite(frameTime) ? Math.max(0, Math.min(frameTime, MAX_FRAME_TIME)) : 0
     const scale = Number.isFinite(this.timeScale) ? Math.max(0, Math.min(1, this.timeScale)) : 1
-    this.accumulator += clamped * scale
+    this.accumulator = Math.min(MAX_BACKLOG, this.accumulator + clamped * scale)
     let steps = 0
     while (this.accumulator >= FIXED_DT && steps < MAX_STEPS_PER_FRAME) {
       this.callbacks.fixedUpdate(FIXED_DT)
@@ -68,9 +75,16 @@ export class GameLoop {
 
   private frame = (now: number): void => {
     if (!this.running) return
+    // Scheduled first: one throwing frame (a driver-specific render error) used to end the loop for
+    // good, freezing the last half-drawn frame and the car while the React HUD kept running.
+    this.rafId = requestAnimationFrame(this.frame)
     const frameTime = (now - this.lastTime) / 1000
     this.lastTime = now
-    this.advance(frameTime)
-    this.rafId = requestAnimationFrame(this.frame)
+    try {
+      this.advance(frameTime)
+    } catch (error) {
+      if (!this.failed) console.error('Game frame failed; the loop keeps running', error)
+      this.failed = true
+    }
   }
 }
