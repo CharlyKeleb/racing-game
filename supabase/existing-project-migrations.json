@@ -25,6 +25,11 @@
       "version": "20261024111823",
       "source": "0005_racer_identity_audit.sql",
       "sha256": "c070bc4c27c77f3cf5d62a27a94278095adabb5f1483f87f20a4c1c253c2f675"
+    },
+    {
+      "version": "20261102120000",
+      "source": "0006_leaderboards.sql",
+      "sha256": "0f6ef218a954a75b38de72f7e9231336f067c7497da9db81280641e543ccec1e"
     }
   ]
 }

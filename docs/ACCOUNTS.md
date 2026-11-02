@@ -117,3 +117,9 @@ Apply migration 0003 before enabling this path. The optional local backend can
 write results with a server-only secret and persistent retry directory; this does
 not enable racing on the deployed lobby pilot. See [storage, setup and acceptance
 limits](ONLINE_PRACTICE_HISTORY.md).
+
+## Leaderboards
+
+Signed-in racers' Time Trial and Drift bests post to public boards under their
+display name. They need migration 0006. See
+[LEADERBOARDS.md](LEADERBOARDS.md).

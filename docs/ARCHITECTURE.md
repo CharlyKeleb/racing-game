@@ -21,7 +21,8 @@ McLaren on a beautiful circuit with arcade driving physics. It runs at a stable
 | Assets | Blender → Blender MCP → GLB/glTF 2.0 | Cars and tracks |
 | Tests | Vitest | Pure physics and race-rule modules |
 | Accounts | Supabase (auth + Postgres, from the browser) | Sign-in and cloud save, see `docs/ACCOUNTS.md` |
-| Later | Node + PostgreSQL, Colyseus | Leaderboards, authoritative multiplayer |
+| Leaderboards | Supabase RPCs | Global Time Trial and Drift boards, see `docs/LEADERBOARDS.md` |
+| Later | Node + PostgreSQL, Colyseus | Authoritative multiplayer |
 
 **Key decision:** Three.js is used directly, not through React Three Fiber. React
 only renders the 2D overlay. This gives the engine full control over the game loop,

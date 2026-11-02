@@ -85,6 +85,7 @@ import { GameLoop } from './GameLoop'
 import { initRapier, PhysicsWorld } from './PhysicsWorld'
 import { Renderer } from './Renderer'
 import { CloudSave } from '../cloud/CloudSave'
+import type { LeaderboardQuery } from '../cloud/leaderboardData'
 
 const TELEMETRY_HZ = 20
 /** Opacity of a tag sitting behind a nearer car's tag. */
@@ -1090,6 +1091,9 @@ export class Game {
   loadPracticeHistory(more = false): Promise<void> { return this.cloud.loadPracticeHistory(more) }
 
   loadIdentityHistory(more = false): Promise<void> { return this.cloud.loadIdentityHistory(more) }
+
+  /** Leaderboards tab and results screen: post any new bests, then fetch this board. */
+  loadLeaderboard(query: LeaderboardQuery): Promise<void> { return this.cloud.loadLeaderboard(query) }
 
   loadRacerProfile(): Promise<void> {
     return this.cloud.loadProfile()

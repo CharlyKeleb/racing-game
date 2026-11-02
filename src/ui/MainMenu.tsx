@@ -2,7 +2,7 @@ import { lobbyStore } from '../multiplayer/lobbyStore'
 import { driftEvent } from '../racing/driftEvents'
 import { AccountButton, AccountDialog } from './Account'
 import { accountStore } from '../stores/accountStore'
-import { GiCheckeredFlag, GiStopwatch, GiRaceCar, GiRoad, GiHomeGarage, GiGears, GiSteeringWheel, GiPathDistance } from 'react-icons/gi'
+import { GiCheckeredFlag, GiStopwatch, GiRaceCar, GiRoad, GiHomeGarage, GiGears, GiSteeringWheel, GiPathDistance, GiPodium } from 'react-icons/gi'
 import { lazy, Suspense, useEffect, useState, type ComponentType } from 'react'
 import { buildStats, carClass, DEFAULT_BUILD, performanceRank } from '../vehicles/CarBuild'
 import { getCar, selectableCars } from '../vehicles/carRegistry'
@@ -26,6 +26,7 @@ const OnlineLobby = lazy(() => import('./OnlineLobby').then(module => ({ default
 
 const SettingsDialog = lazy(() => import('./Settings').then(module => ({ default: module.SettingsDialog })))
 const GarageWorkshop = lazy(() => import('./Garage').then(module => ({ default: module.GarageWorkshop })))
+const Leaderboards = lazy(() => import('./Leaderboards').then(module => ({ default: module.Leaderboards })))
 
 /**
  * The festival hub (Forza Horizon / The Crew Motorfest / NFS): the showroom
@@ -35,8 +36,8 @@ const GarageWorkshop = lazy(() => import('./Garage').then(module => ({ default: 
  * along the bottom. The Garage tab is the garage phase (its camera framing),
  * shown in place: the hub stays mounted across both phases.
  */
-type Tab = 'play' | 'cars' | 'garage'
-const TAB_ORDER: Tab[] = ['play', 'cars', 'garage']
+type Tab = 'play' | 'cars' | 'garage' | 'leaderboard'
+const TAB_ORDER: Tab[] = ['play', 'cars', 'garage', 'leaderboard']
 
 export function MainMenu() {
   const game = useGameInstance()
@@ -96,6 +97,7 @@ export function MainMenu() {
     { id: 'play', label: 'Play', Icon: GiCheckeredFlag },
     { id: 'cars', label: 'Cars', Icon: GiSteeringWheel },
     { id: 'garage', label: 'Garage', Icon: GiHomeGarage },
+    { id: 'leaderboard', label: 'Ranks', Icon: GiPodium },
     { id: 'settings', label: 'Settings', Icon: GiGears },
   ]
   const pick = (id: (typeof tabs)[number]['id']) => {
@@ -134,10 +136,11 @@ export function MainMenu() {
         </div>
       </aside>}
 
-      <section className={`hub-panel${tab === 'garage' ? ' hub-panel--left' : ''}`} key={tab} aria-label={tab === 'play' ? 'Events' : tab === 'cars' ? 'Cars' : 'Garage'}>
+      <section className={`hub-panel${tab === 'garage' ? ' hub-panel--left' : ''}`} key={tab} aria-label={tab === 'play' ? 'Events' : tab === 'cars' ? 'Cars' : tab === 'leaderboard' ? 'Leaderboards' : 'Garage'}>
         {tab === 'play' && <PlayMosaic onOnline={() => setDialog('online')} onSetup={() => setDialog('setup')} onTracks={() => setDialog('tracks')} />}
         {tab === 'cars' && <CarList />}
         {tab === 'garage' && <Suspense fallback={<div className="hub-loading" role="status">Opening the garage…</div>}><GarageWorkshop /></Suspense>}
+        {tab === 'leaderboard' && <Suspense fallback={<div className="hub-loading" role="status">Opening the leaderboards…</div>}><Leaderboards onAccount={() => setDialog('account')} onDrive={() => go('play')} /></Suspense>}
       </section>
 
       <footer className="hub-hints" aria-hidden="true">

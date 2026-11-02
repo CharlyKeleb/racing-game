@@ -1,4 +1,6 @@
 import { IdentityHistory } from './IdentityHistoryLoader'
+import { Leaderboards } from './Leaderboards'
+import type { LeaderboardQuery } from './leaderboardData'
 import { PracticeHistory } from './PracticeHistoryLoader'
 import { validateRacer, profileError } from './racerIdentity'
 import type { Session, SupabaseClient } from '@supabase/supabase-js'
@@ -37,6 +39,7 @@ export class CloudSave {
   private playerId: string | null = null
   private readonly practiceHistory = new PracticeHistory(() => this.client, () => this.playerId)
   private readonly identityHistory = new IdentityHistory(() => this.client, () => this.playerId)
+  private readonly leaderboards = new Leaderboards(() => this.client, () => this.playerId, () => this.merged)
   /** False until this player's cloud save has merged in; uploads wait for it. */
   private merged = false
   private pendingMerge = false
@@ -120,6 +123,8 @@ export class CloudSave {
 
   loadIdentityHistory(more = false): Promise<void> { return this.identityHistory.load(more) }
 
+  loadLeaderboard(query: LeaderboardQuery): Promise<void> { return this.leaderboards.load(query) }
+
   async loadProfile(): Promise<void> {
     const client = await this.client
     const playerId = this.playerId
@@ -156,6 +161,7 @@ export class CloudSave {
   dispose(): void {
     this.practiceHistory.dispose()
     this.identityHistory.dispose()
+    this.leaderboards.dispose()
     this.disposed = true
     if (this.uploadTimer) clearTimeout(this.uploadTimer)
     for (const off of this.cleanup) off()
@@ -220,6 +226,7 @@ export class CloudSave {
       // Storage full or blocked: the cloud save still holds the progress.
     }
     this.merged = true
+    this.leaderboards.scheduleSync()
     if (cloud && sameSnapshot(next, cloud)) {
       this.lastUploaded = cloud
       accountStore.setState({ sync: 'synced', lastSyncedAt: Date.now() })

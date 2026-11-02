@@ -4,6 +4,7 @@ import { formatTime } from '../racing/LapTimer'
 import { useGameInstance } from './GameContext'
 import { useGame, useTelemetry } from './hooks'
 import { Button, Panel } from './kit'
+import { LeaderboardResult } from './LeaderboardResult'
 
 export function Results() {
   const position = useTelemetry(s => s.finishPosition)
@@ -43,6 +44,7 @@ export function Results() {
           <dd className="mono">{formatTime(total)}</dd>
           {!drift && <><dt>Best lap</dt><dd className="mono">{formatTime(best)}</dd></>}
         </dl>
+        {drift && <LeaderboardResult mode="drift" />}
         {standings.length > 1 && <ol className="race-standings" aria-label="Race standings">{standings.map(s => <li key={s.id} className={s.player ? 'race-standings__player' : ''}><b>{s.position}</b><span>{s.name}</span><span className="mono">{s.finishMs === null ? 'Racing' : formatTime(s.finishMs)}</span></li>)}</ol>}
         <Button variant="primary" size="lg" onClick={() => game?.startRace()} autoFocus>
           {drift ? 'Drift again' : 'Race again'}
@@ -79,6 +81,7 @@ function TrialResults() {
           <dt>Session time</dt>
           <dd className="mono">{formatTime(t.total)}</dd>
         </dl>
+        <LeaderboardResult mode="timeTrial" />
         <Button variant="primary" size="lg" onClick={() => game?.startRace()} autoFocus>New session</Button>
         <Button variant="ghost" onClick={() => game?.quitToMenu()}>Main menu</Button>
       </Panel>
