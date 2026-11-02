@@ -71,7 +71,7 @@ function controllerReader(config: VehicleConfig): Reader<VehicleControllerState>
       perfectLeft: number(-.1, 3600), attempted: boolean, releasedFor: timer, wasHeld: boolean }),
     drift: value => object(value, { amount: unit, active: boolean, exiting: boolean, entry: member(-1, 0, 1), direction: member(-1, 0, 1),
       score: number(0, 1e12), lastScore: number(0, 1e12, true), sinceEnd: idleTimer, brakeHeld: timer, steeredWhileBraking: boolean,
-      tapArm: timer, counter: timer, brakeArm: timer, downshiftArm: timer, wasBraking: boolean, calm: timer, exitTimer: timer }),
+      tapArm: timer, counter: timer, brakeArm: timer, downshiftArm: timer, wasBraking: boolean, calm: timer, exitTimer: timer, steer: number(-1, 1) }),
     burnout: value => object(value, { intensity: unit, holding: boolean }),
     backfire: value => object(value, { popped: member(0, 1, 2), strength: unit, flash: unit, flashKind: member(0, 1, 2),
       count: number(0, 1e6, true), sinceHigh: idleTimer, burst: number(0, 5, true), nextBurst: number(-.1, 3600),

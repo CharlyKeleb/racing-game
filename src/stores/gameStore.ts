@@ -63,6 +63,8 @@ export interface Settings {
   spotterVisual: boolean
   /** Quick Race callouts (#90): text on/off, and their chime volume (0 = text only). */
   commentaryVersion: 1
+  /** Set once the golden-hour rain default has been applied to saved settings. */
+  conditionsVersion: 1
   narrator: 'off' | 'duo' | 'camille' | 'alex'
   narratorVolume: number
   callouts: boolean
@@ -184,6 +186,7 @@ const defaultSettings: Settings = {
   proximityRadar: false,
   spotterVisual: true,
   commentaryVersion: 1,
+  conditionsVersion: 1,
   narrator: 'duo',
   narratorVolume: .8,
   callouts: true,
@@ -200,8 +203,8 @@ const defaultSettings: Settings = {
   laps: 3,
   track: 'nurburgring',
   car: 'porsche911',
-  timeOfDay: 'noon',
-  weather: 'dry',
+  timeOfDay: 'golden',
+  weather: 'rain',
 }
 
 function loadSettings(): Settings {
@@ -213,6 +216,12 @@ function loadSettings(): Settings {
     // Move the earlier single-narrator setup to the requested commentary duo once.
     if (saved.commentaryVersion !== 1 && merged.narrator !== 'off') merged.narrator = 'duo'
     merged.commentaryVersion = 1
+    // Golden-hour rain became the default: move saved settings onto it once, then respect changes.
+    if (saved.conditionsVersion !== 1) {
+      merged.timeOfDay = defaultSettings.timeOfDay
+      merged.weather = defaultSettings.weather
+    }
+    merged.conditionsVersion = 1
     if (merged.trackLook !== 'default' && merged.trackLook !== 'road-focus') merged.trackLook = defaultSettings.trackLook
     const savedCockpits = merged.cockpits
     merged.cockpits = {}

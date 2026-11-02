@@ -212,6 +212,49 @@ describe('Arcade drift (NFS / Asphalt)', () => {
     expect(d.active).toBe(false)
   })
 
+  it('hard countersteer on the throttle links into a drift the other way', () => {
+    const d = new Drift()
+    tapWhileTurning(d, 1)
+    const score = () => d.score
+    run(d, { steer: 1, throttle: 1, slipAngle: 0.5 }, 1, DEFAULT_DRIFT)
+    const before = score()
+    run(d, { steer: -1, throttle: 1, slipAngle: 0.5 }, DEFAULT_DRIFT.transitionTime - 0.05, DEFAULT_DRIFT)
+    expect(d.direction).toBe(1)
+    let entry = 0
+    for (let k = 0; k < 6; k++) { d.update({ ...cruise, steer: -1, throttle: 1, slipAngle: 0.5 }, DEFAULT_DRIFT, DT); entry ||= d.entry }
+    // Same drift, other way: kicked toward the new turn, points carried on.
+    expect(d.active).toBe(true)
+    expect(d.direction).toBe(-1)
+    expect(entry).toBe(-1)
+    expect(d.score).toBeGreaterThan(before)
+    // Holding the new direction keeps it going past the old countersteer exit.
+    run(d, { steer: -1, throttle: 1, slipAngle: 0.5 }, DEFAULT_DRIFT.counterExitTime + 0.2, DEFAULT_DRIFT)
+    expect(d.active).toBe(true)
+  })
+
+  it('countersteer off the throttle still ends the drift instead of linking', () => {
+    const d = new Drift()
+    tapWhileTurning(d, 1)
+    run(d, { steer: -1, throttle: 0, slipAngle: 0.5 }, DEFAULT_DRIFT.counterExitTime + 0.1, DEFAULT_DRIFT)
+    expect(d.active).toBe(false)
+    expect(d.direction).toBe(1)
+  })
+
+  it('eases tapped keys into a steady in-between steer for the drift to follow', () => {
+    const d = new Drift()
+    tapWhileTurning(d, 1)
+    // A key tapped half the time, as a keyboard driver holds a line.
+    const seen: number[] = []
+    for (let k = 0; k < 240; k++) {
+      d.update({ ...cruise, steer: k % 30 < 15 ? 1 : 0, throttle: 1, slipAngle: 0.5 }, DEFAULT_DRIFT, DT)
+      if (k >= 120) seen.push(d.steer)
+    }
+    expect(d.active).toBe(true)
+    expect(Math.min(...seen)).toBeGreaterThan(0.3)
+    expect(Math.max(...seen)).toBeLessThan(0.75)
+    expect(Math.max(...seen) - Math.min(...seen)).toBeLessThan(0.35)
+  })
+
   it('scores points while drifting and banks them when it ends', () => {
     const d = new Drift()
     tapWhileTurning(d, 1)
