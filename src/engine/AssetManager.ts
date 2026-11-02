@@ -6,6 +6,14 @@ import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.j
 // Decode meshopt buffers on worker threads so streamed track chunks don't
 // stall the main thread mid-race.
 const METADATA_CACHE_LIMIT = 32
+/**
+ * A download is given up only once no bytes have arrived for this long. It used to be a fixed
+ * deadline (12 s for JSON, 20 s for models), which a slow but steady connection blew through:
+ * a 5 MB car takes ~30 s at 1.5 Mbps, and the track manifest queued behind it read as missing.
+ */
+const STALL_MS = 15_000
+/** Waits (ms) before retrying a download that failed on the network, stalled or hit a server error. */
+const RETRY_WAITS = [1000, 3000]
 
 let workersStarted = false
 function startDecoderWorkers(): void {
@@ -45,10 +53,9 @@ export class AssetManager {
     const profiling = performanceCapture.active
     const started = profiling ? performance.now() : 0
     const absolute = new URL(url, document.baseURI)
-    const timeout = AbortSignal.timeout(20_000)
-    const response = await fetch(absolute, { signal: signal ? AbortSignal.any([signal, timeout]) : timeout })
-    if (!response.ok || response.headers.get('content-type')?.includes('text/html')) throw new Error(`GLTF unavailable: ${url}`)
-    const bytes = onProgress ? await readWithProgress(response, onProgress) : await response.arrayBuffer()
+    const download = await fetchBytes(absolute.href, signal, onProgress)
+    if (!download) throw new Error(`GLTF unavailable: ${url}`)
+    const bytes = download.bytes
     signal?.throwIfAborted()
     const fetched = profiling ? performance.now() : 0
     const gltf = await this.gltfLoader.parseAsync(bytes, new URL('.', absolute).href)
@@ -126,24 +133,25 @@ export class AssetManager {
     return this.disposed || value === null ? null : structuredClone(value) as T
   }
 
-  /** Null covers a missing file and SPA HTML fallback responses. */
+  /** Null covers a missing file, SPA HTML fallback responses, and a download that still failed after retrying. */
   private async fetchJson(url: string): Promise<unknown | null> {
     try {
-      const res = await fetch(url, { signal: AbortSignal.timeout(12_000) })
-      if (!res.ok || !res.headers.get('content-type')?.includes('json')) return null
-      return await res.json()
-    } catch {
+      const download = await fetchBytes(url)
+      if (!download || !download.contentType.includes('json')) return null
+      return JSON.parse(new TextDecoder().decode(download.bytes))
+    } catch (err) {
+      console.warn(`[AssetManager] couldn't download ${url}`, err)
       return null
     }
   }
 
-  /** Raw bytes, or null when missing. */
+  /** Raw bytes, or null when missing (or still failing after retries). */
   async loadBinary(url: string): Promise<Uint8Array | null> {
     try {
-      const res = await fetch(url, { signal: AbortSignal.timeout(12_000) })
-      if (!res.ok || res.headers.get('content-type')?.includes('text/html')) return null
-      return new Uint8Array(await res.arrayBuffer())
-    } catch {
+      const download = await fetchBytes(url)
+      return download ? new Uint8Array(download.bytes) : null
+    } catch (err) {
+      console.warn(`[AssetManager] couldn't download ${url}`, err)
       return null
     }
   }
@@ -169,34 +177,66 @@ export class AssetManager {
 
 }
 
-/** The body as one buffer, reporting the fraction received (0 until the size is known). */
-async function readWithProgress(response: Response, onProgress: (fraction: number) => void): Promise<ArrayBuffer> {
-  // Content-Length is the encoded size: with compression on the wire it isn't the byte count read.
-  const encoded = response.headers.get('content-encoding')
-  const total = encoded && encoded !== 'identity' ? 0 : Number(response.headers.get('content-length')) || 0
-  if (!response.body || !total) {
-    const bytes = await response.arrayBuffer()
-    onProgress(1)
-    return bytes
+/**
+ * GET `url` as bytes. Null when it isn't there: a 4xx, or a SPA's HTML fallback page. A network
+ * error, a stall (see STALL_MS) or a server error is retried (RETRY_WAITS), then thrown, as is an
+ * abort by `signal`. `onProgress` gets the fraction received (0 until the size is known).
+ */
+async function fetchBytes(url: string, signal?: AbortSignal, onProgress?: (fraction: number) => void): Promise<{ bytes: ArrayBuffer; contentType: string } | null> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await fetchBytesOnce(url, signal, onProgress)
+    } catch (err) {
+      // Aborted by the caller: not a network failure, nothing to retry.
+      if (signal?.aborted || attempt >= RETRY_WAITS.length) throw err
+      await new Promise<void>((done) => setTimeout(done, RETRY_WAITS[attempt]))
+      signal?.throwIfAborted()
+    }
   }
-  const reader = response.body.getReader()
-  const chunks: Uint8Array[] = []
-  let received = 0
-  for (;;) {
-    const { done, value } = await reader.read()
-    if (done) break
-    chunks.push(value)
-    received += value.byteLength
-    onProgress(Math.min(1, received / total))
+}
+
+async function fetchBytesOnce(url: string, signal?: AbortSignal, onProgress?: (fraction: number) => void): Promise<{ bytes: ArrayBuffer; contentType: string } | null> {
+  const stall = new AbortController()
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const alive = () => {
+    clearTimeout(timer)
+    timer = setTimeout(() => stall.abort(new DOMException(`Download stalled: ${url}`, 'TimeoutError')), STALL_MS)
   }
-  const bytes = new Uint8Array(received)
-  let offset = 0
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset)
-    offset += chunk.byteLength
+  alive()
+  try {
+    const response = await fetch(url, { signal: signal ? AbortSignal.any([signal, stall.signal]) : stall.signal })
+    const contentType = response.headers.get('content-type') ?? ''
+    if (contentType.includes('text/html') || (response.status >= 400 && response.status < 500 && response.status !== 408 && response.status !== 429)) {
+      void response.body?.cancel().catch(() => {})
+      return null
+    }
+    if (!response.ok) throw new Error(`HTTP ${response.status}: ${url}`)
+    if (!response.body) return { bytes: await response.arrayBuffer(), contentType }
+    // Content-Length is the encoded size: with compression on the wire it isn't the byte count read.
+    const encoded = response.headers.get('content-encoding')
+    const total = encoded && encoded !== 'identity' ? 0 : Number(response.headers.get('content-length')) || 0
+    const reader = response.body.getReader()
+    const chunks: Uint8Array[] = []
+    let received = 0
+    for (;;) {
+      alive()
+      const { done, value } = await reader.read()
+      if (done) break
+      chunks.push(value)
+      received += value.byteLength
+      if (onProgress && total) onProgress(Math.min(1, received / total))
+    }
+    const bytes = new Uint8Array(received)
+    let offset = 0
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset)
+      offset += chunk.byteLength
+    }
+    onProgress?.(1)
+    return { bytes: bytes.buffer, contentType }
+  } finally {
+    clearTimeout(timer)
   }
-  onProgress(1)
-  return bytes.buffer
 }
 
 /** Release a GLTF that will never be adopted by a scene owner. */

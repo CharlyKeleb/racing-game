@@ -1199,7 +1199,9 @@ export class Game {
 
   /** Downloads and parses the cars either side of this one in the background, so the garage chevrons swap at once. */
   private preloadNeighbourCars(): void {
-    if ((navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData) return
+    // Not on data saver, or a slow link: there they'd compete with what's actually needed.
+    const link = (navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string; downlink?: number } }).connection
+    if (link?.saveData || (link?.effectiveType && link.effectiveType !== '4g') || (link?.downlink !== undefined && link.downlink < 5)) return
     const ids = new Set([stepCar(this.carId, 1).id, stepCar(this.carId, -1).id])
     ids.delete(this.carId)
     const load = () => {
