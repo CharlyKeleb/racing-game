@@ -208,6 +208,19 @@ kbd { font-family: inherit; font-size: 11px; padding: 1px 6px; border: 1px solid
   font-family: var(--font-display); font-style: italic; font-weight: 900; font-size: 24px;
   text-transform: uppercase; white-space: nowrap; line-height: 1.1;
 }
+.car-load {
+  position: fixed; left: 50%; bottom: max(84px, env(safe-area-inset-bottom)); z-index: 5; width: min(360px, calc(100vw - 32px));
+  translate: -50% 0; pointer-events: none; animation: car-load-in 0.2s ease-out 0.25s both;
+}
+.car-load__label {
+  display: flex; justify-content: space-between; gap: 12px; margin-bottom: 6px;
+  font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); text-shadow: 0 1px 3px #000;
+}
+.car-load__label span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.car-load__label b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.car-load__track { display: block; height: 4px; overflow: hidden; background: rgba(255, 255, 255, 0.12); transform: skewX(var(--skew)); }
+.car-load__track i { display: block; height: 100%; background: var(--accent); transform-origin: left; transition: transform 0.15s linear; }
+@keyframes car-load-in { from { opacity: 0; translate: -50% 6px; } to { opacity: 1; translate: -50% 0; } }
 .ui-chevron {
   display: grid; place-items: center; width: 52px; height: 52px; padding: 0; cursor: pointer;
   color: var(--accent-ink); background: var(--accent); border: 0; transform: skewX(var(--skew));

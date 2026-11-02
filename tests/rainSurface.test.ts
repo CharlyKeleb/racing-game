@@ -125,6 +125,33 @@ it('anchors car splashes to actual upper body geometry in body-local coordinates
 })
 
 
+it('samples the first surface a drop from above meets, as a raycast would', () => {
+  const root = new THREE.Group(), body = new THREE.Group()
+  root.add(body)
+  const plane = (y: number, material: THREE.Material, faceDown = false) => {
+    const geometry = new THREE.PlaneGeometry(2, 4).rotateX(faceDown ? Math.PI / 2 : -Math.PI / 2)
+    const mesh = new THREE.Mesh(geometry, material)
+    mesh.position.y = y
+    body.add(mesh)
+    return mesh
+  }
+  // A one-sided panel facing down (a headliner) is culled; the roof under it is hit.
+  plane(1.5, new THREE.MeshStandardMaterial(), true)
+  plane(1, new THREE.MeshStandardMaterial())
+  // Mirrored by its node, the bonnet still faces up.
+  plane(.5, new THREE.MeshStandardMaterial()).scale.set(-1, 1, 1)
+  root.position.set(3, 1, -2); root.rotation.y = .7
+  const anchors = sampleCarRain({ root, body, wheels: {} } as CarModel, 40)
+  expect(anchors.positions.length).toBe(40 * 3)
+  for (let i = 0; i < anchors.positions.length; i += 3) {
+    expect(anchors.positions[i + 1]).toBeCloseTo(1)
+    expect(anchors.normals[i + 1]).toBeCloseTo(1)
+  }
+  // A two-sided panel can't be culled: the drop lands on it, facing down, so there's no anchor.
+  plane(2, new THREE.MeshStandardMaterial({ side: THREE.DoubleSide }), true)
+  expect(sampleCarRain({ root, body, wheels: {} } as CarModel, 40).positions.length).toBe(0)
+})
+
 it('splash droplets rise, fall under gravity and land at the expected flight time', () => {
   const launch = 1.4
   const apex = launch / SPLASH_GRAVITY

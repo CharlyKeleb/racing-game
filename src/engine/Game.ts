@@ -172,6 +172,8 @@ const DRIVE_OUT_SEC = 0.45
 const DRIVE_OUT_DIST = 16
 const DRIVE_IN_SEC = 0.6
 const DRIVE_IN_DIST = 12
+/** Texture pixels uploaded per frame while a garage car warms up (see warmCar). */
+const WARM_PIXELS_PER_FRAME = 4_000_000
 
 /**
  * Composition root for one play session. React creates exactly one Game,
@@ -404,7 +406,7 @@ export class Game {
    * for: the car and garage downloads start at once, alongside Rapier and the
    * track's physics core (manifest, collision, surfaces: ~0.5 MB). The track's
    * visuals (materials, scenery, chunks) load behind the menu; Race waits for
-   * them only if it's pressed first. Other cars preload after that.
+   * them only if it's pressed first. The cars either side preload after that.
    */
   async init(carId = gameStore.getState().settings.car): Promise<void> {
     const { setPhase } = gameStore.getState()
@@ -510,13 +512,15 @@ export class Game {
 
     const bootToken = this.trackLoadToken
     // Behind the menu: the track's visuals first (Race needs them), then the
-    // sharp garage textures. Other cars load only when selected or used as rivals.
+    // sharp garage textures, then the cars either side in the garage (others
+    // load only when selected or used as rivals).
     void this.loadTrackVisuals()
       .then(async () => {
         if (this.disposed || this.trackLoadToken !== bootToken) return
         performance.measure('boot:trackVisuals', 'boot:start')
         await this.showroom.upgrade(this.assets)
         performance.measure('boot:garageHigh', 'boot:start')
+        this.preloadNeighbourCars()
       })
       .catch((err: unknown) => {
         if (!this.disposed && this.trackLoadToken === bootToken) {
@@ -778,15 +782,19 @@ export class Game {
     if (!document.hidden) this.loop.start()
   }
 
+  private carModelUrl(entry: CarEntry): string {
+    const low = gameStore.getState().settings.quality === 'low' && entry.modelUrlLow
+    return low ? entry.modelUrlLow! : entry.modelUrl
+  }
+
   /** Loads the GLB + config from the pipeline, falling back to the placeholder car. */
-  private async loadCar(carId: string) {
+  private async loadCar(carId: string, onProgress?: (fraction: number) => void) {
     const entry = getCar(carId)
     // Config and geometry are independent downloads: start both immediately.
-    const low = gameStore.getState().settings.quality === 'low' && entry.modelUrlLow
-    const url = low ? entry.modelUrlLow! : entry.modelUrl
+    const url = this.carModelUrl(entry)
     const [json, loaded] = await Promise.all([
       this.assets.loadJson<Partial<VehicleConfig>>(entry.configUrl),
-      this.assets.loadModel(url).catch((err: unknown) => {
+      this.assets.loadModel(url, onProgress).catch((err: unknown) => {
         console.warn(`[Game] failed to load ${url}, using placeholder`, err)
         return null
       }),
@@ -1109,10 +1117,16 @@ export class Game {
     this.revHeld = false
     this.revRpm = 0
     const token = ++this.carSwapToken
-    gameStore.setState({ carSwitching: true })
+    // Download, then shaders and textures (see warmCar): the garage shows this while it waits.
+    const progress = (p: number) => { if (token === this.carSwapToken) gameStore.setState({ carLoadProgress: p }) }
+    gameStore.setState({ carSwitching: true, carLoadProgress: 0 })
     const phase = gameStore.getState().phase
     const showroom = phase === 'menu' || phase === 'garage'
-    const loading = this.loadCar(entry.id)
+    // Warmed while the current car drives off (see warmCar), so the new one arrives without a hitch.
+    const loading = this.loadCar(entry.id, (p) => progress(p * 0.7)).then(async (car) => {
+      if (showroom && token === this.carSwapToken) await this.warmCar(car.model, (p) => progress(0.7 + p * 0.3), token)
+      return car
+    })
     if (showroom) {
       // Keep the current view while cars leave and arrive, including after a flick.
       this.orbitVelocity = 0
@@ -1124,10 +1138,79 @@ export class Game {
     }
     const { config, model } = await loading
     if (token !== this.carSwapToken || this.disposed) { model.cockpit?.dispose(); return }
+    progress(1)
     this.installCar(entry, config, model)
-    if (showroom) await new Promise<void>((done) => (this.showroomDrive = { mode: 'in', t: 0, spin: 0, done }))
+    if (showroom) {
+      // The build (livery, spoiler, wet paint) can need a shader the bare model didn't: compiled
+      // out of sight, in parallel (only those; the rest are cached).
+      model.root.visible = false
+      await this.compileHidden(model.root)
+      if (token !== this.carSwapToken || this.disposed) return
+      model.root.visible = true
+      await new Promise<void>((done) => (this.showroomDrive = { mode: 'in', t: 0, spin: 0, done }))
+    }
     if (token !== this.carSwapToken) return
-    gameStore.setState({ carSwitching: false })
+    gameStore.setState({ carSwitching: false, carLoadProgress: 1 })
+    this.preloadNeighbourCars()
+  }
+
+  /**
+   * Uploads a loaded car's textures and compiles its shaders before it's drawn. Left to its
+   * first frame, that work froze the garage for up to a quarter of a second per car.
+   */
+  private async warmCar(model: CarModel, onProgress: (fraction: number) => void, token: number): Promise<void> {
+    const renderer = this.renderer.renderer
+    const textures = new Set<THREE.Texture>()
+    model.root.traverse((node) => {
+      const mesh = node as THREE.Mesh
+      if (!mesh.isMesh) return
+      for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
+        for (const value of Object.values(material)) if (value instanceof THREE.Texture) textures.add(value)
+      }
+    })
+    const size = (t: THREE.Texture) => { const image = t.image as { width?: number; height?: number } | null; return (image?.width ?? 0) * (image?.height ?? 0) }
+    const total = [...textures].reduce((sum, t) => sum + size(t), 0) || 1
+    let uploaded = 0, frame = 0
+    // A few megapixels a frame (mipmaps included), so the uploads don't all land in one long frame.
+    for (const texture of textures) {
+      if (frame > WARM_PIXELS_PER_FRAME) {
+        frame = 0
+        await new Promise<void>((next) => requestAnimationFrame(() => next()))
+        if (this.disposed || token !== this.carSwapToken) return
+      }
+      renderer.initTexture(texture)
+      frame += size(texture)
+      uploaded += size(texture)
+      onProgress(0.8 * uploaded / total)
+    }
+    await this.compileHidden(model.root)
+    onProgress(1)
+  }
+
+  /** Compiles a (possibly hidden, possibly unattached) object's shaders in parallel, against the scene's lights. */
+  private async compileHidden(root: THREE.Object3D): Promise<void> {
+    // compileAsync gathers the visible objects as it's called, then waits on the compiles.
+    const visible = root.visible
+    root.visible = true
+    const compiling = this.renderer.compileAsync(root)
+    root.visible = visible
+    await compiling.catch(() => {})
+  }
+
+  /** Downloads and parses the cars either side of this one in the background, so the garage chevrons swap at once. */
+  private preloadNeighbourCars(): void {
+    if ((navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData) return
+    const ids = new Set([stepCar(this.carId, 1).id, stepCar(this.carId, -1).id])
+    ids.delete(this.carId)
+    const load = () => {
+      for (const id of ids) {
+        const entry = getCar(id)
+        void this.assets.loadJson(entry.configUrl)
+        void this.assets.preloadModel(this.carModelUrl(entry))
+      }
+    }
+    if ('requestIdleCallback' in window) requestIdleCallback(load, { timeout: 3000 })
+    else setTimeout(load, 500)
   }
 
   /** Swap the player car for a freshly loaded one, rebuilding everything tied to it. */
@@ -2470,6 +2553,7 @@ export class Game {
     if (!this.showroom) return
     const inShowroom = phase === 'menu' || phase === 'garage'
     this.showroom.setActive(this.renderer.scene, inShowroom, [this.track.group, this.environment.group, this.effects.group, this.guide.group])
+    this.renderer.setShowroom(inShowroom)
     this.setShowroomPad(inShowroom)
     this.audio.setScene(inShowroom ? 'menu' : 'race')
     this.syncCarReflections(phase)

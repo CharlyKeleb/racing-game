@@ -1,4 +1,4 @@
-import { selectableCars } from '../vehicles/carRegistry'
+import { getCar, selectableCars } from '../vehicles/carRegistry'
 import { useGameInstance } from './GameContext'
 import { useGame } from './hooks'
 import { Chevron } from './kit'
@@ -25,6 +25,24 @@ export function CarPicker({ className = '' }: { className?: string }) {
         <b>{switching ? cars[index].name : name}</b>
       </div>
       <Chevron dir="right" label="Next car" disabled={switching} onClick={() => game?.cycleCar(1)} />
+    </div>
+  )
+}
+
+/**
+ * The incoming car's download and preparation while the garage swaps cars. Fades in only after a
+ * moment, so a car that's already loaded just drives in.
+ */
+export function CarLoadBar() {
+  const switching = useGame((s) => s.carSwitching)
+  const progress = useGame((s) => s.carLoadProgress)
+  const carId = useGame((s) => s.settings.car)
+  if (!switching || progress >= 1) return null
+  const percent = Math.round(progress * 100)
+  return (
+    <div className="car-load" role="progressbar" aria-label={`Loading ${getCar(carId).name}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}>
+      <span className="car-load__label"><span>Loading {getCar(carId).name}</span><b>{percent}%</b></span>
+      <span className="car-load__track"><i style={{ transform: `scaleX(${progress})` }} /></span>
     </div>
   )
 }

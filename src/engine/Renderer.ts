@@ -46,6 +46,8 @@ interface PostStack {
   /** Nitro zoom blur, 0 = off (effects/BoostBlur.ts). */
   setBoostBlur(strength: number): void
   setSize(w: number, h: number): void
+  /** WebGL: where the scene itself is drawn (an offscreen buffer, so shaders skip tone mapping). */
+  readonly sceneTarget?: THREE.WebGLRenderTarget
   render(): void
   dispose(): void
 }
@@ -68,6 +70,7 @@ export class Renderer {
   private haze: HazeSource | null = null
   private quality?: QualityPreset
   private displayDpr = 1
+  private showroom = false
   private resolution = new AdaptiveResolution('high', 1)
   private readonly resizeObserver: ResizeObserver
   private readonly container: HTMLElement
@@ -164,7 +167,7 @@ export class Renderer {
     if (resolutionChanged) {
       this.quality = quality
       this.displayDpr = dpr
-      this.resolution = new AdaptiveResolution(quality, dpr)
+      this.resolution = new AdaptiveResolution(quality, dpr, this.showroom)
       this.renderer.setPixelRatio(this.pixelRatio)
     }
     this.renderer.shadowMap.enabled = quality !== 'low' && !renderDiagnostics.shadowsOff
@@ -189,6 +192,16 @@ export class Renderer {
     if (resolutionChanged) this.resize()
   }
 
+  /** The garage is on screen: render the car sharper (see AdaptiveResolution). */
+  setShowroom(on: boolean): void {
+    if (on === this.showroom) return
+    this.showroom = on
+    if (!this.renderer || !this.quality) return
+    this.resolution = new AdaptiveResolution(this.quality, this.displayDpr, on)
+    this.renderer.setPixelRatio(this.pixelRatio)
+    this.postfx?.setSize(this.container.clientWidth, this.container.clientHeight)
+  }
+
   /** Distance beyond which nothing is drawn; tracks set it from their fog. */
   setViewDistance(far: number): void {
     this.camera.far = far
@@ -207,6 +220,24 @@ export class Renderer {
 
   get pixelRatio(): number {
     return renderDiagnostics.fixedDpr ?? this.resolution.ratio
+  }
+
+  /**
+   * Compiles `root`'s shaders in parallel, as they'll be drawn into this scene: its lights, and the
+   * post stack's buffer (bound as the frame does, or the programs miss and compile again on it).
+   * Objects are gathered when it's called, visible ones only.
+   */
+  compileAsync(root: THREE.Object3D): Promise<unknown> {
+    const target = this.postfx?.sceneTarget
+    if (!target || backend.kind !== 'webgl') return this.renderer.compileAsync(root, this.camera, this.scene)
+    const renderer = this.renderer as THREE.WebGLRenderer
+    const previous = renderer.getRenderTarget()
+    renderer.setRenderTarget(target)
+    try {
+      return renderer.compileAsync(root, this.camera, this.scene)
+    } finally {
+      renderer.setRenderTarget(previous)
+    }
   }
 
   /** Heat haze behind the exhausts (#56), drawn by the post stack; none with post FX off. */

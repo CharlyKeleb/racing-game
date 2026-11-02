@@ -183,6 +183,8 @@ export class PostFX {
     this.vectors.setSize(size.x, size.y)
   }
 
+  get sceneTarget(): THREE.WebGLRenderTarget { return this.composer.inputBuffer }
+
   render(): void {
     this.motionPass.enabled = this.exposure > 0 && this.vectors.capture(this.renderer, this.scene, this.camera, this.player)
     this.motion.uniforms.get('exposure')!.value = this.exposure
