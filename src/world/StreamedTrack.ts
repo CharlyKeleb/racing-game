@@ -183,7 +183,8 @@ export class StreamedTrack implements RaceTrack {
    */
   static async load(manifestUrl: string, opts: LoadOptions): Promise<StreamedTrack> {
     const manifest = await opts.assets.loadJson<TrackManifest>(manifestUrl)
-    if (!manifest) throw new Error(`Track manifest missing: ${manifestUrl}`)
+    // Null after AssetManager's retries: almost always the connection, rarely a missing file.
+    if (!manifest) throw new Error(`Couldn't download the track (${manifestUrl}). Check your connection and try again.`)
     const baseUrl = manifestUrl.slice(0, manifestUrl.lastIndexOf('/') + 1)
     const track = new StreamedTrack(baseUrl, manifest, opts)
     await Promise.all([track.loadCollision(), track.loadSurfaces()])
