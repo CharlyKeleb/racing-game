@@ -119,6 +119,7 @@ const newAwarenessCar=():AwarenessCar=>({id:0,x:0,y:0,z:0,fx:0,fz:1,vx:0,vz:0,ha
 const _listenerUp = new THREE.Vector3()
 const _listenerBack = new THREE.Vector3()
 const _relativeVelocity = new THREE.Vector3()
+const _parked = { x: 0, y: 0, z: 0 }
 const _finishRay = new RAPIER.Ray({ x: 0, y: 0, z: 0 }, { x: 1, y: 0, z: 0 })
 const _sparkPoint = new THREE.Vector3()
 const _sparkNormal = new THREE.Vector3()
@@ -306,6 +307,11 @@ export class Game {
   private revHeld = false
   private revRpm = 0
   private showroomRev: { rpm: number; throttle: number } | null = null
+  /**
+   * Where the parked garage car is held. With only the rear handbrake on, the tyres let it creep
+   * backwards about 1 cm/s for as long as the menu stays open, so the garage pins it in place.
+   */
+  private readonly showroomHold = { x: 0, z: 0, held: false }
   /** Grid revs before lights out (sound and tach only), player and per rival. */
   private readonly playerRevs = new StagingRevs(0)
   /** Skill launch at lights-out, graded in fixedUpdate (#91). */
@@ -1690,6 +1696,7 @@ export class Game {
       if (!inMenu) opponent.drive(dt, this.traffic, gap, laneLimit)
     }
     this.physics.step(dt)
+    this.holdShowroomCar(phase === 'menu' || phase === 'garage')
     this.collectHits(dt)
     if (!inMenu) this.exhaustPops()
     this.emitSparks(dt)
@@ -2511,6 +2518,29 @@ export class Game {
    * spawn (which has camber, so the car would sit tilted and the tyres would
    * float over the garage floor). The garage floor is seated at the pad's top.
    */
+  /** Keeps the parked garage car from creeping (see showroomHold): it may still settle on its springs. */
+  private holdShowroomCar(parked: boolean): void {
+    const hold = this.showroomHold
+    const body = this.vehicle.body
+    const p = body.translation(), v = body.linvel()
+    // A respawn or a new track moves the car on: hold it where it lands instead.
+    if (!parked || (hold.held && Math.hypot(p.x - hold.x, p.z - hold.z) > 0.5)) hold.held = false
+    if (!parked) return
+    if (!hold.held) {
+      if (Math.hypot(v.x, v.z) > 0.2) return
+      hold.x = p.x
+      hold.z = p.z
+      hold.held = true
+    }
+    _parked.x = hold.x; _parked.y = p.y; _parked.z = hold.z
+    body.setTranslation(_parked, false)
+    _parked.x = 0; _parked.y = v.y; _parked.z = 0
+    body.setLinvel(_parked, false)
+    const w = body.angvel()
+    _parked.x = w.x; _parked.y = 0; _parked.z = w.z
+    body.setAngvel(_parked, false)
+  }
+
   private setShowroomPad(on: boolean): void {
     const world = this.physics.world
     if (!on) {
