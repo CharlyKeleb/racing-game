@@ -36,7 +36,7 @@ function findWheel(root: THREE.Object3D, id: WheelId): THREE.Object3D | undefine
 }
 
 /** Anisotropic filtering for car textures (clamped to the GPU's maximum): badges, decals and grilles stay crisp at glancing angles. */
-const CAR_ANISOTROPY = 8
+const CAR_ANISOTROPY = 16
 const TEXTURE_SLOTS = ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'emissiveMap', 'aoMap', 'clearcoatNormalMap'] as const
 function sharpenTextures(material: THREE.Material): void {
   const slots = material as unknown as Partial<Record<(typeof TEXTURE_SLOTS)[number], THREE.Texture | null>>

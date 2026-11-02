@@ -11,7 +11,7 @@ import { formatTime } from '../racing/LapTimer'
 import { readTrialRecord, trialBuildKey } from '../racing/TimeTrial'
 import { useGameInstance } from './GameContext'
 import { useGame } from './hooks'
-import { CarPicker } from './CarPicker'
+import { CarLoadBar, CarPicker } from './CarPicker'
 import { ClassBadge, StatBar } from './kit'
 import { OrbitLayer } from './OrbitLayer'
 import { RaceSetup } from './RaceSetup'
@@ -107,6 +107,7 @@ export function MainMenu() {
     <div className={`screen screen--menu hub hub--${tab}`}>
       <OrbitLayer />
       <div className="hub-banner" aria-hidden="true" key={carId}>{switching ? getCar(carId).name : carName}</div>
+      <CarLoadBar />
       <header className="hub-top">
         <div className="logo">RACING<span>/</span>GAME</div>
         <nav className="hub-tabs" role="tablist" aria-label="Main menu">

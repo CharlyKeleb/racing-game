@@ -17,6 +17,17 @@ describe('adaptive resolution', () => {
     expect(lowDpr.ratio).toBe(.5)
     expect(new AdaptiveResolution('low', 3).ratio).toBe(.8)
   })
+  it('renders the garage sharper on Medium and High, but not on Low or beyond the display', () => {
+    const medium = new AdaptiveResolution('medium', 2, true)
+    expect(medium.max).toBe(2)
+    expect(medium.ratio).toBe(1.5)
+    expect(new AdaptiveResolution('high', 3, true).max).toBe(2)
+    expect(new AdaptiveResolution('medium', 1, true).ratio).toBe(1)
+    expect(new AdaptiveResolution('low', 2, true).max).toBe(1)
+    // Still drops when the frame rate can't hold.
+    seconds(medium, 4, 30)
+    expect(medium.ratio).toBeCloseTo(1.35)
+  })
   it('does not resize on a single poor window or a stall', () => {
     const controller = new AdaptiveResolution('high', 2)
     expect(seconds(controller, 1, 30)).toBe(0)
