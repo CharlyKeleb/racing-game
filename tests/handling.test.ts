@@ -202,7 +202,8 @@ describe('handling', () => {
     }
     const side = Math.sign(signed())
     let overshoot = 0
-    for (let i = 0; i < 120; i++) {
+    // 2.5 s: the drift's ~37° angle unwinds before grip takes back over.
+    for (let i = 0; i < 150; i++) {
       drift.step(drive(0))
       overshoot = Math.max(overshoot, -side * signed())
     }

@@ -11,7 +11,9 @@
  * a hairpin at speed), centred is a fast sweeper, countersteer opens the line
  * out. The cost is speed: the steeper the angle, the more it scrubs, and
  * lifting scrubs more and lets the angle fall. The throttle holds it out.
- * Straightening up (or countersteering for a while) ends it; the exit then
+ * Countersteering hard on the throttle swings the car into a drift the other
+ * way (a transition, for S-bends); off the throttle it ends the drift.
+ * Straightening up ends it too; the exit then
  * unwinds the angle — mostly the body swinging back to the line, partly the
  * line swinging toward the nose — before grip takes over, so it never flicks.
  *
@@ -75,6 +77,18 @@ export interface DriftConfig {
   turnCounter: number
   /** Countersteering this long (s) ends the drift. */
   counterExitTime: number
+  /**
+   * Hard countersteer (past `transitionLock`) on the throttle for this long (s) swings the car
+   * into a drift the other way instead (an S-bend transition). Must be under counterExitTime.
+   */
+  transitionTime: number
+  transitionLock: number
+  /**
+   * The steering the drift follows eases toward the driver's over this long (s). Keys are all
+   * or nothing: tapped to hold a line, they made the arc jump between two rates each tap (the
+   * car wobbled); eased, a tapped key sets an in-between angle and arc, as a wheel would.
+   */
+  steerSmoothing: number
   /** Speed lost per second while drifting (fraction), plus this much × sin²(body angle), plus this much off the throttle. */
   scrub: number
   angleScrub: number
@@ -108,14 +122,17 @@ export const DEFAULT_DRIFT: DriftConfig = {
   exitTime: 0.4,
   exitAngle: 0.1,
   tapMaxSec: 0.25,
-  baseAngle: 0.42,
-  holdAngle: 0.6,
+  baseAngle: 0.5,
+  holdAngle: 0.72,
   minAngle: 0.15,
   liftAngle: 0.7,
   turnInto: 1.2,
   turnNeutral: 0.75,
   turnCounter: 0.3,
   counterExitTime: 0.7,
+  transitionTime: 0.35,
+  transitionLock: 0.6,
+  steerSmoothing: 0.35,
   scrub: 0.03,
   angleScrub: 0.65,
   liftScrub: 0.12,
@@ -171,6 +188,7 @@ export interface DriftState {
   wasBraking: boolean
   calm: number
   exitTimer: number
+  steer: number
 }
 
 export class Drift {
@@ -189,6 +207,8 @@ export class Drift {
   /** Points of the last finished drift, and seconds since it finished (for the HUD). */
   lastScore = 0
   sinceEnd = Infinity
+  /** The driver's steering as the drift follows it (eased, see DriftConfig.steerSmoothing): pass it to guide(). */
+  steer = 0
 
   private brakeHeld = 0
   private steeredWhileBraking = false
@@ -203,6 +223,7 @@ export class Drift {
 
   update(i: DriftInput, cfg: DriftConfig, dt: number): void {
     this.entry = 0
+    this.steer += (Math.max(-1, Math.min(1, i.steer)) - this.steer) * (cfg.steerSmoothing > 0 ? 1 - Math.exp(-dt / cfg.steerSmoothing) : 1)
     // Arm the brake-tap entry when the brake is released, the downshift entry when it happens.
     const braking = i.brake > 0.4
     if (this.wasBraking && !braking) {
@@ -246,6 +267,12 @@ export class Drift {
       this.calm = straight ? this.calm + dt : 0
       const countering = i.steer * this.direction < -0.25
       this.counter = countering ? this.counter + dt : 0
+      // Transition: hard opposite lock with the power on throws the car the other way, linked.
+      if (this.counter > cfg.transitionTime && i.steer * this.direction < -cfg.transitionLock && i.throttle > 0.5 && i.speed > cfg.minSpeed) {
+        this.direction = -this.direction
+        this.entry = this.direction
+        this.counter = this.calm = 0
+      }
       const ended =
         this.calm > cfg.exitTime ||
         this.counter > cfg.counterExitTime ||
@@ -340,6 +367,7 @@ export class Drift {
       wasBraking: this.wasBraking,
       calm: this.calm,
       exitTimer: this.exitTimer,
+      steer: this.steer,
     }
   }
 
@@ -362,6 +390,7 @@ export class Drift {
     this.wasBraking = state.wasBraking
     this.calm = state.calm
     this.exitTimer = state.exitTimer
+    this.steer = state.steer
   }
 
   reset(): void {
@@ -373,5 +402,6 @@ export class Drift {
     this.sinceEnd = Infinity
     this.brakeArm = this.downshiftArm = this.calm = this.counter = this.tapArm = this.brakeHeld = 0
     this.wasBraking = this.steeredWhileBraking = false
+    this.steer = 0
   }
 }

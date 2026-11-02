@@ -128,7 +128,7 @@ export class VehicleController {
   readonly backfire = new Backfire()
   private eventDrift: DriftConfig | null = null
   setDriftMode(enabled: boolean): void {
-    this.eventDrift = enabled ? {...this.cfg.drift, minSpeed:9, entryLock:.4, baseAngle:.46, holdAngle:.72, minAngle:.18, exitTime:.55, counterExitTime:.9, scrub:.02, angleScrub:.45, turnInto:1.3} : null
+    this.eventDrift = enabled ? {...this.cfg.drift, minSpeed:9, entryLock:.4, baseAngle:.54, holdAngle:.8, minAngle:.18, exitTime:.55, counterExitTime:.9, scrub:.02, angleScrub:.45, turnInto:1.3} : null
   }
   private readonly driftGuide: DriftGuide = { angle: 0, pathRate: 0 }
   steerAngle = 0
@@ -463,7 +463,7 @@ export class VehicleController {
     } else {
       this.applyStabilityAssist(input.handbrake, speed, lv, dt)
     }
-    this.applyDriftGuidance(input.steer, groundedCount, dt)
+    this.applyDriftGuidance(this.drift.steer, groundedCount, dt)
     // Rotating burnout: steer to swing the tail round on the spot, pivoting on the held front wheels.
     if (this.burnout.holding && groundedCount > 2 && Math.abs(input.steer) > 0.05) {
       const av = body.angvel()
