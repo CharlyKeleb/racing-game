@@ -12,6 +12,8 @@ import { gameStore } from '../src/stores/gameStore'
 vi.mock('../src/ui/hooks', () => ({
   useGame: (select: (s: ReturnType<typeof gameStore.getState>) => unknown) => select(gameStore.getState()),
   useTelemetry: (select: (s: ReturnType<typeof telemetryStore.getState>) => unknown) => select(telemetryStore.getState()),
+  // No payout in these tests: the results screen leaves the coins panel out.
+  useWallet: (select: (s: { lastPayout: null; coins: number }) => unknown) => select({ lastPayout: null, coins: 0 }),
 }))
 
 it('runs the finish at normal speed, skips and resets cleanly', () => {
