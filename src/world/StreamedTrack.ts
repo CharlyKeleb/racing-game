@@ -674,6 +674,8 @@ export class StreamedTrack implements RaceTrack {
   }
 
   dispose(): void {
+    // A second removeRigidBody of the same body panics Rapier and poisons the world.
+    if (this.disposed) return
     this.disposed = true
     this.warmup.dispose()
     for (const chunk of this.chunks) chunk.request?.abort()

@@ -207,6 +207,42 @@ const defaultSettings: Settings = {
   weather: 'rain',
 }
 
+/** Coerces every field to a valid value: saved data and settings patches can carry stale or unknown ids. */
+function sanitizeSettings(merged: Settings): Settings {
+  if (merged.trackLook !== 'default' && merged.trackLook !== 'road-focus') merged.trackLook = defaultSettings.trackLook
+  const savedCockpits = merged.cockpits
+  merged.cockpits = {}
+  for (const car of selectableCars()) if (savedCockpits && typeof savedCockpits === 'object' && Object.hasOwn(savedCockpits, car.id)) merged.cockpits[car.id] = sanitizeCockpit(savedCockpits[car.id], car.id)
+  if (typeof merged.cameraMotion !== 'boolean') merged.cameraMotion = defaultSettings.cameraMotion
+  if (typeof merged.fovEffects !== 'boolean') merged.fovEffects = defaultSettings.fovEffects
+  if (typeof merged.speedLines !== 'boolean') merged.speedLines = defaultSettings.speedLines
+  if (typeof merged.launchAssist !== 'boolean') merged.launchAssist = defaultSettings.launchAssist
+  if (merged.drivingLine !== 'corners' && merged.drivingLine !== 'full') merged.drivingLine = 'off'
+  if (merged.transmission !== 'manual') merged.transmission = 'auto'
+  for(const key of ['proximityRadar','spotterVisual','spotterAudio'] as const)if(typeof merged[key]!=='boolean')merged[key]=defaultSettings[key]
+  if (!['off', 'duo', 'camille', 'alex'].includes(merged.narrator)) merged.narrator = defaultSettings.narrator
+  merged.narratorVolume = typeof merged.narratorVolume === 'number' && Number.isFinite(merged.narratorVolume) ? Math.max(0, Math.min(1, merged.narratorVolume)) : defaultSettings.narratorVolume
+  if (typeof merged.callouts !== 'boolean') merged.callouts = defaultSettings.callouts
+  merged.calloutVolume = typeof merged.calloutVolume === 'number' && Number.isFinite(merged.calloutVolume) ? Math.max(0, Math.min(1, merged.calloutVolume)) : defaultSettings.calloutVolume
+  merged.tracksideVolume = typeof merged.tracksideVolume === 'number' && Number.isFinite(merged.tracksideVolume) ? Math.max(0, Math.min(1, merged.tracksideVolume)) : defaultSettings.tracksideVolume
+  merged.driftEvent=driftEvent(merged.driftEvent).id
+  if (!['drift', 'timeTrial', 'freeRoam'].includes(merged.mode)) merged.mode = 'quick'
+  if (typeof merged.roamHud !== 'boolean') merged.roamHud = defaultSettings.roamHud
+  if (typeof merged.roamGuide !== 'boolean') merged.roamGuide = defaultSettings.roamGuide
+  if (!isAiDifficulty(merged.difficulty)) merged.difficulty = 'challenging'
+  merged.opponents = [0, 1, 3].includes(merged.opponents) ? merged.opponents : 3
+  if (!isTimeOfDay(merged.timeOfDay)) merged.timeOfDay = defaultSettings.timeOfDay
+  if (merged.weather !== 'rain') merged.weather = 'dry'
+  merged.motionBlur = typeof merged.motionBlur === 'number' && Number.isFinite(merged.motionBlur) ? Math.max(0, Math.min(1, merged.motionBlur)) : defaultSettings.motionBlur
+  if (merged.renderer !== 'webgpu') merged.renderer = 'webgl'
+  if (typeof merged.menuMusic !== 'boolean') merged.menuMusic = defaultSettings.menuMusic
+  if (!isMusicTrack(merged.musicTrack)) merged.musicTrack = defaultSettings.musicTrack
+  if (typeof merged.raceMusic !== 'boolean') merged.raceMusic = defaultSettings.raceMusic
+  merged.raceMusicVolume = typeof merged.raceMusicVolume === 'number' && Number.isFinite(merged.raceMusicVolume) ? Math.max(0, Math.min(1, merged.raceMusicVolume)) : defaultSettings.raceMusicVolume
+  if (!selectableCars().some((c) => c.id === merged.car)) merged.car = defaultSettings.car
+  return merged
+}
+
 function loadSettings(): Settings {
   try {
     const raw = localStorage.getItem(SETTINGS_KEY)
@@ -222,38 +258,7 @@ function loadSettings(): Settings {
       merged.weather = defaultSettings.weather
     }
     merged.conditionsVersion = 1
-    if (merged.trackLook !== 'default' && merged.trackLook !== 'road-focus') merged.trackLook = defaultSettings.trackLook
-    const savedCockpits = merged.cockpits
-    merged.cockpits = {}
-    for (const car of selectableCars()) if (savedCockpits && typeof savedCockpits === 'object' && Object.hasOwn(savedCockpits, car.id)) merged.cockpits[car.id] = sanitizeCockpit(savedCockpits[car.id], car.id)
-    if (typeof merged.cameraMotion !== 'boolean') merged.cameraMotion = defaultSettings.cameraMotion
-    if (typeof merged.fovEffects !== 'boolean') merged.fovEffects = defaultSettings.fovEffects
-    if (typeof merged.speedLines !== 'boolean') merged.speedLines = defaultSettings.speedLines
-    if (typeof merged.launchAssist !== 'boolean') merged.launchAssist = defaultSettings.launchAssist
-    if (merged.drivingLine !== 'corners' && merged.drivingLine !== 'full') merged.drivingLine = 'off'
-    if (merged.transmission !== 'manual') merged.transmission = 'auto'
-    for(const key of ['proximityRadar','spotterVisual','spotterAudio'] as const)if(typeof merged[key]!=='boolean')merged[key]=defaultSettings[key]
-    if (!['off', 'duo', 'camille', 'alex'].includes(merged.narrator)) merged.narrator = defaultSettings.narrator
-    merged.narratorVolume = typeof merged.narratorVolume === 'number' && Number.isFinite(merged.narratorVolume) ? Math.max(0, Math.min(1, merged.narratorVolume)) : defaultSettings.narratorVolume
-    if (typeof merged.callouts !== 'boolean') merged.callouts = defaultSettings.callouts
-    merged.calloutVolume = typeof merged.calloutVolume === 'number' && Number.isFinite(merged.calloutVolume) ? Math.max(0, Math.min(1, merged.calloutVolume)) : defaultSettings.calloutVolume
-    merged.tracksideVolume = typeof merged.tracksideVolume === 'number' && Number.isFinite(merged.tracksideVolume) ? Math.max(0, Math.min(1, merged.tracksideVolume)) : defaultSettings.tracksideVolume
-    merged.driftEvent=driftEvent(merged.driftEvent).id
-    if (!['drift', 'timeTrial', 'freeRoam'].includes(merged.mode)) merged.mode = 'quick'
-    if (typeof merged.roamHud !== 'boolean') merged.roamHud = defaultSettings.roamHud
-    if (typeof merged.roamGuide !== 'boolean') merged.roamGuide = defaultSettings.roamGuide
-    if (!isAiDifficulty(merged.difficulty)) merged.difficulty = 'challenging'
-    merged.opponents = [0, 1, 3].includes(merged.opponents) ? merged.opponents : 3
-    if (!isTimeOfDay(merged.timeOfDay)) merged.timeOfDay = defaultSettings.timeOfDay
-    if (merged.weather !== 'rain') merged.weather = 'dry'
-    merged.motionBlur = typeof merged.motionBlur === 'number' && Number.isFinite(merged.motionBlur) ? Math.max(0, Math.min(1, merged.motionBlur)) : defaultSettings.motionBlur
-    if (merged.renderer !== 'webgpu') merged.renderer = 'webgl'
-    if (typeof merged.menuMusic !== 'boolean') merged.menuMusic = defaultSettings.menuMusic
-    if (!isMusicTrack(merged.musicTrack)) merged.musicTrack = defaultSettings.musicTrack
-    if (typeof merged.raceMusic !== 'boolean') merged.raceMusic = defaultSettings.raceMusic
-    merged.raceMusicVolume = typeof merged.raceMusicVolume === 'number' && Number.isFinite(merged.raceMusicVolume) ? Math.max(0, Math.min(1, merged.raceMusicVolume)) : defaultSettings.raceMusicVolume
-    if (!selectableCars().some((c) => c.id === merged.car)) merged.car = defaultSettings.car
-    return merged
+    return sanitizeSettings(merged)
   } catch {
     return defaultSettings
   }
@@ -307,7 +312,7 @@ export const gameStore = createStore<GameState>()((set, get) => ({
   setPhase: (phase) => set({ phase }),
   setError: (error) => set({ error }),
   updateSettings: (patch) => {
-    const settings = { ...get().settings, ...patch }
+    const settings = sanitizeSettings({ ...get().settings, ...patch })
     // Switching car brings up that car's own build.
     if (settings.car !== get().settings.car) set({ settings, build: get().builds[settings.car] ?? DEFAULT_BUILD })
     else set({ settings })

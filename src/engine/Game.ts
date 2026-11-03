@@ -766,6 +766,8 @@ export class Game {
     try {
       this.track = await this.loadTrack(id)
     } catch (err) {
+      // Torn down mid-switch: the load failed because the world was freed, not a real error.
+      if (this.disposed) return
       gameStore.getState().setError(err instanceof Error ? err.message : String(err))
       return
     }

@@ -41,6 +41,7 @@ export class Track implements RaceTrack {
   readonly line: THREE.Vector3[]
   readonly definition: ProceduralTrackDefinition
   private readonly disposables: { dispose(): void }[] = []
+  private disposed = false
   private readonly surfaces: SurfaceMap
 
   constructor(def: ProceduralTrackDefinition, world: RAPIER.World) {
@@ -290,6 +291,9 @@ export class Track implements RaceTrack {
   }
 
   dispose(): void {
+    // A second removeRigidBody of the same body panics Rapier and poisons the world.
+    if (this.disposed) return
+    this.disposed = true
     this.atmosphere.dispose()
     for (const body of this.eventBarriers) this.world.removeRigidBody(body)
     this.disposables.forEach((d) => d.dispose())
