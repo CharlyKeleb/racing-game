@@ -1,7 +1,7 @@
 // Turns a shipped city track into a whole city: a post-build step on the track package (no
 // source GLB needed), run after build-track.mjs and before derive-from-chunks.mjs.
 //
-//   node scripts/track/city-fill.mjs scripts/track/city.config.mjs
+//   node scripts/track/city-fill.mjs scripts/track/u2city.config.mjs
 //
 // City sources are a few streets with nothing around them: side streets end at the edge of the
 // world, there is no ground between the blocks, and game-ripped buildings are walls without
@@ -513,6 +513,61 @@ if (F.existingWalls !== false) {
     }
   }
   log(`existing buildings given wall collision: ${added} (already colliding: ${skipped}), ${(existingWalls.length / 9).toLocaleString()} wall tris`)
+
+  // Everything else a car would visibly hit: walls of half-colliding buildings, garden walls,
+  // planters, fences, trunks. Any upright prop or barrier triangle crossing the car-body band
+  // (0.4–1.4 m over the street) with no collision wall within a metre becomes a wall. Bushes and
+  // hedges (veg) stay soft.
+  const solidFine = new Uint8Array(NXF * NZF)
+  // The street under each metre: lowest and highest floor there (a bridge deck over a road), not
+  // the smoothed height field, which sits a metre off on Bayview's hills.
+  const floorLo = new Float32Array(NXF * NZF).fill(Infinity), floorHi = new Float32Array(NXF * NZF).fill(-Infinity)
+  for (const m of collision) if (!m.name.startsWith('barrier')) rasterize(m.pos, m.idx, (k, y) => { if (y < floorLo[k]) floorLo[k] = y; if (y > floorHi[k]) floorHi[k] = y }, 1, NXF, NZF)
+  const streetAt = (k, x, y, z) => floorLo[k] === Infinity ? heightAt(x, z) : y >= floorHi[k] ? floorHi[k] : floorLo[k]
+  const fineCell = (x, z) => { const i = Math.floor(x - X0), j = Math.floor(z - Z0); return i < 0 || j < 0 || i >= NXF || j >= NZF ? -1 : j * NXF + i }
+  /** Calls fn(fineCell) for samples of an upright triangle that lie in the car-body band. */
+  const bandSamples = (p, a, b, d, fn) => {
+    const ux = p[b] - p[a], uy = p[b + 1] - p[a + 1], uz = p[b + 2] - p[a + 2], vx = p[d] - p[a], vy = p[d + 1] - p[a + 1], vz = p[d + 2] - p[a + 2]
+    const n = Math.min(120, Math.ceil(Math.max(Math.hypot(ux, uy, uz), Math.hypot(vx, vy, vz)) / 0.5))
+    for (let i = 0; i <= n; i++) for (let j = 0; j <= n - i; j++) {
+      const x = p[a] + (ux * i + vx * j) / n, y = p[a + 1] + (uy * i + vy * j) / n, z = p[a + 2] + (uz * i + vz * j) / n
+      const k = fineCell(x, z)
+      if (k < 0) continue
+      const f = streetAt(k, x, y, z)
+      if (y > f + 0.35 && y < f + 1.5) fn(k)
+    }
+  }
+  const upright = (p, a, b, d) => {
+    const ux = p[b] - p[a], uy = p[b + 1] - p[a + 1], uz = p[b + 2] - p[a + 2], vx = p[d] - p[a], vy = p[d + 1] - p[a + 1], vz = p[d + 2] - p[a + 2]
+    const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx, l = Math.hypot(nx, ny, nz)
+    return l > 1e-6 && Math.abs(ny / l) <= 0.5
+  }
+  const markSolid = (pos, idx) => { for (let t = 0; t < idx.length; t += 3) { const a = idx[t] * 3, b = idx[t + 1] * 3, d = idx[t + 2] * 3; if (upright(pos, a, b, d)) bandSamples(pos, a, b, d, (k) => { solidFine[k] = 1 }) } }
+  for (const m of collision) markSolid(m.pos, m.idx)
+  markSolid(existingWalls, Uint32Array.from({ length: existingWalls.length / 3 }, (_, i) => i))
+  const nearSolid = (k) => {
+    const i = k % NXF, j = (k / NXF) | 0
+    for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
+      const ii = i + di, jj = j + dj
+      if (ii >= 0 && jj >= 0 && ii < NXF && jj < NZF && solidFine[jj * NXF + ii]) return true
+    }
+    return false
+  }
+  let loose = 0
+  const before = existingWalls.length
+  for (const m of visual) {
+    if (!m.name.startsWith('prop') && !m.name.startsWith('barrier')) continue
+    for (let t = 0; t < m.idx.length; t += 3) {
+      const a = m.idx[t] * 3, b = m.idx[t + 1] * 3, d = m.idx[t + 2] * 3
+      if (!upright(m.pos, a, b, d)) continue
+      let open = false
+      bandSamples(m.pos, a, b, d, (k) => { if (!open && !nearSolid(k)) open = true })
+      if (!open) continue
+      existingWalls.push(m.pos[a], m.pos[a + 1], m.pos[a + 2], m.pos[b], m.pos[b + 1], m.pos[b + 2], m.pos[d], m.pos[d + 1], m.pos[d + 2])
+      loose++
+    }
+  }
+  log(`loose walls given collision: ${loose.toLocaleString()} tris (${((existingWalls.length - before) / 9).toLocaleString()})`)
 }
 
 // ── Write ───────────────────────────────────────────────────────────────────

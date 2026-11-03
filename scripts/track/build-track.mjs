@@ -15,7 +15,7 @@
 // library material by name, so textures are decoded and uploaded exactly once.
 import { Document, Logger, NodeIO } from '@gltf-transform/core'
 import { ALL_EXTENSIONS, KHRTextureTransform } from '@gltf-transform/extensions'
-import { meshopt, textureCompress } from '@gltf-transform/functions'
+import { getBounds, meshopt, textureCompress } from '@gltf-transform/functions'
 import { MeshoptEncoder, MeshoptSimplifier } from 'meshoptimizer'
 import fs from 'node:fs/promises'
 import path from 'node:path'
@@ -44,11 +44,19 @@ const layerOf = (mat) => cfg.layers.find(([re]) => re.test(mat))[1]
 const scale = cfg.scale ?? 1
 /** @type {{mat:string, layer:string, pos:Float32Array, nrm:Float32Array|null, uv:Float32Array|null, idx:Uint32Array}[]} */
 const prims = []
+function droppedByBox(node) {
+  const mat = node.getMesh().listPrimitives()[0]?.getMaterial()?.getName() ?? ''
+  const { min, max } = getBounds(node)
+  return cfg.dropBoxes.some(([x0, z0, x1, z1, re]) => re.test(mat) && min[0] * scale >= x0 && max[0] * scale <= x1 && min[2] * scale >= z0 && max[2] * scale <= z1)
+}
 for (const node of src.getRoot().listNodes()) {
   const mesh = node.getMesh()
   if (!mesh) continue
   // cfg.dropNodes: node names never shipped (blocker cards the source left across a street).
   if (cfg.dropNodes?.test(node.getName())) continue
+  // cfg.dropBoxes: [x0, z0, x1, z1, materialRegex] in scaled source space; a node of that material
+  // lying wholly inside the box is dropped (a game's route-closing railings share one node name).
+  if (cfg.dropBoxes && droppedByBox(node)) continue
   const m = node.getWorldMatrix()
   for (const prim of mesh.listPrimitives()) {
     if (prim.getMode() !== 4) continue // TRIANGLES only
