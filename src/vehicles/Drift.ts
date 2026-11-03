@@ -9,10 +9,11 @@
  * the car's own full-lock grip turn at that speed, so a drift always rounds a
  * corner: steering INTO it turns tighter than gripping would (the way through
  * a hairpin at speed), centred is a fast sweeper, countersteer opens the line
- * out. The cost is speed: the steeper the angle, the more it scrubs, and
- * lifting scrubs more and lets the angle fall. The throttle holds it out.
- * Countersteering hard on the throttle swings the car into a drift the other
- * way (a transition, for S-bends); off the throttle it ends the drift.
+ * out and, at full countersteer, bends it gently the other way. The cost is speed: the steeper
+ * the angle, the more it scrubs, and lifting scrubs more and lets the angle fall. The throttle
+ * holds it out. Steering the other way past `transitionLock` (or with the handbrake) swings the
+ * car into a drift that way (a transition, for S-bends), on or off the throttle, so a drift goes
+ * wherever the driver steers it. A light countersteer held too long ends it instead.
  * Straightening up ends it too; the exit then
  * unwinds the angle — mostly the body swinging back to the line, partly the
  * line swinging toward the nose — before grip takes over, so it never flicks.
@@ -70,7 +71,8 @@ export interface DriftConfig {
   liftAngle: number
   /**
    * Turn rate of the drift's arc as a share of the car's full-lock grip turn
-   * at the same speed: full lock into the drift, centred, full countersteer.
+   * at the same speed: full lock into the drift, centred, full countersteer
+   * (negative: the line bends the other way, toward where the driver steers).
    */
   turnInto: number
   turnNeutral: number
@@ -78,11 +80,13 @@ export interface DriftConfig {
   /** Countersteering this long (s) ends the drift. */
   counterExitTime: number
   /**
-   * Hard countersteer (past `transitionLock`) on the throttle for this long (s) swings the car
-   * into a drift the other way instead (an S-bend transition). Must be under counterExitTime.
+   * Countersteer (past `transitionLock`) with at least `transitionThrottle` for this long (s)
+   * swings the car into a drift the other way instead (an S-bend transition). Must be under
+   * counterExitTime. The handbrake with the wheel turned the other way switches at once.
    */
   transitionTime: number
   transitionLock: number
+  transitionThrottle: number
   /**
    * The steering the drift follows eases toward the driver's over this long (s). Keys are all
    * or nothing: tapped to hold a line, they made the arc jump between two rates each tap (the
@@ -128,10 +132,11 @@ export const DEFAULT_DRIFT: DriftConfig = {
   liftAngle: 0.7,
   turnInto: 1.2,
   turnNeutral: 0.75,
-  turnCounter: 0.3,
+  turnCounter: -0.25,
   counterExitTime: 0.7,
-  transitionTime: 0.35,
-  transitionLock: 0.6,
+  transitionTime: 0.18,
+  transitionLock: 0.5,
+  transitionThrottle: 0,
   steerSmoothing: 0.35,
   scrub: 0.03,
   angleScrub: 0.65,
@@ -139,7 +144,7 @@ export const DEFAULT_DRIFT: DriftConfig = {
   lateralRelief: 0.8,
   angleGain: 3,
   yawResponse: 9,
-  maxSwing: 1.05,
+  maxSwing: 1.4,
   exitAlign: 0.3,
   exitSettle: 0.07,
   exitMaxSec: 0.8,
@@ -267,8 +272,11 @@ export class Drift {
       this.calm = straight ? this.calm + dt : 0
       const countering = i.steer * this.direction < -0.25
       this.counter = countering ? this.counter + dt : 0
-      // Transition: hard opposite lock with the power on throws the car the other way, linked.
-      if (this.counter > cfg.transitionTime && i.steer * this.direction < -cfg.transitionLock && i.throttle > 0.5 && i.speed > cfg.minSpeed) {
+      // Transition: opposite lock with the power on (or a yank of the handbrake) throws the car the other way, linked.
+      const opposite = i.steer * this.direction
+      const powered = this.counter > cfg.transitionTime && opposite < -cfg.transitionLock && i.throttle >= cfg.transitionThrottle
+      const yanked = i.handbrake && opposite <= -0.3
+      if ((powered || yanked) && i.speed > cfg.minSpeed) {
         this.direction = -this.direction
         this.entry = this.direction
         this.counter = this.calm = 0
