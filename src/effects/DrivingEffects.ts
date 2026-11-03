@@ -55,6 +55,14 @@ export class DrivingEffects {
     if (NitroFlames.camera) this.trails.update(vehicle.model.body, NitroFlames.camera, ctrl.nitro.intensity, ctrl.nitro.perfect, dt)
   }
 
+  /** Lights out: a burst of tyre smoke off the driven wheels, 0..1 (see TireSmoke.puff). */
+  launch(vehicle: Vehicle, strength: number): void {
+    const v = vehicle.body.linvel()
+    _vel.set(v.x, v.y, v.z)
+    _fwd.set(0, 0, 1).applyQuaternion(vehicle.quaternion)
+    this.smoke.puff(vehicle.controller.wheels, _vel, _fwd, strength)
+  }
+
   renderMarks(renderer: AnyRenderer, position: THREE.Vector3): void {
     this.skidMarks.render(renderer, position)
   }

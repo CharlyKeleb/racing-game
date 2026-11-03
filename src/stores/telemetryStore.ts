@@ -82,6 +82,8 @@ export interface Telemetry {
   launchGrade: LaunchGrade
   /** The PERFECT / GOOD / … call is showing. */
   launchFlash: boolean
+  /** Lights out → release, seconds; -1 when the launch wasn't graded on a release. */
+  launchReaction: number
   /** Free Roam: no timing, laps or positions. */
   freeRoam: boolean
   /** Time Trial (#31). Lap being driven (1-based), laps done and how many were valid. */
@@ -181,6 +183,7 @@ export const initialTelemetry: Telemetry = {
   launchArmed: false,
   launchGrade: 'none',
   launchFlash: false,
+  launchReaction: -1,
   freeRoam: false,
   trialLap: 1,
   trialLaps: 0,
