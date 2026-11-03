@@ -11,6 +11,12 @@ export interface Point3 {
 }
 
 const WINDOW = 40 // points either side (~160 m at 4 m spacing)
+/**
+ * Metres from the windowed match beyond which the car is taken as lost (a reset or teleport the
+ * caller didn't report, or a tracker that started before the car was placed) and the whole line
+ * is searched again. Online, the server moves cars on its own, so nothing calls reset().
+ */
+const LOST_METRES = 35
 
 export class TrackProgress {
   /** Index of the nearest centreline point. */
@@ -27,18 +33,19 @@ export class TrackProgress {
     if (n === 0) return 0
     let best = this.index
     let bestD = Infinity
-    if (!this.initialised) {
-      for (let i = 0; i < n; i++) {
-        const d = dist2(this.line[i], x, z)
-        if (d < bestD) { bestD = d; best = i }
-      }
-      this.initialised = true
-    } else {
+    if (this.initialised) {
       for (let k = -WINDOW; k <= WINDOW; k++) {
         const i = (this.index + k + n) % n
         const d = dist2(this.line[i], x, z)
         if (d < bestD) { bestD = d; best = i }
       }
+    }
+    if (bestD > LOST_METRES * LOST_METRES) {
+      for (let i = 0; i < n; i++) {
+        const d = dist2(this.line[i], x, z)
+        if (d < bestD) { bestD = d; best = i }
+      }
+      this.initialised = true
     }
     this.index = best
     return best
