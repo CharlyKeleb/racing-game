@@ -77,6 +77,7 @@ import { Surface } from '../vehicles/Surface'
 import { measureRoadEdges } from '../world/SurfaceMap'
 import { addSafetyWalls } from '../world/SafetyWallBody'
 import { Showroom } from '../world/Showroom'
+import { StreetLife } from '../world/StreetLife'
 import { StreamedTrack } from '../world/StreamedTrack'
 import { Track } from '../world/Track'
 import { getTrack } from '../world/tracks'
@@ -159,6 +160,8 @@ function readTyres(ctrl: Vehicle['controller'], out: TyreBrakeInput): TyreBrakeI
 }
 /** Seconds of driving against the race direction before the HUD says so. */
 const WRONG_WAY_DELAY = 1.2
+/** Street maps: lamp posts, cones and (in Free Roam) oncoming traffic. */
+const STREET_TRACKS = new Set(['u2city', 'city'])
 /** How long a Time Trial split / lap call stays on screen, ms of session time. */
 const TRIAL_SPLIT_SHOW_MS = 3000
 /** Garage turntable camera: distance (m) and lens (deg) when there's room. */
@@ -234,6 +237,8 @@ export class Game {
   private readonly opponentFlames = new Map<number, NitroFlames>()
   private opponentToken = 0
   private roadEdges!: { left: Float32Array; right: Float32Array }
+  /** Posts, cones and oncoming traffic on the street maps (see StreetLife); built at a race start. */
+  private streetLife: StreetLife | null = null
   private standings!: RaceStandings
   private readonly recovery = new RecoveryMonitor()
   private safetyWalls: RAPIER.RigidBody | null = null
@@ -638,6 +643,8 @@ export class Game {
     // Built at the next race start: colliders only answer ray queries after a
     // physics step, and at boot/track load none has run yet.
     this.removeSafetyWalls()
+    this.streetLife?.dispose()
+    this.streetLife = null
     const edges = measureRoadEdges(this.track.line, (x, z) => this.track.surfaceAt(x, z))
     this.roadEdges = edges
     this.checkpointGates?.dispose()
@@ -683,6 +690,22 @@ export class Game {
       },
     })
   }
+
+  /**
+   * Street maps get things to hit: posts and cones in every mode, oncoming traffic in Free Roam.
+   * Rebuilt when traffic comes or goes; otherwise just put back for the new race.
+   */
+  private setUpStreetLife(traffic: boolean): void {
+    if (!STREET_TRACKS.has(this.track.id)) return
+    if (this.streetLife && this.streetLifeTraffic !== traffic) { this.streetLife.dispose(); this.streetLife = null }
+    if (!this.streetLife) {
+      this.streetLife = new StreetLife(this.physics.world, this.track.line, this.roadEdges, (x, y, z) => this.physics.groundHeight(x, y, z, (c) => this.track.isRoadCollider(c)), { traffic })
+      this.streetLifeTraffic = traffic
+      this.renderer.scene.add(this.streetLife.group)
+    }
+    this.streetLife.reset(this.progress.index)
+  }
+  private streetLifeTraffic = false
 
   /** Invisible walls where the track's collision floor ends, so a car can't drop off the world (see SafetyWalls). */
   private buildSafetyWalls(): void {
@@ -871,6 +894,7 @@ export class Game {
     if (!this.safetyWalls) this.buildSafetyWalls()
     const token = this.opponentToken
     const { settings } = gameStore.getState()
+    this.setUpStreetLife(settings.mode === 'freeRoam')
     const opponentCount = isSoloMode(settings.mode) ? 0 : settings.opponents
     this.callouts.reset()
     this.finishGapMs = null
@@ -1695,6 +1719,7 @@ export class Game {
       const gap = playerDistance - this.standings.distance(opponent.entry)
       if (!inMenu) opponent.drive(dt, this.traffic, gap, laneLimit)
     }
+    if (!inMenu) this.streetLife?.fixedUpdate(dt, this.progress.index, this.vehicle.chassis)
     this.physics.step(dt)
     this.holdShowroomCar(phase === 'menu' || phase === 'garage')
     this.collectHits(dt)
@@ -1939,6 +1964,7 @@ export class Game {
       this.camera.update(this.vehicle.model.root, this.vehicle.speedKmh, dt, this.vehicle.controller.nitro.intensity, this.vehicle.motion,gridFraming,this.vehicle.model.body)
       this.effects.update(this.vehicle, dt)
       this.sparks.update(dt)
+      this.streetLife?.render()
       const settings = gameStore.getState().settings
       this.guide.group.visible = settings.mode !== 'freeRoam' || settings.roamGuide
       this.updateGuide(dt)
