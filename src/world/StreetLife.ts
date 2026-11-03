@@ -31,7 +31,13 @@ interface Civilian {
   index: number
   /** Seconds since the player hit it (it's a loose dynamic body then); -1 while it drives. */
   wrecked: number
+  /** Which car model it wears (an index into carModels) and its instance slot in that model's meshes. */
+  model: number
+  slot: number
 }
+
+/** One traffic car model: a mesh per material, nose toward +Z, wheels on y = 0, about 4.4 m long. */
+export type TrafficModel = { geometry: THREE.BufferGeometry; material: THREE.Material }[]
 
 /** Metres from the player's car within which a post or cone turns dynamic, ready to be hit. */
 const ARM_RADIUS = 6
@@ -62,7 +68,8 @@ export class StreetLife {
   private readonly civilians: Civilian[] = []
   private readonly postMesh: THREE.InstancedMesh
   private readonly coneMesh: THREE.InstancedMesh
-  private readonly carMesh: THREE.InstancedMesh | null
+  /** Per car model, one InstancedMesh per material; all of a model's meshes share its instance slots. */
+  private carModels: THREE.InstancedMesh[][] = []
   private readonly ground: (x: number, y: number, z: number) => number | null
   private disposed = false
 
@@ -125,19 +132,69 @@ export class StreetLife {
     for (const m of [this.postMesh, this.coneMesh]) { m.castShadow = true; m.receiveShadow = true; m.frustumCulled = false; this.group.add(m) }
 
     if (options.traffic) {
-      const paints = [0xd8d8d8, 0x1b1d22, 0x8c1c1c, 0x23466e, 0xb8b2a2, 0x3b5a3b, 0x6d6f73, 0xc58b2a]
-      this.carMesh = new THREE.InstancedMesh(civilianGeometry(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.35, metalness: 0.3 }), TRAFFIC_COUNT)
-      this.carMesh.castShadow = true
-      this.carMesh.frustumCulled = false
-      const color = new THREE.Color()
       for (let k = 0; k < TRAFFIC_COUNT; k++) {
         const body = world.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(0, -500, 0).setLinearDamping(0.3).setAngularDamping(1))
         const collider = world.createCollider(RAPIER.ColliderDesc.cuboid(0.9, 0.7, 2.2).setTranslation(0, 0.75, 0).setMass(1300).setFriction(0.6), body)
-        this.civilians.push({ body, collider, index: 0, wrecked: -1 })
-        this.carMesh.setColorAt(k, color.setHex(paints[k % paints.length]))
+        this.civilians.push({ body, collider, index: 0, wrecked: -1, model: 0, slot: k })
       }
-      this.group.add(this.carMesh)
-    } else this.carMesh = null
+      // Box saloons in eight paints until the real models (setTrafficModels) arrive.
+      const paints = [0xd8d8d8, 0x1b1d22, 0x8c1c1c, 0x23466e, 0xb8b2a2, 0x3b5a3b, 0x6d6f73, 0xc58b2a]
+      const box = new THREE.InstancedMesh(civilianGeometry(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.35, metalness: 0.3 }), TRAFFIC_COUNT)
+      const color = new THREE.Color()
+      for (let k = 0; k < TRAFFIC_COUNT; k++) box.setColorAt(k, color.setHex(paints[k % paints.length]))
+      this.carModels = [[box]]
+      this.addCarMeshes()
+    }
+  }
+
+  /** Swaps the placeholder boxes for real car models, dealt round-robin across the traffic. Geometry and materials are borrowed, not owned. */
+  setTrafficModels(models: TrafficModel[], shadows = true): void {
+    if (this.disposed || !this.civilians.length || !models.length) return
+    this.removeCarMeshes(true)
+    // Each car's collision box fits its model: the set runs from a 3.1 m city car to a 5.3 m taxi.
+    const box = new THREE.Box3(), part = new THREE.Box3()
+    const sizes = models.map((parts) => {
+      box.makeEmpty()
+      for (const p of parts) {
+        p.geometry.boundingBox ?? p.geometry.computeBoundingBox()
+        box.union(part.copy(p.geometry.boundingBox!))
+      }
+      return { half: { x: (box.max.x - box.min.x) / 2, y: (box.max.y - box.min.y) / 2, z: (box.max.z - box.min.z) / 2 }, centre: box.getCenter(new THREE.Vector3()) }
+    })
+    const counts = models.map(() => 0)
+    for (let k = 0; k < this.civilians.length; k++) {
+      const c = this.civilians[k]
+      c.model = k % models.length
+      c.slot = counts[c.model]++
+      const { half, centre } = sizes[c.model]
+      if (!(half.x > 0.3 && half.y > 0.3 && half.z > 0.8)) continue
+      c.collider.setHalfExtents(half)
+      c.collider.setTranslationWrtParent(centre)
+    }
+    this.carModels = models.map((parts, i) => parts.map((p) => {
+      const mesh = new THREE.InstancedMesh(p.geometry, p.material, counts[i])
+      mesh.userData.borrowed = true
+      return mesh
+    }))
+    this.addCarMeshes()
+    for (const meshes of this.carModels) for (const m of meshes) m.castShadow = shadows
+  }
+
+  private addCarMeshes(): void {
+    for (const meshes of this.carModels) for (const m of meshes) {
+      m.castShadow = true
+      m.frustumCulled = false
+      this.group.add(m)
+    }
+  }
+
+  private removeCarMeshes(release: boolean): void {
+    for (const meshes of this.carModels) for (const m of meshes) {
+      m.removeFromParent()
+      if (release && !m.userData.borrowed) { m.geometry.dispose(); (m.material as THREE.Material).dispose() }
+      m.dispose()
+    }
+    this.carModels = []
   }
 
   private place(list: Prop[], x: number, y: number, z: number, yaw: number, ground: (x: number, y: number, z: number) => number | null, kind: 'post' | 'cone'): void {
@@ -238,14 +295,12 @@ export class StreetLife {
     if (this.disposed) return
     this.sync(this.postMesh, this.posts, 3.5)
     this.sync(this.coneMesh, this.cones, 0.36)
-    if (this.carMesh) {
-      for (let k = 0; k < this.civilians.length; k++) {
-        const b = this.civilians[k].body, t = b.translation(), r = b.rotation()
-        _m.compose(_p.set(t.x, t.y, t.z), _q.set(r.x, r.y, r.z, r.w), _s)
-        this.carMesh.setMatrixAt(k, _m)
-      }
-      this.carMesh.instanceMatrix.needsUpdate = true
+    for (const c of this.civilians) {
+      const t = c.body.translation(), r = c.body.rotation()
+      _m.compose(_p.set(t.x, t.y, t.z), _q.set(r.x, r.y, r.z, r.w), _s)
+      for (const m of this.carModels[c.model]) m.setMatrixAt(c.slot, _m)
     }
+    for (const meshes of this.carModels) for (const m of meshes) m.instanceMatrix.needsUpdate = true
   }
 
   private synced = false
@@ -273,8 +328,8 @@ export class StreetLife {
     for (const p of [...this.posts, ...this.cones]) this.world.removeRigidBody(p.body)
     for (const c of this.civilians) this.world.removeRigidBody(c.body)
     this.group.removeFromParent()
-    for (const m of [this.postMesh, this.coneMesh, this.carMesh]) {
-      if (!m) continue
+    this.removeCarMeshes(true)
+    for (const m of [this.postMesh, this.coneMesh]) {
       m.geometry.dispose()
       ;(m.material as THREE.Material).dispose()
       m.dispose()
