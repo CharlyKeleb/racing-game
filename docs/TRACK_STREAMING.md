@@ -186,6 +186,16 @@ materials are just numbers like `11851Mtl`):
   takes `SCALE=<n>`).
 - `dropNodes`: node-name regex never shipped, for blocker cards an export left
   standing across a street.
+- `dropBoxes: [[x0, z0, x1, z1, materialRegex], …]`: drops a node of that
+  material lying wholly inside the box (scaled source coordinates), for one
+  blocker among many nodes of the same name.
+- `openRoads: { lanes, closures }`: game-ripped circuits close the streets off
+  their route with railings and roadblocks. Every upright `closures` triangle
+  standing on a `lanes` surface with lane 2 m out on both sides is dropped; a
+  railing along the road edge has lane on one side only and stays.
+- `raiseBarriers: { match, factor = 3, below = 0.9 }`: low kerb walls,
+  guardrails and barrels collide `factor` times as tall as they look (their
+  collision only), so a car glances off instead of climbing on and beaching.
 - `lineVia` points can carry a third value, `[x, z, snap]`: how far (m, default
   15) the tracer may move them to the middle of the road. Use a small snap to
   hold the line in a narrow street next to a wider area.
@@ -201,7 +211,7 @@ materials are just numbers like `11851Mtl`):
   `high` m above the profile within `halfWidth` of the line: deck supports,
   overhangs and low beams the route squeezes past.
 
-Bayview Streets (`scripts/track/u2city.config.mjs`) uses most of these:
+Paris (`scripts/track/paris.config.mjs`) uses the first three. Bayview Streets (`scripts/track/u2city.config.mjs`) uses most of the rest:
 its source is a ×32 miniature with anonymous materials, and its back alley
 needed flattening and a cleared channel before a car could get through.
 

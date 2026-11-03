@@ -89,6 +89,56 @@ for (const node of src.getRoot().listNodes()) {
 }
 log(`${prims.length} primitives, ${prims.reduce((s, p) => s + p.idx.length / 3, 0).toLocaleString()} tris`)
 
+// cfg.openRoads { lanes, closures }: a game closes the streets off its route with railings and
+// roadblocks standing across the carriageway. Drop every upright `closures` triangle that stands
+// on a `lanes` surface with lane on both sides of it (2 m out); a railing along the road edge has
+// lane on one side only and stays.
+if (cfg.openRoads) {
+  const lane = new Set()
+  for (const pr of prims) {
+    if (!cfg.openRoads.lanes.test(pr.mat)) continue
+    const { pos, idx } = pr
+    for (let t = 0; t < idx.length; t += 3) {
+      const a = idx[t] * 3, b = idx[t + 1] * 3, c = idx[t + 2] * 3
+      const d = (pos[b + 2] - pos[c + 2]) * (pos[a] - pos[c]) + (pos[c] - pos[b]) * (pos[a + 2] - pos[c + 2])
+      if (Math.abs(d) < 1e-9) continue
+      for (let j = Math.floor(Math.min(pos[a + 2], pos[b + 2], pos[c + 2])); j <= Math.max(pos[a + 2], pos[b + 2], pos[c + 2]); j++)
+        for (let i = Math.floor(Math.min(pos[a], pos[b], pos[c])); i <= Math.max(pos[a], pos[b], pos[c]); i++) {
+          const x = i + 0.5, z = j + 0.5
+          const w0 = ((pos[b + 2] - pos[c + 2]) * (x - pos[c]) + (pos[c] - pos[b]) * (z - pos[c + 2])) / d
+          const w1 = ((pos[c + 2] - pos[a + 2]) * (x - pos[c]) + (pos[a] - pos[c]) * (z - pos[c + 2])) / d
+          if (w0 >= 0 && w1 >= 0 && w0 + w1 <= 1) lane.add(`${i},${j}`)
+        }
+    }
+  }
+  const onLane = (x, z) => lane.has(`${Math.floor(x)},${Math.floor(z)}`)
+  let dropped = 0
+  for (const pr of prims) {
+    if (!cfg.openRoads.closures.test(pr.mat)) continue
+    const { pos, idx } = pr, keep = []
+    for (let t = 0; t < idx.length; t += 3) {
+      const a = idx[t] * 3, b = idx[t + 1] * 3, c = idx[t + 2] * 3
+      const ux = pos[b] - pos[a], uy = pos[b + 1] - pos[a + 1], uz = pos[b + 2] - pos[a + 2]
+      const vx = pos[c] - pos[a], vy = pos[c + 1] - pos[a + 1], vz = pos[c + 2] - pos[a + 2]
+      let nx = uy * vz - uz * vy, nz = ux * vy - uy * vx
+      const ny = uz * vx - ux * vz, nl = Math.hypot(nx, ny, nz), hl = Math.hypot(nx, nz)
+      const cx = (pos[a] + pos[b] + pos[c]) / 3, cz = (pos[a + 2] + pos[b + 2] + pos[c + 2]) / 3
+      let across
+      if (nl > 1e-9 && Math.abs(ny / nl) < 0.7) {
+        nx /= hl; nz /= hl
+        across = onLane(cx, cz) && onLane(cx + nx * 2, cz + nz * 2) && onLane(cx - nx * 2, cz - nz * 2)
+      } else {
+        // A horizontal cap (a railing's top) goes when it's lane all round.
+        across = onLane(cx, cz) && onLane(cx + 2, cz) && onLane(cx - 2, cz) && onLane(cx, cz + 2) && onLane(cx, cz - 2)
+      }
+      if (across) dropped++
+      else keep.push(idx[t], idx[t + 1], idx[t + 2])
+    }
+    if (keep.length !== idx.length) pr.idx = Uint32Array.from(keep)
+  }
+  log(`open roads: ${dropped.toLocaleString()} closure tris dropped`)
+}
+
 // ── 2. Locate the start line and verify checkpoints sit on the road ────────
 function heightAt(x, z, layers, matRe = null) {
   let best = null
@@ -730,6 +780,61 @@ async function mergeAsSmallProp(mat, layer, tris) {
   return textureIsOpaque(srcMaterialByName.get(mat)?.getBaseColorTexture())
 }
 
+// cfg.raiseBarriers { match, factor = 3, below = 0.9 }: kerb walls, guardrails and barrels a car
+// would climb and beach on collide `factor` times as tall as they look (up to `below` m high
+// counts as low). The floor under each vertex is the road or ground there.
+const raisedPrims = new Map()
+const raiseFloor = (() => {
+  if (!cfg.raiseBarriers) return null
+  const C = 2, cells = new Map()
+  for (const pr of prims) {
+    if (pr.layer !== 'road' && pr.layer !== 'ground') continue
+    const { pos, idx } = pr
+    for (let t = 0; t < idx.length; t += 3) {
+      const a = idx[t] * 3, b = idx[t + 1] * 3, c = idx[t + 2] * 3
+      const d = (pos[b + 2] - pos[c + 2]) * (pos[a] - pos[c]) + (pos[c] - pos[b]) * (pos[a + 2] - pos[c + 2])
+      if (Math.abs(d) < 1e-9) continue
+      const i0 = Math.floor(Math.min(pos[a], pos[b], pos[c]) / C), i1 = Math.floor(Math.max(pos[a], pos[b], pos[c]) / C)
+      const j0 = Math.floor(Math.min(pos[a + 2], pos[b + 2], pos[c + 2]) / C), j1 = Math.floor(Math.max(pos[a + 2], pos[b + 2], pos[c + 2]) / C)
+      for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+        const x = (i + 0.5) * C, z = (j + 0.5) * C
+        const w0 = ((pos[b + 2] - pos[c + 2]) * (x - pos[c]) + (pos[c] - pos[b]) * (z - pos[c + 2])) / d
+        const w1 = ((pos[c + 2] - pos[a + 2]) * (x - pos[c]) + (pos[a] - pos[c]) * (z - pos[c + 2])) / d
+        const w2 = 1 - w0 - w1
+        // A little slack so a cell whose centre is just off a thin kerb strip still gets its floor.
+        if (w0 < -0.2 || w1 < -0.2 || w2 < -0.2) continue
+        const y = w0 * pos[a + 1] + w1 * pos[b + 1] + w2 * pos[c + 1]
+        const k = `${i},${j}`, e = cells.get(k)
+        if (!e) cells.set(k, [y, y]); else { e[0] = Math.min(e[0], y); e[1] = Math.max(e[1], y) }
+      }
+    }
+  }
+  return (x, y, z) => {
+    let best = null
+    for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
+      const e = cells.get(`${Math.floor(x / C) + di},${Math.floor(z / C) + dj}`)
+      if (!e) continue
+      for (const f of e) if (f <= y + 0.05 && (best === null || f > best)) best = f
+    }
+    return best
+  }
+})()
+function raisedPrim(pr) {
+  let out = raisedPrims.get(pr)
+  if (out) return out
+  const { factor = 3, below = 0.9 } = cfg.raiseBarriers
+  const pos = Float32Array.from(pr.pos)
+  for (let v = 0; v < pos.length; v += 3) {
+    const f = raiseFloor(pos[v], pos[v + 1], pos[v + 2])
+    if (f === null) continue
+    const h = pos[v + 1] - f
+    if (h > 0.02 && h <= below) pos[v + 1] = f + h * factor
+  }
+  raisedPrims.set(pr, (out = { ...pr, pos }))
+  return out
+}
+const colPartsOf = (mat, parts) => cfg.raiseBarriers?.match.test(mat) ? parts.map((p) => ({ ...p, pr: raisedPrim(p.pr) })) : parts
+
 // ── 6. Chunks (LOD0 + LOD1) + per-chunk collision ──────────────────────────
 const manifestChunks = []
 const collisionParts = [] // { name, g }
@@ -762,7 +867,7 @@ for (const cell of [...cells.values()].sort((a, b) => a.i - b.i || a.j - b.j)) {
       if (lod === 0) {
         const b = bounds(g.pos)
         for (let k = 0; k < 3; k++) { entry.min[k] = Math.min(entry.min[k], b.min[k]); entry.max[k] = Math.max(entry.max[k], b.max[k]) }
-        if (['road', 'ground', 'barrier'].includes(grp.layer)) colParts.push({ layer: grp.layer, parts: grp.lod0 })
+        if (['road', 'ground', 'barrier'].includes(grp.layer)) colParts.push({ layer: grp.layer, parts: grp.layer === 'barrier' ? colPartsOf(mat, grp.lod0) : grp.lod0 })
         else {
           // Painted-on ground (logos, ads) that has no road or grass under it:
           // without collision it's a hole in the floor (see cfg.collide).
