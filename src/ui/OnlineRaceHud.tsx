@@ -37,6 +37,7 @@ export function OnlineRaceHud() {
     return p?.retiredTicks !== undefined ? `${r.displayName} · DNF` : r.connected === false ? `${r.displayName} · Reconnecting…` : null
   }).filter(Boolean)
   const missed = useStore(telemetryStore, s => s.missedCheckpoint)
+  const wrongWay = useStore(telemetryStore, s => s.wrongWay)
   const canReset = race?.resetVersion === RESET_VERSION
   const shift = state.gear > 0 && state.rpm >= state.redlineRpm * .94
   const sweep = state.countdown !== null
@@ -72,7 +73,8 @@ export function OnlineRaceHud() {
       <div className="start-lights__gantry">{Array.from({ length: 5 }, (_, i) => <span key={i} className={`start-lights__pod${!state.go && i < lights ? ' is-lit' : ''}`}><i /><i /></span>)}</div>
       {state.go && <div className="start-lights__go">Go</div>}
     </div>}
-    {ready && missed && <div className="hud-wrongway hud-wrongway--missed" role="alert">Missed checkpoint<small>{canReset ? touch ? 'Tap ↺ to go back' : 'Press R to go back' : 'Turn back and drive through it · laps only count through every gate'}</small></div>}
+    {ready && wrongWay && <div className="hud-wrongway" role="alert">Wrong way</div>}
+    {ready && !wrongWay && missed && <div className="hud-wrongway hud-wrongway--missed" role="alert">Missed checkpoint<small>{canReset ? touch ? 'Tap ↺ to go back' : 'Press R to go back' : 'Turn back and drive through it · laps only count through every gate'}</small></div>}
     {ready && state.finishWindowMs !== null && <p className="online-race__delay" role="status">Your rival has finished · {Math.ceil(state.finishWindowMs / 1000)} s left to cross the line</p>}
     {state.finished && !result && <div className="online-race__message" role="status"><strong>Finished</strong><span>Waiting for your rival · They have up to 60 seconds to finish.</span></div>}
     {(state.delayed || recovering || lobby?.draining) && !result && <p className="online-race__delay" role="status">{recovering ? 'Reconnecting · Your race continues · Controls released' : state.delayed ? 'Connection delayed · Controls released' : 'Server restarting · Finish before the shutdown window closes'}</p>}

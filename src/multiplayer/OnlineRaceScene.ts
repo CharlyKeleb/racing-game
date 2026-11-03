@@ -31,6 +31,11 @@ const MAX_BLEND_METRES = 5
 const POSITION_BLEND = .18
 const ROTATION_BLEND = .12
 const GO_TICKS = 54
+/** Wrong way, as offline: pointing more than ~114° against the track, above 12 km/h, for 1.2 s. */
+const WRONG_WAY_DOT = -0.4
+const WRONG_WAY_KMH = 12
+const WRONG_WAY_SECONDS = 1.2
+const _forward = new THREE.Vector3()
 interface BrowserManifest { protocol: number; simulationVersion: number; fingerprint: string; track: string; cars: string[] }
 
 /** Server-owned race presentation, with optional isolated own-car prediction. Never runs local race rules or results. */
@@ -49,6 +54,9 @@ export class OnlineRaceScene {
   private drawn = false
   private readonly sound: CarSoundState = { rpm: 900, gear: 1, throttle: 0, nitro: 0, nitroActive: false, nitroPerfect: false }
   private publishedAt = -Infinity
+  /** The own car on the centreline, every frame: the minimap and the wrong-way check. */
+  private readonly playerProgress: TrackProgress | null
+  private wrongWayTime = 0
   private prediction: PredictionReconciler | null = null
   private predictionWorld: PredictionWorld | null = null
   private readonly predicted = emptyVehicleState('')
@@ -126,6 +134,7 @@ export class OnlineRaceScene {
       this.group.add(model.root)
     }
     this.playerCar = this.cars.find(car => car.state.id === playerId)!
+    this.playerProgress = line?.length ? new TrackProgress(line) : null
     const latency = lobbyStore.getState().connectionLatency
     if (latency) this.ensurePrediction(latency)
     for (const child of context.renderer.scene.children) {
@@ -298,12 +307,34 @@ export class OnlineRaceScene {
       this.sound.nitro = state.nitroIntensity ?? 0; this.sound.nitroActive = this.sound.nitro > .01
       this.context.audio.update(this.sound)
       this.context.audio.setRaceMusicActive(this.buffer.latest?.phase === 'racing')
+      this.publishPose(h)
       if (now - this.publishedAt >= 50) {
         this.publishedAt = now
         this.publish(now)
       }
     }
     this.context.renderer.render()
+  }
+
+  /**
+   * The minimap pose and the wrong-way warning, every frame from the drawn car. At the 20 Hz of the
+   * rest of the HUD the heading-up map stepped and lagged behind the car.
+   */
+  private publishPose(dt: number): void {
+    const root = this.playerCar.model.root, q = root.quaternion
+    _forward.set(0, 0, 1).applyQuaternion(q)
+    const progress = this.playerProgress
+    const index = progress ? progress.update(root.position.x, root.position.z) : 0
+    let wrongWay = false
+    if (progress) {
+      const t = progress.tangent(index)
+      const latest = this.buffer.latest
+      const racing = latest?.phase === 'racing' && latest.progress?.find(p => p.id === this.playerCar.state.id)?.finishTicks == null
+      const against = _forward.x * t.x + _forward.z * t.z < WRONG_WAY_DOT && Math.abs(this.playerCar.state.speed) * 3.6 > WRONG_WAY_KMH
+      this.wrongWayTime = racing && against ? this.wrongWayTime + dt : 0
+      wrongWay = this.wrongWayTime > WRONG_WAY_SECONDS
+    }
+    telemetryStore.setState({ carX: root.position.x, carZ: root.position.z, heading: Math.atan2(_forward.x, _forward.z), trackIndex: index, wrongWay })
   }
 
   /** HUD state at 20 Hz, in the same shape the offline HUD reads, from server timing and drawn poses. */
@@ -317,7 +348,8 @@ export class OnlineRaceScene {
       const count = this.context.track.checkpoints.length
       for (const car of this.cars) {
         const p = latest.progress.find(row => row.id === car.state.id), entry = car.entry
-        if (!p || !car.progress) continue
+        // Not drawn yet: its model still sits at the origin, which isn't where the car is.
+        if (!p || !car.progress || !car.model.root.visible) continue
         entry.x = car.model.root.position.x; entry.z = car.model.root.position.z
         entry.index = car.progress.update(entry.x, entry.z)
         entry.lap = Math.min(this.laps, p.completedLaps + 1)
@@ -326,10 +358,8 @@ export class OnlineRaceScene {
       }
       standings = this.standings.snapshot(this.cars.map(car => car.entry))
       const self = this.playerCar.entry, rival = this.cars.filter(car => car !== this.playerCar)
-      const forward = this.playerCar.model.root.quaternion
       telemetryStore.setState({
-        carX: self.x ?? 0, carZ: self.z ?? 0, heading: Math.atan2(2 * (forward.w * forward.y + forward.x * forward.z), 1 - 2 * (forward.y * forward.y + forward.x * forward.x)),
-        trackIndex: self.index, distanceLeft: self.finishMs !== null ? 0 : Math.max(0, this.laps * this.standings.lapLength - this.standings.distance(self)),
+        distanceLeft: self.finishMs !== null ? 0 : Math.max(0, this.laps * this.standings.lapLength - this.standings.distance(self)),
         opponents: rival.filter(car => car.model.root.visible).map(car => ({ id: car.entry.id, x: car.model.root.position.x, z: car.model.root.position.z })),
         // The server only counts ordered gates: without this a cut gate silently stops lap progress.
         missedCheckpoint: latest.phase === 'racing' && self.finishMs === null && this.standings.overrun(self) > MISSED_GATE_METRES,
