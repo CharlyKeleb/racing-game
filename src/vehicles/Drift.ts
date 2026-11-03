@@ -11,9 +11,10 @@
  * a hairpin at speed), centred is a fast sweeper, countersteer opens the line
  * out and, at full countersteer, bends it gently the other way. The cost is speed: the steeper
  * the angle, the more it scrubs, and lifting scrubs more and lets the angle fall. The throttle
- * holds it out. Steering the other way past `transitionLock` (or with the handbrake) swings the
- * car into a drift that way (a transition, for S-bends), on or off the throttle, so a drift goes
- * wherever the driver steers it. A light countersteer held too long ends it instead.
+ * holds it out. Steering the other way past `transitionLock` with any throttle (or with the
+ * handbrake) swings the car into a drift that way (a transition, for S-bends), so a drift goes
+ * wherever the driver steers it. Countersteer with the throttle shut is catching the slide: held,
+ * it ends the drift instead (and the AI's slide-catching doesn't flick it from side to side).
  * Straightening up ends it too; the exit then
  * unwinds the angle — mostly the body swinging back to the line, partly the
  * line swinging toward the nose — before grip takes over, so it never flicks.
@@ -136,7 +137,7 @@ export const DEFAULT_DRIFT: DriftConfig = {
   counterExitTime: 0.7,
   transitionTime: 0.18,
   transitionLock: 0.5,
-  transitionThrottle: 0,
+  transitionThrottle: 0.2,
   steerSmoothing: 0.35,
   scrub: 0.03,
   angleScrub: 0.65,

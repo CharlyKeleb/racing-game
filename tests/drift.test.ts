@@ -250,12 +250,12 @@ describe('Arcade drift (NFS / Asphalt)', () => {
     expect(d.guide(-1, 1, 1.2, 0, DEFAULT_DRIFT, g).pathRate).toBeGreaterThan(0)
   })
 
-  it('full countersteer off the throttle switches direction too', () => {
+  it('countersteer off the throttle still ends the drift instead of linking', () => {
     const d = new Drift()
     tapWhileTurning(d, 1)
-    run(d, { steer: -1, throttle: 0, slipAngle: 0.5 }, DEFAULT_DRIFT.transitionTime + 0.05, DEFAULT_DRIFT)
-    expect(d.active).toBe(true)
-    expect(d.direction).toBe(-1)
+    run(d, { steer: -1, throttle: 0, slipAngle: 0.5 }, DEFAULT_DRIFT.counterExitTime + 0.1, DEFAULT_DRIFT)
+    expect(d.active).toBe(false)
+    expect(d.direction).toBe(1)
   })
 
   it('eases tapped keys into a steady in-between steer for the drift to follow', () => {
