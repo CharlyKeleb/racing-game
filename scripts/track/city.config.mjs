@@ -121,8 +121,24 @@ export default {
   lineSpacing: 4,
   spawnBehind: 14,
 
+  /**
+   * The city round the district (city-fill.mjs): the source is one strip of streets with every
+   * side street ending at the edge of the world. Track coordinates (metres from the start line):
+   * the rows carry on the side streets east and west, the columns the avenue and alley north and south.
+   */
+  cityFill: {
+    margin: 230,
+    roads: {
+      x: [-390, -280, -8, 62, 137, 340, 450],
+      z: [-680, -560, -415, -300, -185, -65, 70, 205, 350, 470],
+    },
+    heights: [16, 84],
+    seed: 7,
+  },
+
   /** Surface map (derive-from-chunks.mjs). The tram beds beside the avenue are ballast. */
   surfaces: [
+    [/^cityfill_/, 'asphalt'],
     [M(42), 'gravel'],
     [M(...ROAD), 'asphalt'],
     [/^material_104_93(_0|_1)?$/, 'asphalt'],

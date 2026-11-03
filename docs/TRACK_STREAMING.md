@@ -233,6 +233,37 @@ To find the racing asphalt in such a model, look for a racing-line or rubber
 decal and check which material lies directly under it. On Singapore, a black
 decal (`151Mtl`) traces the whole lap, and `11861Mtl` is under 98% of it.
 
+## City fill (city-fill.mjs)
+
+City sources are a few streets with nothing round them: side streets end at the edge of the
+world, there's no ground between the blocks, and a game-ripped city's buildings are hollow walls
+with no collision. `scripts/track/city-fill.mjs <config>` turns the shipped package into a whole
+city, from `cfg.cityFill`, without the source GLB. Run it after `build-track.mjs` and before
+`derive-from-chunks.mjs` (the surface map then covers the new streets; give `cfg.surfaces` a
+`[/^cityfill_/, 'asphalt']` rule):
+
+```bash
+node scripts/track/city-fill.mjs scripts/track/city.config.mjs && node scripts/track/derive-from-chunks.mjs scripts/track/city.config.mjs
+```
+
+- **Ground**: pavement over every hole in the fill area (the chunks' bounds + `margin`), on a
+  height field that follows the existing floor out. 8 m cells in the open, 4 m where it meets
+  existing floor, dropped 12 cm under its edge so the two never z-fight.
+- **Streets**: `roads.x` / `roads.z` lines (track coordinates) laid wherever there's no existing
+  floor or wall, so dead-end side streets run on into new ones. Plain asphalt at crossings.
+- **Buildings**: lots on the blocks between streets, 12 m clear of existing scenery, taller
+  toward the edge; an invisible wall closes the fill area. `openOnly` keeps streets and buildings
+  out of blocks walled in by existing buildings (hollow in a game rip).
+- **Existing buildings**: prop components at least 5 m tall and 8 m long get their walls as
+  barrier collision (unless they already collide).
+
+Everything new shares one generated texture atlas (`cityfill_atlas`): a fill chunk is two draw
+calls. Fill chunks are manifest entries `f_<i>_<j>` and collision nodes `<layer>__fill…`, so a
+rerun replaces them; a rebuild with `build-track.mjs` drops them (run city-fill again).
+
+Terrain collision is the drawn backdrop itself (`terrainError`), not a separate simplification:
+on Canyon Dam the two differed by up to 1.5 m, and cars hit slopes they couldn't see.
+
 ## Debugging
 
 In dev, `window.__game.debugStep(60)` advances 60 frames by hand, even when the

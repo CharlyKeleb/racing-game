@@ -84,8 +84,25 @@ export default {
   lineSpacing: 4,
   spawnBehind: 14,
 
+  /**
+   * City round the block (city-fill.mjs), in track coordinates (metres from the start line). The
+   * source's buildings are hollow walls with no collision, and it stops dead at a void on the
+   * west, north and south: fill those with streets and blocks, leave the hollow blocks alone.
+   */
+  cityFill: {
+    margin: 200,
+    openOnly: true,
+    roads: {
+      x: [-1140, -1020, -900, -780, -660, -540, -420, 1000, 1110],
+      z: [-1140, -1020, -900, -780, -660, 300, 420, 540, 660, 780, 900, 1020, 1160],
+    },
+    heights: [14, 64],
+    seed: 3,
+  },
+
   /** Surface map (derive-from-chunks.mjs): material → surface. */
   surfaces: [
+    [/^cityfill_/, 'asphalt'],
     [/^(RDP_|ARC_SIDEWALK|ARC_COURTGD|ARC_PARKING|ARC_PRKG_BASE|ARC_CONCFOUNDATION)/, 'asphalt'],
     [/^(TRN_GRASS|ORG_GRASSHILL)/, 'grass'],
     [/^TRN_(DIRT|RUBBLE)/, 'gravel'],

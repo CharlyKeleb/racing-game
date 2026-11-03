@@ -6832,12 +6832,12 @@
  "stats": {
   "lod0Tris": 61606,
   "lod1Tris": 25916,
-  "collisionTris": 50520,
+  "collisionTris": 54708,
   "bytes": {
    "lod0": 1413560,
    "lod1": 564856,
-   "collision": 261140,
-   "backdrop": 153176,
+   "collision": 282764,
+   "backdrop": 274160,
    "materials": {
     "high": 3132772,
     "low": 239936

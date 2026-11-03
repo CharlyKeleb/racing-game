@@ -53,7 +53,8 @@ export default {
   keepUvs: R('ATLAS_2'),
 
   collisionError: { road: 0.03, ground: 0.15, barrier: 0.1, terrain: 0.5 },
-  terrainError: 1,
+  /** The backdrop is also the terrain's collision (build-track.mjs), so it's kept fine enough to drive against. */
+  terrainError: 0.4,
 
   sceneryMargin: 350,
   /** The circuit asphalt's box, not the access roads running a kilometre north and south-east. */
