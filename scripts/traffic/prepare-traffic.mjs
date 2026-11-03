@@ -1,9 +1,10 @@
 // Turns a downloaded Sketchfab car (glTF folder or .glb) into a traffic GLB for StreetLife:
-// every node's transform baked, nose turned to +Z, scaled to `length` metres, centred on x/z
-// with the wheels on y = 0, one mesh per material, simplified to about `triangles`, textures
+// every node's transform baked, nose turned to +Z, kept to scale (or scaled to `--length` metres), centred on x/z
+// with the wheels on y = 0, materials matching `--drop` removed (interiors: a draw call nobody sees
+// from outside), one mesh per material, simplified to about `triangles`, textures
 // shrunk to WebP and meshopt-compressed. No wheel rig: traffic cars don't steer or spin wheels.
 //
-// usage: node scripts/traffic/prepare-traffic.mjs <scene.gltf|.glb> <out.glb> [--rotate 0|90|180|270] [--length 4.4] [--triangles 6000] [--texture 1024]
+// usage: node scripts/traffic/prepare-traffic.mjs <scene.gltf|.glb> <out.glb> [--rotate 0|90|180|270] [--length m] [--triangles 6000] [--texture 1024] [--drop regex]
 import { statSync } from 'node:fs'
 import { NodeIO } from '@gltf-transform/core'
 import { ALL_EXTENSIONS } from '@gltf-transform/extensions'
@@ -17,7 +18,9 @@ const flag = (name, fallback) => {
   const i = flags.indexOf(`--${name}`)
   return i >= 0 ? Number(flags[i + 1]) : fallback
 }
-const rotate = flag('rotate', 0), length = flag('length', 4.4), targetTriangles = flag('triangles', 6000), textureSize = flag('texture', 1024)
+const dropIndex = flags.indexOf('--drop')
+const drop = dropIndex >= 0 ? new RegExp(flags[dropIndex + 1], 'i') : null
+const rotate = flag('rotate', 0), length = flag('length', 0), targetTriangles = flag('triangles', 6000), textureSize = flag('texture', 1024)
 
 await Promise.all([MeshoptEncoder.ready, MeshoptDecoder.ready, MeshoptSimplifier.ready])
 const io = new NodeIO().registerExtensions(ALL_EXTENSIONS).registerDependencies({ 'meshopt.encoder': MeshoptEncoder, 'meshopt.decoder': MeshoptDecoder })
@@ -34,6 +37,8 @@ const turn = (deg) => {
   const a = (deg * Math.PI) / 180, c = Math.cos(a), s = Math.sin(a)
   return [c, 0, -s, 0, 0, 1, 0, 0, s, 0, c, 0, 0, 0, 0, 1]
 }
+
+if (drop) for (const mesh of root.listMeshes()) for (const p of mesh.listPrimitives()) if (drop.test(p.getMaterial()?.getName() ?? '')) p.dispose()
 
 // ── 1. Bake each mesh node's world transform (a mesh shared by nodes is copied per node) ──
 const baked = new Set()
@@ -56,7 +61,7 @@ scene.addChild(holder)
 
 // ── 2. Scale to `length` along Z, centre on x/z, wheels on the ground ──
 let [min, max] = [getBounds(scene).min, getBounds(scene).max]
-const scale = length / (max[2] - min[2])
+const scale = length > 0 ? length / (max[2] - min[2]) : 1
 const cx = (min[0] + max[0]) / 2, cz = (min[2] + max[2]) / 2
 const place = [scale, 0, 0, 0, 0, scale, 0, 0, 0, 0, scale, 0, -cx * scale, -min[1] * scale, -cz * scale, 1]
 for (const node of holder.listChildren()) transformMesh(node.getMesh(), place)

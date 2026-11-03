@@ -186,6 +186,20 @@ At runtime, `Showroom` lights only the car: an environment map baked from the
 room itself, a key light, two rims, a contact shadow and a warm floor pool.
 Medium and High add a radially faded floor reflection.
 
+## Traffic cars
+
+Free Roam's street traffic (`src/world/StreetLife.ts`) wears the GLBs in `public/models/traffic/`,
+listed in `src/world/trafficModels.ts`. A traffic car has no wheel rig: it's one mesh per
+material, nose +Z, wheels on y = 0, to scale; its collision box is fitted to its bounds at load.
+
+```
+node scripts/traffic/prepare-traffic.mjs source.glb public/models/traffic/<id>.glb --rotate 270 --triangles 6000 --drop Interior
+node scripts/traffic/prepare-traffic.mjs source.glb public/models/traffic/<id>_low.glb --rotate 270 --triangles 2500 --texture 512 --drop 'Interior|Numberplates|Carbadges'
+```
+
+`--rotate` turns the nose to +Z (check it in the game). Each material is a draw call per model, so
+Low uses only the first two models, as `_low` files, and turns their shadows off.
+
 ## Licensing
 
 A free download is **not** automatically licensed for redistribution in a

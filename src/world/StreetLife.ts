@@ -148,14 +148,28 @@ export class StreetLife {
   }
 
   /** Swaps the placeholder boxes for real car models, dealt round-robin across the traffic. Geometry and materials are borrowed, not owned. */
-  setTrafficModels(models: TrafficModel[]): void {
+  setTrafficModels(models: TrafficModel[], shadows = true): void {
     if (this.disposed || !this.civilians.length || !models.length) return
     this.removeCarMeshes(true)
+    // Each car's collision box fits its model: the set runs from a 3.1 m city car to a 5.3 m taxi.
+    const box = new THREE.Box3(), part = new THREE.Box3()
+    const sizes = models.map((parts) => {
+      box.makeEmpty()
+      for (const p of parts) {
+        p.geometry.boundingBox ?? p.geometry.computeBoundingBox()
+        box.union(part.copy(p.geometry.boundingBox!))
+      }
+      return { half: { x: (box.max.x - box.min.x) / 2, y: (box.max.y - box.min.y) / 2, z: (box.max.z - box.min.z) / 2 }, centre: box.getCenter(new THREE.Vector3()) }
+    })
     const counts = models.map(() => 0)
     for (let k = 0; k < this.civilians.length; k++) {
       const c = this.civilians[k]
       c.model = k % models.length
       c.slot = counts[c.model]++
+      const { half, centre } = sizes[c.model]
+      if (!(half.x > 0.3 && half.y > 0.3 && half.z > 0.8)) continue
+      c.collider.setHalfExtents(half)
+      c.collider.setTranslationWrtParent(centre)
     }
     this.carModels = models.map((parts, i) => parts.map((p) => {
       const mesh = new THREE.InstancedMesh(p.geometry, p.material, counts[i])
@@ -163,6 +177,7 @@ export class StreetLife {
       return mesh
     }))
     this.addCarMeshes()
+    for (const meshes of this.carModels) for (const m of meshes) m.castShadow = shadows
   }
 
   private addCarMeshes(): void {

@@ -80,7 +80,7 @@ import { measureRoadEdges } from '../world/SurfaceMap'
 import { addSafetyWalls } from '../world/SafetyWallBody'
 import { Showroom } from '../world/Showroom'
 import { StreetLife, type TrafficModel } from '../world/StreetLife'
-import { TRAFFIC_MODEL_IDS, toTrafficModel, trafficModelUrl } from '../world/trafficModels'
+import { LOW_TRAFFIC_MODELS, TRAFFIC_MODEL_IDS, toTrafficModel, trafficModelUrl } from '../world/trafficModels'
 import { StreamedTrack } from '../world/StreamedTrack'
 import { Track } from '../world/Track'
 import { getTrack } from '../world/tracks'
@@ -702,27 +702,39 @@ export class Game {
    */
   private setUpStreetLife(traffic: boolean): void {
     if (!STREET_TRACKS.has(this.track.id)) return
-    if (this.streetLife && this.streetLifeTraffic !== traffic) { this.streetLife.dispose(); this.streetLife = null }
+    // Low gets two light traffic models without shadows, not five: each full one costs seven draw
+    // calls and 6k triangles a car, and Low keeps to ~150 calls and ~200k triangles a frame.
+    const low = gameStore.getState().settings.quality === 'low'
+    if (this.streetLife && (this.streetLifeTraffic !== traffic || this.streetLifeLow !== low)) { this.streetLife.dispose(); this.streetLife = null }
     if (!this.streetLife) {
       this.streetLife = new StreetLife(this.physics.world, this.track.line, this.roadEdges, (x, y, z) => this.physics.groundHeight(x, y, z, (c) => this.track.isRoadCollider(c)), { traffic })
       this.streetLifeTraffic = traffic
+      this.streetLifeLow = low
       this.renderer.scene.add(this.streetLife.group)
       if (traffic) {
         const life = this.streetLife
-        void this.loadTrafficModels().then((models) => { if (this.streetLife === life) life.setTrafficModels(models) })
+        void this.loadTrafficModels(low).then((models) => { if (this.streetLife === life) life.setTrafficModels(models, !low) })
       }
     }
     this.streetLife.reset(this.progress.index)
   }
   private streetLifeTraffic = false
+  private streetLifeLow = false
 
-  /** The civilian car models, loaded once; a model that fails to load is left out (box cars if all do). */
-  private loadTrafficModels(): Promise<TrafficModel[]> {
-    this.trafficModels ??= Promise.all(TRAFFIC_MODEL_IDS.map((id) => this.assets.loadModel(trafficModelUrl(id)).then(toTrafficModel, () => null)))
-      .then((models) => models.filter((m): m is TrafficModel => m !== null && m.length > 0))
-    return this.trafficModels
+  /** The civilian car models for this quality, each loaded once; one that fails to load is left out (box cars if all do). */
+  private async loadTrafficModels(low: boolean): Promise<TrafficModel[]> {
+    const models = await Promise.all(TRAFFIC_MODEL_IDS.slice(0, low ? LOW_TRAFFIC_MODELS : undefined).map((id) => {
+      const url = trafficModelUrl(id, low)
+      let model = this.trafficModels.get(url)
+      if (!model) {
+        model = this.assets.loadModel(url).then(toTrafficModel, () => null)
+        this.trafficModels.set(url, model)
+      }
+      return model
+    }))
+    return models.filter((m): m is TrafficModel => m !== null && m.length > 0)
   }
-  private trafficModels: Promise<TrafficModel[]> | null = null
+  private readonly trafficModels = new Map<string, Promise<TrafficModel | null>>()
 
   /** Invisible walls where the track's collision floor ends, so a car can't drop off the world (see SafetyWalls). */
   private buildSafetyWalls(): void {
