@@ -3,8 +3,8 @@
  * the game already writes, copied key for key. Pure apart from the Storage
  * passed in, so the merge rules are unit tested.
  *
- * Synced: settings, per-car builds, build presets, Time Trial bests and drift
- * records. Device settings (quality, renderer, post FX, motion blur) stay on
+ * Synced: settings, per-car builds, build presets, the wallet (coins and owned
+ * cars), Time Trial bests and drift records. Device settings (quality, renderer, post FX, motion blur) stay on
  * the device: a phone shouldn't pick up a desktop's High preset.
  */
 
@@ -18,7 +18,8 @@ export interface SaveSnapshot {
 
 const PREFIX = 'racing-game:'
 const SETTINGS_KEY = `${PREFIX}settings`
-const WHOLE_KEYS = new Set([SETTINGS_KEY, `${PREFIX}builds`, `${PREFIX}presets`])
+const WALLET_KEY = `${PREFIX}wallet`
+const WHOLE_KEYS = new Set([SETTINGS_KEY, `${PREFIX}builds`, `${PREFIX}presets`, WALLET_KEY])
 const TRIAL_PREFIX = `${PREFIX}trial:`
 const DRIFT_PREFIX = `${PREFIX}drift:`
 export const DEVICE_SETTINGS = ['quality', 'renderer', 'postfx', 'motionBlur'] as const
@@ -94,6 +95,7 @@ function mergeEntry(key: string, local: string, cloud: string): string {
   if (key.startsWith(DRIFT_PREFIX)) return driftScore(local) > driftScore(cloud) ? local : cloud
   if (key === `${PREFIX}builds`) return mergeObjects(local, cloud, (_mine, theirs) => theirs)
   if (key === `${PREFIX}presets`) return mergeObjects(local, cloud, mergePresetLists)
+  if (key === WALLET_KEY) return mergeWallets(local, cloud)
   return cloud
 }
 
@@ -131,6 +133,23 @@ function mergePresetLists(mine: unknown, theirs: unknown): unknown {
   if (!Array.isArray(mine)) return theirs
   const ids = new Set(theirs.map((p: { id?: unknown }) => p?.id))
   return [...theirs, ...mine.filter((p: { id?: unknown }) => !ids.has(p?.id))]
+}
+
+/**
+ * The cloud's coins (taking the larger would hand back coins spent on another device), every car
+ * either side owns, and the better lap per track.
+ */
+function mergeWallets(local: string, cloud: string): string {
+  const mine = parse(local), theirs = parse(cloud)
+  if (!isRecord(theirs)) return local
+  if (!isRecord(mine)) return cloud
+  const owned = [...new Set([...(Array.isArray(theirs.owned) ? theirs.owned : []), ...(Array.isArray(mine.owned) ? mine.owned : [])])]
+  const bestLaps: Record<string, unknown> = { ...(isRecord(mine.bestLaps) ? mine.bestLaps : {}) }
+  if (isRecord(theirs.bestLaps)) for (const [track, ms] of Object.entries(theirs.bestLaps)) {
+    const other = bestLaps[track]
+    if (typeof ms === 'number' && (typeof other !== 'number' || ms < other)) bestLaps[track] = ms
+  }
+  return JSON.stringify({ ...theirs, owned, bestLaps })
 }
 
 function isRecord(v: unknown): v is Record<string, unknown> {

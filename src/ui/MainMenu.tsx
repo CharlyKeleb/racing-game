@@ -1,8 +1,10 @@
+import { carPrice } from '../racing/Economy'
+import { walletStore } from '../stores/walletStore'
 import { lobbyStore } from '../multiplayer/lobbyStore'
 import { driftEvent } from '../racing/driftEvents'
 import { AccountButton, AccountDialog } from './Account'
 import { accountStore } from '../stores/accountStore'
-import { GiCheckeredFlag, GiStopwatch, GiRaceCar, GiRoad, GiHomeGarage, GiGears, GiSteeringWheel, GiPathDistance, GiPodium } from 'react-icons/gi'
+import { GiCheckeredFlag, GiStopwatch, GiRaceCar, GiRoad, GiHomeGarage, GiGears, GiSteeringWheel, GiPathDistance, GiPodium, GiCoins } from 'react-icons/gi'
 import { lazy, Suspense, useEffect, useState, type ComponentType } from 'react'
 import { buildStats, carClass, DEFAULT_BUILD, performanceRank } from '../vehicles/CarBuild'
 import { getCar, selectableCars } from '../vehicles/carRegistry'
@@ -10,7 +12,7 @@ import { GAME_MODES, gameMode, type GameModeId } from '../racing/gameModes'
 import { formatTime } from '../racing/LapTimer'
 import { readTrialRecord, trialBuildKey } from '../racing/TimeTrial'
 import { useGameInstance } from './GameContext'
-import { useGame } from './hooks'
+import { useGame, useWallet } from './hooks'
 import { CarLoadBar, CarPicker } from './CarPicker'
 import { ClassBadge, StatBar } from './kit'
 import { OrbitLayer } from './OrbitLayer'
@@ -123,6 +125,7 @@ export function MainMenu() {
           ))}
           <kbd className="hub-key" aria-hidden="true">E</kbd>
         </nav>
+        <CoinBalance />
         <AccountButton onOpen={() => setDialog('account')} />
       </header>
 
@@ -160,6 +163,12 @@ export function MainMenu() {
   )
 }
 
+/** Coins in the header; pulses when a race pays out. */
+function CoinBalance() {
+  const coins = useWallet((s) => s.coins)
+  return <div className="hub-coins" aria-label={`${coins.toLocaleString()} coins`} title="Coins: earn them racing, spend them on cars"><GiCoins aria-hidden="true" /><b key={coins}>{coins.toLocaleString()}</b></div>
+}
+
 const START_LABELS: Record<GameModeId, string> = { quick: 'Race', timeTrial: 'Start trial', drift: 'Start drifting', freeRoam: 'Drive' }
 const MODE_ICONS = { quick: GiCheckeredFlag, timeTrial: GiStopwatch, drift: GiRaceCar, freeRoam: GiRoad }
 
@@ -189,6 +198,11 @@ function PlayMosaic({ onSetup, onTracks, onOnline }: { onSetup(): void; onTracks
   const preview = trackPreviews[settings.track as keyof typeof trackPreviews]
   const personalBest = settings.mode === 'timeTrial' ? readTrialRecord(settings.track, settings.car, trialBuildKey(build))?.lapMs ?? null : null
   const conditions = `${TIME_PRESETS[settings.timeOfDay].label}${settings.weather === 'rain' ? ' · Rain' : ''}`
+  const coins = useWallet((s) => s.coins)
+  const owned = useWallet((s) => s.owns(settings.car))
+  const price = carPrice(settings.car)
+  // Free Roam is the test drive: any car, no pay.
+  const locked = !owned && settings.mode !== 'freeRoam'
   return (
     <div className="hub-mosaic">
       <article className={`hub-hero hub-mode--${mode.id}`}>
@@ -200,10 +214,15 @@ function PlayMosaic({ onSetup, onTracks, onOnline }: { onSetup(): void; onTracks
             <b>{trackName}</b>
             <span>{trackSwitching ? `Loading · ${Math.round(progress * 100)}%` : `${preview?.lengthKm ?? '—'} km · ${setupLabel(settings.mode, settings.driftEvent, settings.laps, personalBest)} · ${conditions}`}</span>
           </p>
-          <button className="hub-go" disabled={switching} onClick={() => game?.startRace()} autoFocus>
-            <span><GiCheckeredFlag aria-hidden="true" /> {START_LABELS[settings.mode]}</span>
-            <kbd aria-hidden="true">Enter</kbd>
-          </button>
+          {locked
+            ? <button className="hub-go hub-go--buy" disabled={switching || coins < price} onClick={() => walletStore.getState().buy(settings.car)} autoFocus>
+                <span><GiCoins aria-hidden="true" /> {coins < price ? `Locked · ${price.toLocaleString()} coins` : `Buy · ${price.toLocaleString()} coins`}</span>
+                <small>{coins < price ? `${(price - coins).toLocaleString()} more to go · test drive it in Free Roam` : 'Yours to race, for good'}</small>
+              </button>
+            : <button className="hub-go" disabled={switching} onClick={() => game?.startRace()} autoFocus>
+                <span><GiCheckeredFlag aria-hidden="true" /> {START_LABELS[settings.mode]}</span>
+                <kbd aria-hidden="true">Enter</kbd>
+              </button>}
         </div>
       </article>
 
@@ -249,6 +268,7 @@ function CarList() {
   const update = useGame((s) => s.updateSettings)
   const switching = useGame((s) => s.carSwitching || s.trackSwitching)
   const builds = useGame((s) => s.builds)
+  const owned = useWallet((s) => s.owned)
   return (
     <div className="hub-cars" role="radiogroup" aria-label="Cars">
       {selectableCars().map((car) => {
@@ -260,6 +280,9 @@ function CarList() {
             <span className="hub-carrow__name">{car.name}<small>{car.specs.drivetrain} · {car.specs.weightKg.toLocaleString()} kg</small></span>
             <span className="hub-carrow__num"><b>{car.specs.powerHp}</b> hp</span>
             <span className="hub-carrow__num"><b>{car.specs.topSpeedKmh}</b> km/h</span>
+            <span className={`hub-carrow__price${carPrice(car.id) === 0 || owned.includes(car.id) ? ' is-owned' : ''}`}>
+              {carPrice(car.id) === 0 || owned.includes(car.id) ? 'Owned' : <><GiCoins aria-hidden="true" /> {carPrice(car.id).toLocaleString()}</>}
+            </span>
           </button>
         )
       })}

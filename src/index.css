@@ -1736,3 +1736,25 @@ html, body { overscroll-behavior: none; }
   .lb__you { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { .lb-skeleton { animation: none; } }
+
+/* Coins: header balance, locked-car buy button, car list prices, results payout. */
+.hub-coins { display: flex; align-items: center; gap: 6px; margin-left: auto; margin-right: 12px; padding: 6px 12px; border-radius: 999px; background: rgba(10, 14, 20, 0.7); border: 1px solid rgba(255, 200, 60, 0.45); color: #ffd25a; font-weight: 800; letter-spacing: 0.04em; }
+.hub-coins svg { width: 18px; height: 18px; }
+.hub-coins b { animation: coin-pop 0.5s ease-out; }
+@keyframes coin-pop { from { transform: scale(1.35); color: #fff; } }
+.hub-go--buy { flex-direction: column; align-items: flex-start; gap: 4px; background: linear-gradient(135deg, #3a2a05, #7a5a0c); border-color: #ffd25a; color: #fff3cf; }
+.hub-go--buy small { font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: none; opacity: 0.85; }
+.hub-carrow__price { display: inline-flex; align-items: center; gap: 4px; min-width: 76px; justify-content: flex-end; color: #ffd25a; font-weight: 800; }
+.hub-carrow__price.is-owned { color: var(--muted); font-weight: 600; }
+.payout { margin: 12px 0; padding: 12px 14px; border-radius: 8px; background: rgba(255, 210, 90, 0.08); border: 1px solid rgba(255, 210, 90, 0.35); }
+.payout header, .payout footer { display: flex; align-items: center; gap: 8px; }
+.payout header svg { color: #ffd25a; width: 20px; height: 20px; }
+.payout header b { margin-left: auto; font-size: 24px; color: #ffd25a; }
+.payout ul { list-style: none; margin: 8px 0; padding: 0; display: grid; gap: 4px; }
+.payout li { display: flex; justify-content: space-between; font-size: 14px; }
+.payout li b { color: #ffe39a; }
+.payout footer { justify-content: space-between; border-top: 1px solid rgba(255, 210, 90, 0.25); padding-top: 8px; font-size: 13px; color: var(--muted); }
+.payout footer b { color: #fff; }
+.payout p { margin: 6px 0; font-size: 13px; color: var(--muted); }
+.payout__cap { color: #ffcf7a !important; }
+@media (prefers-reduced-motion: reduce) { .hub-coins b { animation: none; } }
