@@ -79,7 +79,8 @@ import { Surface } from '../vehicles/Surface'
 import { measureRoadEdges } from '../world/SurfaceMap'
 import { addSafetyWalls } from '../world/SafetyWallBody'
 import { Showroom } from '../world/Showroom'
-import { StreetLife } from '../world/StreetLife'
+import { StreetLife, type TrafficModel } from '../world/StreetLife'
+import { TRAFFIC_MODEL_IDS, toTrafficModel, trafficModelUrl } from '../world/trafficModels'
 import { StreamedTrack } from '../world/StreamedTrack'
 import { Track } from '../world/Track'
 import { getTrack } from '../world/tracks'
@@ -706,10 +707,22 @@ export class Game {
       this.streetLife = new StreetLife(this.physics.world, this.track.line, this.roadEdges, (x, y, z) => this.physics.groundHeight(x, y, z, (c) => this.track.isRoadCollider(c)), { traffic })
       this.streetLifeTraffic = traffic
       this.renderer.scene.add(this.streetLife.group)
+      if (traffic) {
+        const life = this.streetLife
+        void this.loadTrafficModels().then((models) => { if (this.streetLife === life) life.setTrafficModels(models) })
+      }
     }
     this.streetLife.reset(this.progress.index)
   }
   private streetLifeTraffic = false
+
+  /** The civilian car models, loaded once; a model that fails to load is left out (box cars if all do). */
+  private loadTrafficModels(): Promise<TrafficModel[]> {
+    this.trafficModels ??= Promise.all(TRAFFIC_MODEL_IDS.map((id) => this.assets.loadModel(trafficModelUrl(id)).then(toTrafficModel, () => null)))
+      .then((models) => models.filter((m): m is TrafficModel => m !== null && m.length > 0))
+    return this.trafficModels
+  }
+  private trafficModels: Promise<TrafficModel[]> | null = null
 
   /** Invisible walls where the track's collision floor ends, so a car can't drop off the world (see SafetyWalls). */
   private buildSafetyWalls(): void {
