@@ -40,6 +40,15 @@ export default {
     [156, -10, 184, 11, D('tiezhalan_3')],
   ],
 
+  /** Free Roam drives every street: drop the railings, roadblocks and barrels closing them. */
+  openRoads: { lanes: D(...ROAD), closures: D('tiezhalan_.*', 'luzhang_2', 'tong_1', 'hulang_1') },
+
+  /**
+   * The road edges are lined with 0.5 m kerb walls, guardrails on posts and barrels. A car that
+   * brushes them climbs on and beaches; collide them three times as tall so it glances off.
+   */
+  raiseBarriers: { match: D('qiang_.*', 'hulang_1', 'tong_1', 'tiezhalan_1', 'tiezhalan_4', 'luzhang_2') },
+
   layers: [
     [D('zhibei_.*'), 'veg'],
     [D(...ROAD), 'road'],
