@@ -113,6 +113,24 @@ export class TireSmoke {
     this.pool.spawn(_p)
   }
 
+  /**
+   * A burst off the driven wheels, thrown back as in a burnout: the launch off the line, where the
+   * slip is too brief (and launch control too tidy) for the steady emission to show.
+   * @param strength 0..1, scales the count and the cloud.
+   */
+  puff(wheels: readonly WheelState[], carVelocity: { x: number; y: number; z: number }, forward: { x: number; z: number }, strength: number): void {
+    const burnout = this.burnout
+    this.burnout = strength
+    this.throwX = -forward.x
+    this.throwZ = -forward.z
+    const count = Math.round(14 * strength * this.emission)
+    for (const w of wheels) {
+      if (!w.cfg.driven || !w.grounded || surfaceProps(w.surface).loose !== 0) continue
+      for (let n = 0; n < count; n++) this.spawn(w, carVelocity, 0.6 + 0.4 * strength)
+    }
+    this.burnout = burnout
+  }
+
   clear(): void {
     this.pool.clear()
     for (let i = 0; i < this.emitDebt.length; i++) this.emitDebt[i] = 0
