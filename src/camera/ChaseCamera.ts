@@ -136,9 +136,9 @@ export class ChaseCamera {
     }
   }
 
-  /** The nitro just lit: punch the lens wide for a moment. */
-  ignite(): void {
-    this.punch = 1
+  /** The nitro just lit (or a launch got away): punch the lens wide for a moment, `strength` 0..1. */
+  ignite(strength = 1): void {
+    this.punch = Math.max(this.punch, strength)
   }
 
   private time = 0

@@ -426,25 +426,113 @@ export class AudioManager {
     })
   }
 
-  /** Start gantry: a short tone per red light, a long high one at lights out. */
+  /**
+   * Start gantry: a short beep per red light with a low relay clunk under it, and at lights out
+   * a long bright tone over a fifth with a swell of air (the field launching).
+   */
   playStartLight(go: boolean): void {
     const ctx = this.ctx
     if (!ctx || this.paused) return
-    const t = ctx.currentTime, length = go ? 0.7 : 0.16
-    const tone = ctx.createOscillator()
-    tone.type = 'square'
-    tone.frequency.value = go ? 1320 : 660
+    const t = ctx.currentTime, length = go ? 0.9 : 0.2
+    const out = ctx.createGain()
+    out.gain.setValueAtTime(0.0001, t)
+    out.gain.exponentialRampToValueAtTime(go ? 0.2 : 0.17, t + 0.006)
+    out.gain.setValueAtTime(go ? 0.2 : 0.17, t + length * 0.35)
+    out.gain.exponentialRampToValueAtTime(0.0001, t + length)
     const soften = ctx.createBiquadFilter()
     soften.type = 'lowpass'
-    soften.frequency.value = 2600
-    const gain = ctx.createGain()
+    soften.frequency.value = go ? 4200 : 3000
+    soften.connect(out).connect(this.master)
+    // A square for the gantry's bite, a detuned triangle for body; at lights out a fifth above.
+    const tones: [OscillatorType, number, number][] = go
+      ? [['square', 1320, 0.5], ['triangle', 1323, 0.8], ['triangle', 1980, 0.35]]
+      : [['square', 660, 0.55], ['triangle', 662, 0.8]]
+    for (const [type, hz, level] of tones) {
+      const tone = ctx.createOscillator(), gain = ctx.createGain()
+      tone.type = type
+      tone.frequency.value = hz
+      gain.gain.value = level
+      tone.connect(gain).connect(soften)
+      tone.onended = () => { tone.disconnect(); gain.disconnect() }
+      tone.start(t)
+      tone.stop(t + length + 0.02)
+    }
+    setTimeout(() => { soften.disconnect(); out.disconnect() }, (length + 0.2) * 1000)
+    // The relay: a short low thump as each light snaps on.
+    const thump = ctx.createOscillator(), thumpGain = ctx.createGain()
+    thump.type = 'sine'
+    thump.frequency.setValueAtTime(go ? 140 : 110, t)
+    thump.frequency.exponentialRampToValueAtTime(45, t + 0.12)
+    thumpGain.gain.setValueAtTime(0.0001, t)
+    thumpGain.gain.exponentialRampToValueAtTime(go ? 0.3 : 0.2, t + 0.004)
+    thumpGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.16)
+    thump.connect(thumpGain).connect(this.master)
+    thump.onended = () => { thump.disconnect(); thumpGain.disconnect() }
+    thump.start(t)
+    thump.stop(t + 0.18)
+    if (go) this.playAirSwell(t, 1.1, 0.1)
+  }
+
+  /**
+   * Off the line: a perfect launch gets a rising rush of air and a bright two-note sting, a good
+   * one a softer rush; a bog-down a low dull thud, a jump start a flat buzz.
+   */
+  playLaunch(grade: 'perfect' | 'good' | 'poor' | 'early'): void {
+    const ctx = this.ctx
+    if (!ctx || this.paused) return
+    const t = ctx.currentTime
+    if (grade === 'perfect' || grade === 'good') {
+      this.playAirSwell(t, grade === 'perfect' ? 1.2 : 0.8, grade === 'perfect' ? 0.16 : 0.09)
+      const notes = grade === 'perfect' ? [880, 1318.5] : [880]
+      notes.forEach((hz, i) => {
+        const at = t + i * 0.09
+        const tone = ctx.createOscillator(), gain = ctx.createGain()
+        tone.type = 'sine'
+        tone.frequency.value = hz
+        gain.gain.setValueAtTime(0.0001, at)
+        gain.gain.exponentialRampToValueAtTime(0.1, at + 0.01)
+        gain.gain.exponentialRampToValueAtTime(0.0001, at + 0.45)
+        tone.connect(gain).connect(this.master)
+        tone.onended = () => { tone.disconnect(); gain.disconnect() }
+        tone.start(at)
+        tone.stop(at + 0.5)
+      })
+      return
+    }
+    const tone = ctx.createOscillator(), gain = ctx.createGain(), filter = ctx.createBiquadFilter()
+    tone.type = grade === 'early' ? 'sawtooth' : 'sine'
+    tone.frequency.setValueAtTime(grade === 'early' ? 150 : 90, t)
+    if (grade === 'poor') tone.frequency.exponentialRampToValueAtTime(40, t + 0.3)
+    filter.type = 'lowpass'
+    filter.frequency.value = grade === 'early' ? 900 : 400
     gain.gain.setValueAtTime(0.0001, t)
-    gain.gain.exponentialRampToValueAtTime(0.22, t + 0.008)
-    gain.gain.setValueAtTime(0.22, t + length - 0.05)
-    gain.gain.exponentialRampToValueAtTime(0.0001, t + length)
-    tone.connect(soften).connect(gain).connect(this.master)
+    gain.gain.exponentialRampToValueAtTime(grade === 'early' ? 0.08 : 0.25, t + 0.01)
+    gain.gain.setValueAtTime(grade === 'early' ? 0.08 : 0.25, t + (grade === 'early' ? 0.28 : 0.05))
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + (grade === 'early' ? 0.36 : 0.35))
+    tone.connect(filter).connect(gain).connect(this.master)
+    tone.onended = () => { tone.disconnect(); filter.disconnect(); gain.disconnect() }
     tone.start(t)
-    tone.stop(t + length + 0.02)
+    tone.stop(t + 0.4)
+  }
+
+  /** A band of noise swelling up and away over `length` seconds: a car (or the field) launching. */
+  private playAirSwell(t: number, length: number, level: number): void {
+    const ctx = this.ctx
+    if (!ctx) return
+    const src = this.noiseSource(ctx)
+    const band = ctx.createBiquadFilter(), gain = ctx.createGain()
+    band.type = 'bandpass'
+    band.Q.value = 0.9
+    band.frequency.setValueAtTime(250, t)
+    band.frequency.exponentialRampToValueAtTime(2400, t + length * 0.4)
+    band.frequency.exponentialRampToValueAtTime(700, t + length)
+    gain.gain.setValueAtTime(0.0001, t)
+    gain.gain.exponentialRampToValueAtTime(level, t + length * 0.3)
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + length)
+    src.connect(band).connect(gain).connect(this.master)
+    src.onended = () => { src.disconnect(); band.disconnect(); gain.disconnect() }
+    src.start(t)
+    src.stop(t + length + 0.05)
   }
 
   /** Menu soundtrack selection and on/off; safe before unlock, applied when the graph exists. */

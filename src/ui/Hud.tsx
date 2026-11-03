@@ -217,7 +217,7 @@ const LAUNCH_CALLS: Record<string, string> = { perfect: 'Perfect launch', good: 
 
 /** Grid rev band + how-to during the countdown, then the launch grade at lights-out (#91). */
 function HudLaunch() {
-  const t = useTelemetry(useShallow(s => ({ armed: s.launchArmed, flash: s.launchFlash, grade: s.launchGrade, high: s.launchBandHigh, low: s.launchBandLow, revs: s.launchRevs })))
+  const t = useTelemetry(useShallow(s => ({ armed: s.launchArmed, flash: s.launchFlash, grade: s.launchGrade, high: s.launchBandHigh, low: s.launchBandLow, revs: s.launchRevs, reaction: s.launchReaction })))
   const phase = useGame(s => s.phase)
   const assist = useGame(s => s.settings.launchAssist)
   const inBand = t.revs >= t.low && t.revs <= t.high
@@ -226,6 +226,7 @@ function HudLaunch() {
       <div className={`launch-cue${t.armed ? ' is-armed' : ''}${inBand ? ' is-in-band' : ''}`}>
         {!assist && (
           <div className="launch-cue__meter" role="meter" aria-label="Launch revs" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(t.revs * 100)}>
+            <span className="launch-cue__fill" style={{ width: `${Math.min(1, Math.max(0, t.revs)) * 100}%` }} />
             <span className="launch-cue__band" style={{ left: `${t.low * 100}%`, width: `${(t.high - t.low) * 100}%` }} />
             <span className="launch-cue__needle" style={{ left: `${Math.min(1, Math.max(0, t.revs)) * 100}%` }} />
           </div>
@@ -239,7 +240,13 @@ function HudLaunch() {
     )
   }
   if (phase === 'racing' && t.flash && LAUNCH_CALLS[t.grade]) {
-    return <div className={`hud-nitro-call launch-call launch-call--${t.grade}`}>{LAUNCH_CALLS[t.grade]}</div>
+    return <>
+      {(t.grade === 'perfect' || t.grade === 'good') && <div className={`launch-flash launch-flash--${t.grade}`} aria-hidden />}
+      <div className={`hud-nitro-call launch-call launch-call--${t.grade}`} role="status">
+        {LAUNCH_CALLS[t.grade]}
+        {t.reaction >= 0 && <small className="launch-call__reaction">Reaction {t.reaction.toFixed(3)} s</small>}
+      </div>
+    </>
   }
   return null
 }

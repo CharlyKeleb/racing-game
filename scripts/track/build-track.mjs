@@ -847,7 +847,10 @@ if (terrainPrims.length) {
   for (const pr of terrainPrims) usedMaterials.add(pr.mat)
   addMesh(doc, `terrain__${terrainPrims[0].mat}`, g, terrainPrims[0].mat, new Map())
   backdropBytes = await writeDoc(doc, 'backdrop.glb')
-  const col = simplify(weld(gather(parts, false), 'pos'), cfg.collisionError.terrain)
+  // Collide with exactly the terrain that's drawn. Simplified on its own (a different weld and
+  // error), the collision hillside stood up to ~1.5 m proud of the visible one on Canyon Dam:
+  // cars ran wide into slopes they couldn't see, and a respawn could sit inside a drawn hill.
+  const col = { pos: g.pos, idx: g.idx }
   collisionParts.push({ name: 'terrain__backdrop', g: col })
   totals.col += col.idx.length / 3
   log(`backdrop ${(g.idx.length / 3).toLocaleString()} tris, ${(backdropBytes / 1e3).toFixed(0)} KB`)

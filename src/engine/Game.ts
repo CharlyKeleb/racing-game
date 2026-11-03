@@ -56,7 +56,7 @@ import { DrivingEffects } from '../effects/DrivingEffects'
 import { Headlights } from '../effects/Headlights'
 import { TrackProgress } from '../racing/TrackProgress'
 import { InputManager, type InputState } from '../input/InputManager'
-import { LaunchControl } from '../racing/LaunchControl'
+import { LaunchControl, type LaunchGrade } from '../racing/LaunchControl'
 import { RaceCallouts } from '../racing/RaceCallouts'
 import { COUNTDOWN_SEC, RaceManager, START_LIGHTS, startLightsLit } from '../racing/RaceManager'
 import { draftingStrength } from '../racing/Drafting'
@@ -330,6 +330,8 @@ export class Game {
   private introCueAt = 0
   /** Start lights already announced this countdown. */
   private lightsShown = 0
+  /** The launch grade's sound, smoke and camera punch have played (once per start). */
+  private launchCued = false
   private showroomYaw = 0.9
   /** Orbit state: camera height above the car's focus, zoom factor, flick momentum. */
   private showroomHeight = ORBIT_REST_HEIGHT
@@ -978,6 +980,7 @@ export class Game {
     this.playerRevs.reset(this.vehicle.config.engine.idleRpm)
     this.launch.setConfig(this.vehicle.config.launch)
     this.launch.reset()
+    this.launchCued = false
     this.introCueAt = 0
     this.lightsShown = 0
     this.updateShowroom('intro')
@@ -1998,6 +2001,7 @@ export class Game {
       this.lightsShown = 0
       this.audio.playStartLight(true)
     }
+    if (!this.launchCued && this.launch.grade !== 'none' && this.launch.sinceGrade < LAUNCH_FLASH_SEC) this.cueLaunch(this.launch.grade)
     this.driftZones?.update(this.vehicle.position.x,this.vehicle.position.z,gameStore.getState().settings.mode === 'drift' && ['racing','countdown','intro','paused'].includes(phase),(this.race.lastCheckpoint+1)%this.track.checkpoints.length)
     this.environment.follow(this.vehicle.position)
     if (--this.carReflectionsIn <= 0) this.syncCarReflections(phase)
@@ -2394,6 +2398,17 @@ export class Game {
     wallet.award(raceReward(result))
   }
 
+  /** The launch grade, felt: a sound for every grade; tyre smoke and a lens punch for a clean getaway. */
+  private cueLaunch(grade: Exclude<LaunchGrade, 'none'>): void {
+    this.launchCued = true
+    this.audio.playLaunch(grade)
+    if (grade === 'early') return
+    const strength = grade === 'perfect' ? 1 : grade === 'good' ? 0.65 : 0.3
+    this.effects.launch(this.vehicle, strength)
+    if (grade === 'poor') this.camera.jolt(0.35)
+    else this.camera.ignite(strength)
+  }
+
   private finishDriftRun(): void {
     this.driftChallenge.bank()
     const {track,driftEvent:event}=gameStore.getState().settings
@@ -2478,6 +2493,7 @@ export class Game {
       launchBandHigh: this.vehicle.config.launch.bandHigh,
       launchArmed: this.launch.armed,
       launchGrade: this.launch.grade,
+      launchReaction: this.launch.reaction,
       launchFlash: this.launch.sinceGrade < LAUNCH_FLASH_SEC,
       fps: this.fps,
       carX: this.vehicle.position.x,
