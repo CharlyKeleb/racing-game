@@ -139,6 +139,14 @@ if (cfg.openRoads) {
   log(`open roads: ${dropped.toLocaleString()} closure tris dropped`)
 }
 
+// cfg.restyle { match, prefix }: re-skin plain box buildings as Haussmann blocks (restyle.mjs).
+if (cfg.restyle) {
+  const { restyleBuildings } = await import('./restyle.mjs')
+  const r = await restyleBuildings(src, prims, cfg.restyle)
+  for (const pr of prims) pr.layer ??= layerOf(pr.mat)
+  log(`restyle: ${r.buildings} buildings, ${r.tris.toLocaleString()} tris`)
+}
+
 // ── 2. Locate the start line and verify checkpoints sit on the road ────────
 function heightAt(x, z, layers, matRe = null) {
   let best = null
@@ -777,6 +785,8 @@ const srcMaterialByName = new Map(src.getRoot().listMaterials().map((m) => [m.ge
  */
 async function mergeAsSmallProp(mat, layer, tris) {
   if (!cfg.mergeSmallProps || layer !== 'prop' || tris >= cfg.mergeSmallProps) return false
+  // Restyled buildings tile their textures: a vertex colour would throw the facade away.
+  if (cfg.restyle && mat.startsWith(cfg.restyle.prefix)) return false
   return textureIsOpaque(srcMaterialByName.get(mat)?.getBaseColorTexture())
 }
 
