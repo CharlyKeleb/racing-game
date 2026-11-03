@@ -164,7 +164,7 @@ function readTyres(ctrl: Vehicle['controller'], out: TyreBrakeInput): TyreBrakeI
 /** Seconds of driving against the race direction before the HUD says so. */
 const WRONG_WAY_DELAY = 1.2
 /** Street maps: lamp posts, cones and (in Free Roam) oncoming traffic. */
-const STREET_TRACKS = new Set(['u2city', 'city'])
+const STREET_TRACKS = new Set(['u2city', 'paris'])
 /** How long a Time Trial split / lap call stays on screen, ms of session time. */
 const TRIAL_SPLIT_SHOW_MS = 3000
 /** Garage turntable camera: distance (m) and lens (deg) when there's room. */
@@ -2655,7 +2655,7 @@ export class Game {
       const [x, , z] = w.position
       const wx = spawn.position.x + x * cos + z * sin
       const wz = spawn.position.z - x * sin + z * cos
-      // floorHeight: a canopy over the grid (Station District) is not the floor.
+      // floorHeight: a canopy over the grid is not the floor.
       const h = this.physics.floorHeight(wx, spawn.position.y, wz, (c) => c !== this.showroomPad)
       if (h === null) this.showroomPadStale = true
       else top = Math.max(top, h)

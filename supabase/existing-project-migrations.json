@@ -30,6 +30,11 @@
       "version": "20261102120000",
       "source": "0006_leaderboards.sql",
       "sha256": "0f6ef218a954a75b38de72f7e9231336f067c7497da9db81280641e543ccec1e"
+    },
+    {
+      "version": "20261103160000",
+      "source": "0007_paris_leaderboard.sql",
+      "sha256": "63cd371077626c162cff3f83b04b3e2913fa5b56d7bfe9687653c3b24516f0e4"
     }
   ]
 }

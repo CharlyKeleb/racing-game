@@ -1,7 +1,7 @@
 // Turns a shipped city track into a whole city: a post-build step on the track package (no
 // source GLB needed), run after build-track.mjs and before derive-from-chunks.mjs.
 //
-//   node scripts/track/city-fill.mjs scripts/track/city.config.mjs
+//   node scripts/track/city-fill.mjs scripts/track/u2city.config.mjs
 //
 // City sources are a few streets with nothing around them: side streets end at the edge of the
 // world, there is no ground between the blocks, and game-ripped buildings are walls without

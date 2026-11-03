@@ -201,7 +201,7 @@ materials are just numbers like `11851Mtl`):
   `high` m above the profile within `halfWidth` of the line: deck supports,
   overhangs and low beams the route squeezes past.
 
-The Station District (`scripts/track/city.config.mjs`) uses all of these:
+Bayview Streets (`scripts/track/u2city.config.mjs`) uses most of these:
 its source is a ×32 miniature with anonymous materials, and its back alley
 needed flattening and a cleared channel before a car could get through.
 
@@ -243,7 +243,7 @@ city, from `cfg.cityFill`, without the source GLB. Run it after `build-track.mjs
 `[/^cityfill_/, 'asphalt']` rule):
 
 ```bash
-node scripts/track/city-fill.mjs scripts/track/city.config.mjs && node scripts/track/derive-from-chunks.mjs scripts/track/city.config.mjs
+node scripts/track/city-fill.mjs scripts/track/u2city.config.mjs && node scripts/track/derive-from-chunks.mjs scripts/track/u2city.config.mjs
 ```
 
 - **Ground**: pavement over every hole in the fill area (the chunks' bounds + `margin`), on a
