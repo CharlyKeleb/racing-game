@@ -25,7 +25,9 @@ import { DrivingLine } from '../effects/DrivingLine'
 import { BrakingGuide } from '../racing/BrakingGuide'
 import { performanceCapture } from './PerformanceCapture'
 import { hudCoversPoint } from '../stores/hudLayoutStore'
-import { driftEvent, readDriftRecord, saveDriftRecord } from '../racing/driftEvents'
+import { driftEvent, driftMedal, readDriftRecord, saveDriftRecord } from '../racing/driftEvents'
+import { raceReward, type RaceResult } from '../racing/Economy'
+import { walletStore } from '../stores/walletStore'
 import { DriftZones } from '../effects/DriftZones'
 import { CheckpointGates } from '../effects/CheckpointGates'
 import { TimeTrialSession, readTrialRecord, saveTrialRecord, trialBuildKey } from '../racing/TimeTrial'
@@ -821,6 +823,8 @@ export class Game {
     if (lobbyStore.getState().status === 'connected') void leaveLobby()
     const { settings, carSwitching } = gameStore.getState()
     if (this.disposed || carSwitching || gameStore.getState().trackSwitching || this.raceQueued) return
+    // A car you haven't bought races only in Free Roam (a test drive, which pays nothing).
+    if (settings.mode !== 'freeRoam' && !walletStore.getState().owns(settings.car)) return
     if (!this.trackReady) {
       // Pressed before the track's visuals finished loading behind the menu:
       // show the loading screen, then start. Audio unlocks now, while this is
@@ -1528,6 +1532,7 @@ export class Game {
     this.race.state = 'finished'
     this.finishPosition = 1
     this.finishFieldSize = 1
+    this.payRace()
     gameStore.getState().setPhase('finished')
     this.audio.resume()
     this.publishTelemetry()
@@ -1784,6 +1789,7 @@ export class Game {
       const standings = this.standings.snapshot(this.entries)
       this.finishPosition = standings.find(row => row.player)?.position ?? 1
       this.finishFieldSize = this.entries.length
+      this.payRace()
       this.finishGapMs = this.nearestFinishGap()
       this.finish.start(matchMedia('(prefers-reduced-motion: reduce)').matches)
       // Slide toward whichever side has more room before a wall (a paved pit
@@ -2366,6 +2372,26 @@ export class Game {
     _forward.set(0, 0, 1).applyQuaternion(this.vehicle.quaternion)
     const against = _forward.x * t.x + _forward.z * t.z < -0.4 && this.vehicle.speedKmh > 12
     this.wrongWayTime = against && !this.vehicle.controller.drift.active && gameStore.getState().phase === 'racing' && !this.race.freeRoam ? this.wrongWayTime + dt : 0
+  }
+
+  /** Coins for the race just finished (see Economy): once per race, never in Free Roam. */
+  private payRace(): void {
+    const { mode, track, difficulty, driftEvent: event } = gameStore.getState().settings
+    const wallet = walletStore.getState()
+    let result: RaceResult
+    if (mode === 'quick') {
+      const best = this.race.timer.bestLapMs
+      result = { mode, position: this.finishPosition, field: this.finishFieldSize, laps: this.race.totalLaps, bestLapMs: best, previousBestLapMs: best === null ? null : wallet.recordLap(track, best), difficulty }
+    } else if (mode === 'timeTrial') {
+      // Only valid laps count: a cut lap isn't a record.
+      const best = this.trial.sessionBest?.lapMs ?? null
+      result = { mode, validLaps: this.trial.validLaps, bestLapMs: best, previousBestLapMs: best === null ? null : wallet.recordLap(track, best) }
+    } else if (mode === 'drift') {
+      const score = this.driftChallenge.total
+      const medal = ['Unranked', 'Bronze', 'Silver', 'Gold'].indexOf(driftMedal(score, driftEvent(event).targets)) as 0 | 1 | 2 | 3
+      result = { mode, score, medal }
+    } else return
+    wallet.award(raceReward(result))
   }
 
   private finishDriftRun(): void {

@@ -2,7 +2,9 @@ import { useShallow } from 'zustand/react/shallow'
 import { driftEvent, driftMedal } from '../racing/driftEvents'
 import { formatTime } from '../racing/LapTimer'
 import { useGameInstance } from './GameContext'
-import { useGame, useTelemetry } from './hooks'
+import { GiCoins } from 'react-icons/gi'
+import { DAILY_SOFT_CAP } from '../racing/Economy'
+import { useGame, useTelemetry, useWallet } from './hooks'
 import { Button, Panel } from './kit'
 import { LeaderboardResult } from './LeaderboardResult'
 
@@ -44,6 +46,7 @@ export function Results() {
           <dd className="mono">{formatTime(total)}</dd>
           {!drift && <><dt>Best lap</dt><dd className="mono">{formatTime(best)}</dd></>}
         </dl>
+        <PayoutSummary />
         {drift && <LeaderboardResult mode="drift" />}
         {standings.length > 1 && <ol className="race-standings" aria-label="Race standings">{standings.map(s => <li key={s.id} className={s.player ? 'race-standings__player' : ''}><b>{s.position}</b><span>{s.name}</span><span className="mono">{s.finishMs === null ? 'Racing' : formatTime(s.finishMs)}</span></li>)}</ol>}
         <Button variant="primary" size="lg" onClick={() => game?.startRace()} autoFocus>
@@ -54,6 +57,21 @@ export function Results() {
         </Button>
       </Panel>
     </div>
+  )
+}
+
+/** What the race paid, line by line, and the balance it leaves. */
+function PayoutSummary() {
+  const payout = useWallet((s) => s.lastPayout)
+  const coins = useWallet((s) => s.coins)
+  if (!payout) return null
+  return (
+    <section className="payout" aria-label="Coins earned">
+      <header><GiCoins aria-hidden="true" /><span className="eyebrow">Coins earned</span><b>+{payout.paid.toLocaleString()}</b></header>
+      {payout.lines.length ? <ul>{payout.lines.map((l) => <li key={l.label}><span>{l.label}</span><b>+{l.coins.toLocaleString()}</b></li>)}</ul> : <p>No coins this time. Finish the race to get paid.</p>}
+      {payout.paid < payout.earned && <p className="payout__cap">Past today's {DAILY_SOFT_CAP.toLocaleString()} coins, races pay a quarter. Full pay again tomorrow.</p>}
+      <footer><span>Balance</span><b>{coins.toLocaleString()}</b></footer>
+    </section>
   )
 }
 
@@ -81,6 +99,7 @@ function TrialResults() {
           <dt>Session time</dt>
           <dd className="mono">{formatTime(t.total)}</dd>
         </dl>
+        <PayoutSummary />
         <LeaderboardResult mode="timeTrial" />
         <Button variant="primary" size="lg" onClick={() => game?.startRace()} autoFocus>New session</Button>
         <Button variant="ghost" onClick={() => game?.quitToMenu()}>Main menu</Button>

@@ -6,6 +6,7 @@ import { validateRacer, profileError } from './racerIdentity'
 import type { Session, SupabaseClient } from '@supabase/supabase-js'
 import { accountStore, type Player } from '../stores/accountStore'
 import { gameStore, type GamePhase } from '../stores/gameStore'
+import { walletStore } from '../stores/walletStore'
 import { mergeSnapshots, parseSnapshot, readSnapshot, replaceSnapshot, sameSnapshot, writeSnapshot, type SaveSnapshot } from './saveData'
 
 /**
@@ -220,6 +221,7 @@ export class CloudSave {
         if (next === cloud) replaceSnapshot(localStorage, next)
         else writeSnapshot(localStorage, next)
         gameStore.getState().reloadSaved()
+        walletStore.getState().reloadSaved()
       }
       localStorage.setItem(LAST_PLAYER_KEY, playerId)
     } catch {
