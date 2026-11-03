@@ -66,16 +66,22 @@ export default {
     prop: [0.1, 1],
   },
   weld: { road: 'posnrm', ground: 'posnrm', barrier: 'pos', prop: 'posnrm', decal: 'none' },
-  /** Billboards and signs carry text. */
-  keepUvs: D('guanggao_2', 'jiantou_1'),
+  /** Billboards and signs carry text; restyled facades tile in metres. */
+  keepUvs: D('guanggao_2', 'jiantou_1', 'peilou_haussmann_.*'),
+
+  /**
+   * The source's blocks are plain boxes with 128 px textures. Re-skin them as Haussmann buildings:
+   * shopfronts, limestone floors with balconies, zinc mansards (scripts/track/restyle.mjs).
+   */
+  restyle: { match: D('peilou_.*'), glass: D('boli_.*'), prefix: 'D_peilou_haussmann_' },
 
   collisionError: { road: 0.03, ground: 0.15, barrier: 0.1, terrain: 0.5 },
   terrainError: 1,
 
   sceneryMargin: 350,
   vegKeep: { default: [1, 0.5] },
-  textures: { high: 512, low: 256 },
-  mergeSmallProps: 4000,
+  textures: { high: 1024, low: 512 },
+  mergeSmallProps: 9000,
 
   /** Railings, plant cards, arrows and roadblocks: cut out, never sorted. */
   alpha: [[D('tiezhalan_1', 'tiezhalan_3', 'zhibei_.*', 'luzhang_2', 'jiantou_1'), 'MASK']],

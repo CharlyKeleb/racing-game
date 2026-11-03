@@ -196,6 +196,12 @@ materials are just numbers like `11851Mtl`):
 - `raiseBarriers: { match, factor = 3, below = 0.9 }`: low kerb walls,
   guardrails and barrels collide `factor` times as tall as they look (their
   collision only), so a car glances off instead of climbing on and beaching.
+- `restyle: { match, glass, prefix }`: re-skins plain box buildings
+  (`scripts/track/restyle.mjs`). Each `match` building is cut into a shopfront
+  ground floor, limestone floors with French windows and balconies (cut every
+  two floors) and a zinc mansard; `glass` towers get a curtain wall. Walls get
+  UVs in metres onto two generated textures, so it costs two draw calls a
+  chunk. List the `prefix` materials in `keepUvs` so they aren't welded away.
 - `lineVia` points can carry a third value, `[x, z, snap]`: how far (m, default
   15) the tracer may move them to the middle of the road. Use a small snap to
   hold the line in a narrow street next to a wider area.
@@ -211,7 +217,7 @@ materials are just numbers like `11851Mtl`):
   `high` m above the profile within `halfWidth` of the line: deck supports,
   overhangs and low beams the route squeezes past.
 
-Paris (`scripts/track/paris.config.mjs`) uses the first three. Bayview Streets (`scripts/track/u2city.config.mjs`) uses most of the rest:
+Paris (`scripts/track/paris.config.mjs`) uses the first four. Bayview Streets (`scripts/track/u2city.config.mjs`) uses most of the rest:
 its source is a ×32 miniature with anonymous materials, and its back alley
 needed flattening and a cleared channel before a car could get through.
 
