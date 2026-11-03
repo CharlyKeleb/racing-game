@@ -206,9 +206,9 @@ describe('Arcade drift (NFS / Asphalt)', () => {
   it('holding countersteer ends the drift after counterExitTime', () => {
     const d = new Drift()
     tapWhileTurning(d, 1)
-    run(d, { steer: -0.6 }, DEFAULT_DRIFT.counterExitTime - 0.1, DEFAULT_DRIFT)
+    run(d, { steer: -0.4 }, DEFAULT_DRIFT.counterExitTime - 0.1, DEFAULT_DRIFT)
     expect(d.active).toBe(true)
-    run(d, { steer: -0.6 }, 0.2, DEFAULT_DRIFT)
+    run(d, { steer: -0.4 }, 0.2, DEFAULT_DRIFT)
     expect(d.active).toBe(false)
   })
 
@@ -230,6 +230,24 @@ describe('Arcade drift (NFS / Asphalt)', () => {
     // Holding the new direction keeps it going past the old countersteer exit.
     run(d, { steer: -1, throttle: 1, slipAngle: 0.5 }, DEFAULT_DRIFT.counterExitTime + 0.2, DEFAULT_DRIFT)
     expect(d.active).toBe(true)
+  })
+
+  it('switches direction on part throttle, and at once with the handbrake', () => {
+    const d = new Drift()
+    tapWhileTurning(d, 1)
+    run(d, { steer: -1, throttle: 0.3, slipAngle: 0.5 }, DEFAULT_DRIFT.transitionTime + 0.05, DEFAULT_DRIFT)
+    expect(d.active).toBe(true)
+    expect(d.direction).toBe(-1)
+    d.update({ ...cruise, steer: 1, handbrake: true, slipAngle: 0.5 }, DEFAULT_DRIFT, DT)
+    expect(d.direction).toBe(1)
+  })
+
+  it('full countersteer bends the line the other way', () => {
+    const d = new Drift()
+    tapWhileTurning(d, 1)
+    const g = { angle: 0, pathRate: 0 }
+    // A right-hand drift turns clockwise (negative); full left lock turns the line left.
+    expect(d.guide(-1, 1, 1.2, 0, DEFAULT_DRIFT, g).pathRate).toBeGreaterThan(0)
   })
 
   it('countersteer off the throttle still ends the drift instead of linking', () => {
