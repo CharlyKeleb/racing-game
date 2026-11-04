@@ -44,8 +44,12 @@ export function tiltToSteer(degrees: number, fullLock = TILT_FULL_LOCK, deadzone
 
 type PermissionRequest = () => Promise<'granted' | 'denied' | 'default'>
 
+/** Set once a prompt was accepted: the next race doesn't ask again this session. */
+let granted = false
+
 /** iOS 13+ only hands out orientation after a permission prompt from a tap. */
 export function tiltNeedsPermission(): boolean {
+  if (granted) return false
   const E = typeof window !== 'undefined' ? (window as unknown as { DeviceOrientationEvent?: { requestPermission?: PermissionRequest } }).DeviceOrientationEvent : undefined
   return typeof E?.requestPermission === 'function'
 }
@@ -59,7 +63,8 @@ export async function requestTiltPermission(): Promise<boolean> {
   if (!tiltNeedsPermission()) return tiltSupported()
   try {
     const E = (window as unknown as { DeviceOrientationEvent: { requestPermission: PermissionRequest } }).DeviceOrientationEvent
-    return (await E.requestPermission()) === 'granted'
+    granted = (await E.requestPermission()) === 'granted'
+    return granted
   } catch {
     return false
   }

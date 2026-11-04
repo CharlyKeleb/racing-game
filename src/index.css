@@ -1791,10 +1791,26 @@ html, body { overscroll-behavior: none; }
 .payout__cap { color: #ffcf7a !important; }
 @media (prefers-reduced-motion: reduce) { .hub-coins b { animation: none; } }
 
-/* Phones in landscape (short and narrow): shrink the corner cards so the speed sits clear between them. */
-@media (max-height: 480px) and (max-width: 960px) {
+/*
+ * Phones (short landscape or narrow portrait): a clear top. The speed moves to the bottom centre
+ * (empty in both touch layouts) as just the speed dial; the icons shrink; the FPS readout goes.
+ */
+@media (max-height: 480px), (max-width: 600px) {
   .overlay--touch .hud-tl { transform: scale(0.62); }
-  .overlay--touch .speedo { transform: translateX(50%) scale(0.72); transform-origin: top center; }
-  .overlay--touch .minimap { width: 96px; }
+  .overlay--touch .speedo { top: auto; bottom: max(8px, env(safe-area-inset-bottom)); transform: translateX(50%) scale(0.78); transform-origin: bottom center; }
+  .overlay--touch .gauge--small { display: none; }
+  .overlay--touch .minimap { width: 92px; }
+  .overlay--touch .hud-fps { display: none; }
+  .touch-icon { width: 34px; height: 34px; font-size: 13px; background: rgba(8, 13, 26, 0.35); }
+  .touch-top { gap: 6px; }
+  .overlay--touch .touch-top { right: calc(max(var(--gutter), env(safe-area-inset-right)) + 102px); }
   .touch-tilt-bar .touch-btn--small { width: 60px; height: 40px; font-size: 12px; }
+  .touch-tilt-bar { bottom: calc(max(8px, env(safe-area-inset-bottom)) + 96px); }
+  .touch-hint { bottom: auto; top: 58%; }
+  /* The commentator's card: a slim strip under the lap card, not a third of the screen. */
+  .overlay--touch .narration { top: calc(max(8px, env(safe-area-inset-top)) + 54px); width: min(300px, 44vw); padding: 6px 8px; gap: 8px; background: rgba(5, 9, 16, .78); }
+  .overlay--touch .narration__portrait { width: 34px; height: 40px; }
+  .overlay--touch .narration .eyebrow { font-size: 10px; }
+  .overlay--touch .narration__heading small { display: none; }
+  .overlay--touch .narration p { margin-top: 3px; min-height: 0; font-size: 13px; line-height: 1.15; }
 }
