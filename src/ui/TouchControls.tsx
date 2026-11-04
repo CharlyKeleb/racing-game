@@ -10,7 +10,8 @@ const RELEASED: InputState = { throttle: 0, brake: 0, steer: 0, handbrake: false
 /**
  * On-screen controls for phones and tablets, in one of two layouts (Settings → Touch controls):
  *  - Tilt (default): turn the device like a wheel to steer, the throttle is on, hold the left
- *    half of the screen to brake and the right half for nitro; a small Drift button.
+ *    half of the screen to brake and the right half for nitro. Nothing is drawn over the road:
+ *    a hint shows for a few seconds at the start, and the halves are invisible.
  *  - Pad: drag on the left half to steer; throttle, brake, nitro and drift buttons on the right.
  * Every control captures its own pointer, so several fingers work at once.
  */
@@ -78,23 +79,16 @@ export function TouchControls({ online = false, onlineReset = false }: { online?
 /** Tilt to steer, throttle on, hold left to brake, hold right for nitro. */
 function TiltLayout({ onFail, gears }: { onFail: () => void; gears: ReactNode }) {
   const game = useGameInstance()
-  const [steer, setSteer] = useState(0)
-  const tilt = useRef<TiltSteering | null>(null)
+  const [hint, setHint] = useState(true)
 
   useEffect(() => {
-    let last = 0
-    const t = new TiltSteering((s) => {
-      game?.setTouchInput({ steer: s })
-      // Repaint the indicator at most every other reading.
-      const now = performance.now()
-      if (now - last > 30) { last = now; setSteer(s) }
-    })
-    tilt.current = t
+    const t = new TiltSteering((s) => game?.setTouchInput({ steer: s }))
     t.start()
     game?.setTouchInput({ throttle: 1 })
     // No reading at all (sensor blocked, desktop browser with touch): fall back to the pad.
     const check = window.setTimeout(() => { if (!t.live) onFail() }, 2000)
-    return () => { window.clearTimeout(check); t.stop(); game?.setTouchInput(RELEASED) }
+    const fade = window.setTimeout(() => setHint(false), 4000)
+    return () => { window.clearTimeout(check); window.clearTimeout(fade); t.stop(); game?.setTouchInput(RELEASED) }
   }, [game, onFail])
 
   const brake = (on: boolean) => {
@@ -104,14 +98,8 @@ function TiltLayout({ onFail, gears }: { onFail: () => void; gears: ReactNode })
   return <>
     <Zone side="left" label="Brake" onChange={brake} />
     <Zone side="right" label="Nitro" onChange={(nitro) => game?.setTouchInput({ nitro })} />
-    <div className="touch-tilt-bar" aria-hidden="true">
-      <Hold className="touch-btn touch-btn--small" label="Drift" onChange={(v) => game?.setTouchInput({ handbrake: v })} />
-      <div className="touch-tilt" role="meter" aria-label="Steering" aria-valuemin={-1} aria-valuemax={1} aria-valuenow={Math.round(steer * 100) / 100}>
-        <div className="touch-tilt__needle" style={{ transform: `rotate(${steer * 60}deg)` }} />
-      </div>
-      <button className="touch-btn touch-btn--small" aria-label="Recentre tilt" onPointerDown={() => tilt.current?.recentre()}>Centre</button>
-      {gears}
-    </div>
+    <div className={hint ? 'touch-hint' : 'touch-hint is-gone'} aria-hidden="true">Tilt to steer · hold left to brake · hold right for nitro</div>
+    {gears && <div className="touch-tilt-bar">{gears}</div>}
   </>
 }
 
@@ -129,9 +117,7 @@ function Zone({ side, label, onChange }: { side: 'left' | 'right'; label: string
       onPointerUp={() => set(false)}
       onPointerCancel={() => set(false)}
       onLostPointerCapture={() => set(false)}
-    >
-      <span>{label}</span>
-    </div>
+    />
   )
 }
 
