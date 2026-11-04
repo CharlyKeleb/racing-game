@@ -5,6 +5,7 @@ export const optionHelp: Record<string,string> = {
   'Camera':'Chase follows behind your car. Cockpit places the camera inside the car while driving.',
   'Time of day':'Changes the sky, lighting and visibility during the race. Night also turns on the headlights.',
   'Weather':'Rain brings rainfall, spray thrown up behind every car (it hides the car in front, like real racing in the wet) and an overcast sky with shorter visibility.',
+  'Touch controls':'Phones and tablets. Tilt: turn the device like a steering wheel, the throttle stays on, hold the left half of the screen to brake (and reverse) and the right half for nitro; Centre makes the current angle straight ahead. Pad: drag on the left to steer, with throttle, brake and nitro buttons.',
   'Launch assist':'Off: on the grid, hold handbrake or brake, keep the revs in the green band and let go as the lights go out. A quick release from the band gives a perfect launch. On: hold the throttle and the game gives you a good launch.',
   'Camera movement':'Camera shake at speed, on bumps and on impacts, plus the sway into corners and under acceleration. Off holds the camera steady.',
   'Speed FOV':'Widens the view as you go faster and kicks it out when nitro fires. Off keeps the lens fixed.',

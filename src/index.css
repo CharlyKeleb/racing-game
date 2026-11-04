@@ -626,6 +626,45 @@ html, body { overscroll-behavior: none; }
 .touch-top { position: absolute; top: max(var(--gutter), env(safe-area-inset-top)); right: max(var(--gutter), env(safe-area-inset-right)); display: flex; gap: 10px; }
 .touch-icon { width: 46px; height: 46px; font-size: 18px; color: var(--ink); background: rgba(8, 13, 26, 0.55); border: 1px solid var(--line); border-radius: 0; transform: skewX(var(--skew)); }
 
+/* Tilt layout: the halves of the screen are the brake (left) and nitro (right). */
+.touch--tilt .touch-top, .touch--tilt .touch-tilt-bar, .touch--tilt .touch-enable { z-index: 2; }
+.touch-zone {
+  position: absolute; top: 0; bottom: 0; width: 50%; display: flex; align-items: flex-end; touch-action: none;
+  padding: 0 max(var(--gutter), env(safe-area-inset-left)) max(22px, env(safe-area-inset-bottom));
+  font-weight: 800; font-style: italic; text-transform: uppercase; letter-spacing: 0.08em; font-size: 15px; color: var(--ink);
+  transition: background 0.06s;
+}
+.touch-zone span { padding: 10px 16px; background: rgba(8, 13, 26, 0.45); border: 1px solid var(--line); transform: skewX(var(--skew)); }
+.touch-zone--left { left: 0; justify-content: flex-start; }
+.touch-zone--left span { border-color: rgba(255, 59, 59, 0.55); }
+.touch-zone--left.is-pressed { background: linear-gradient(90deg, rgba(255, 59, 59, 0.22), transparent 70%); }
+.touch-zone--right { right: 0; justify-content: flex-end; padding-left: 0; padding-right: max(var(--gutter), env(safe-area-inset-right)); }
+.touch-zone--right span { border-color: rgba(25, 195, 255, 0.6); }
+.touch-zone--right.is-pressed { background: linear-gradient(270deg, rgba(25, 195, 255, 0.24), transparent 70%); }
+.touch-tilt-bar {
+  position: absolute; left: 50%; bottom: max(14px, env(safe-area-inset-bottom)); transform: translateX(-50%);
+  display: flex; gap: 10px; align-items: flex-end;
+}
+.touch-tilt { position: relative; width: 92px; height: 48px; overflow: hidden; }
+.touch-tilt::before { content: ''; position: absolute; inset: 0 0 -46px; border: 2px solid var(--line); border-radius: 50%; background: rgba(8, 13, 26, 0.45); }
+.touch-tilt__needle { position: absolute; left: calc(50% - 2px); bottom: 0; width: 4px; height: 42px; background: var(--accent, #ffd200); transform-origin: 50% 100%; }
+.touch-enable {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); display: grid; gap: 8px; text-align: center;
+  max-width: min(440px, calc(100vw - 32px)); padding: 18px 22px; color: var(--ink); font-family: var(--font-display);
+  background: rgba(8, 13, 26, 0.85); border: 1px solid var(--accent, #ffd200);
+}
+.touch-enable strong { font-size: 20px; font-style: italic; text-transform: uppercase; letter-spacing: 0.04em; }
+.touch-enable span { font-size: 14px; opacity: 0.8; }
+.touch-rotate { display: none; }
+@media (orientation: portrait) {
+  .touch-tilt-bar { bottom: calc(max(14px, env(safe-area-inset-bottom)) + 64px); }
+  .touch-rotate {
+    display: block; position: absolute; left: 50%; top: 38%; transform: translateX(-50%); z-index: 2; pointer-events: none;
+    padding: 8px 14px; font-size: 14px; font-style: italic; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--ink); background: rgba(8, 13, 26, 0.7); border: 1px solid var(--line);
+  }
+}
+
 /* HUD rearranged around the thumbs: speed top-centre, fps under the buttons. */
 .overlay--touch .speedo { top: max(6px, env(safe-area-inset-top)); bottom: auto; right: 50%; transform: translateX(50%); align-items: center; }
 .overlay--touch .gauge--speed { width: 124px; }
@@ -1758,3 +1797,12 @@ html, body { overscroll-behavior: none; }
 .payout p { margin: 6px 0; font-size: 13px; color: var(--muted); }
 .payout__cap { color: #ffcf7a !important; }
 @media (prefers-reduced-motion: reduce) { .hub-coins b { animation: none; } }
+
+/* Phones in landscape (short and narrow): shrink the corner cards so the speed sits clear between them. */
+@media (max-height: 480px) and (max-width: 960px) {
+  .overlay--touch .hud-tl { transform: scale(0.62); }
+  .overlay--touch .speedo { transform: translateX(50%) scale(0.72); transform-origin: top center; }
+  .overlay--touch .minimap { width: 96px; }
+  .touch-zone span { padding: 8px 12px; font-size: 13px; }
+  .touch-tilt-bar .touch-btn--small { width: 60px; height: 40px; font-size: 12px; }
+}

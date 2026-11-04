@@ -1,25 +1,62 @@
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import type { InputState } from '../input/InputManager'
+import { TiltSteering, requestTiltPermission, tiltNeedsPermission, tiltSupported } from '../input/TiltSteering'
+import { enterLandscapeFullscreen, keepScreenAwake } from '../engine/device'
 import { useGameInstance } from './GameContext'
 import { useGame } from './hooks'
 
 const RELEASED: InputState = { throttle: 0, brake: 0, steer: 0, handbrake: false, nitro: false, lookBack: false }
 
 /**
- * On-screen controls for phones and tablets.
- *  - Left half: analog steering pad — drag left/right of where you touched.
- *  - Right: throttle (big), brake, nitro, handbrake.
- * Every control captures its own pointer, so steering + throttle + nitro work
- * simultaneously with three fingers.
+ * On-screen controls for phones and tablets, in one of two layouts (Settings → Touch controls):
+ *  - Tilt (default): turn the device like a wheel to steer, the throttle is on, hold the left
+ *    half of the screen to brake and the right half for nitro; a small Drift button.
+ *  - Pad: drag on the left half to steer; throttle, brake, nitro and drift buttons on the right.
+ * Every control captures its own pointer, so several fingers work at once.
  */
 export function TouchControls({ online = false, onlineReset = false }: { online?: boolean; onlineReset?: boolean }) {
   const game = useGameInstance()
   const manual = useGame((s) => !online && s.settings.transmission === 'manual')
+  const wanted = useGame((s) => s.settings.touchControls)
+  // Tilt needs the sensor (and, on iOS, a tap to allow it); without either, the pad.
+  const [tilt, setTilt] = useState<'off' | 'ask' | 'on'>(() => wanted !== 'tilt' || !tiltSupported() ? 'off' : tiltNeedsPermission() ? 'ask' : 'on')
+  useEffect(() => { setTilt(wanted !== 'tilt' || !tiltSupported() ? 'off' : tiltNeedsPermission() ? 'ask' : 'on') }, [wanted])
+  const tiltFailed = useCallback(() => setTilt('off'), [])
 
   useEffect(() => () => game?.setTouchInput(RELEASED), [game])
+  useEffect(() => keepScreenAwake(), [])
+
+  const top = (
+    <div className="touch-top">
+      {!online && <><button className="touch-icon" aria-label="Switch camera" onPointerDown={() => game?.triggerAction('camera')}>◉</button>
+        <button className="touch-icon" aria-label="Reset car" onPointerDown={() => game?.triggerAction('reset')}>↺</button></>}
+      {onlineReset && <button className="touch-icon" aria-label="Reset car" onPointerDown={() => game?.triggerAction('reset')}>↺</button>}
+      <button className="touch-icon" aria-label={online ? 'Race menu' : 'Pause'} onPointerDown={() => game?.triggerAction('pause')}>❚❚</button>
+    </div>
+  )
+  const gears = manual && <div className="touch-col touch-col--gears">
+    <button className="touch-btn touch-btn--small" aria-label="Shift up" onPointerDown={() => game?.triggerAction('shiftUp')}>+</button>
+    <button className="touch-btn touch-btn--small" aria-label="Shift down" onPointerDown={() => game?.triggerAction('shiftDown')}>−</button>
+  </div>
+
+  if (tilt !== 'off') return (
+    <div className="touch touch--tilt" onContextMenu={(e) => e.preventDefault()}>
+      {tilt === 'on'
+        ? <TiltLayout onFail={tiltFailed} gears={gears} />
+        : <button className="touch-enable" onClick={() => {
+          void enterLandscapeFullscreen()
+          void requestTiltPermission().then((ok) => setTilt(ok ? 'on' : 'off'))
+        }}>
+          <strong>Tap to enable tilt steering</strong>
+          <span>Turn your phone like a wheel · hold left to brake · hold right for nitro</span>
+        </button>}
+      {top}
+      <div className="touch-rotate" aria-hidden="true">Turn your phone sideways</div>
+    </div>
+  )
 
   return (
-    <div className="touch" onContextMenu={(e) => e.preventDefault()}>
+    <div className="touch" onContextMenu={(e) => e.preventDefault()} onPointerDown={() => void enterLandscapeFullscreen()}>
       <SteerPad onSteer={(steer) => game?.setTouchInput({ steer })} />
       <div className="touch-pedals">
         <div className="touch-col">
@@ -27,30 +64,73 @@ export function TouchControls({ online = false, onlineReset = false }: { online?
           <Hold className="touch-btn touch-btn--small" label="Drift" onChange={(v) => game?.setTouchInput({ handbrake: v })} />
           <Hold className="touch-btn touch-btn--brake" label="Brake" onChange={(v) => game?.setTouchInput({ brake: v ? 1 : 0 })} />
         </div>
-        {manual && <div className="touch-col touch-col--gears">
-          <button className="touch-btn touch-btn--small" aria-label="Shift up" onPointerDown={() => game?.triggerAction('shiftUp')}>+</button>
-          <button className="touch-btn touch-btn--small" aria-label="Shift down" onPointerDown={() => game?.triggerAction('shiftDown')}>−</button>
-        </div>}
+        {gears}
         <div className="touch-col">
           <Hold className="touch-btn touch-btn--nitro" label="N₂O" onChange={(v) => game?.setTouchInput({ nitro: v })} />
           <Hold className="touch-btn touch-btn--gas" label="Gas" onChange={(v) => game?.setTouchInput({ throttle: v ? 1 : 0 })} />
         </div>
       </div>
-      <div className="touch-top">
-        {!online && <><button className="touch-icon" aria-label="Switch camera" onPointerDown={() => game?.triggerAction('camera')}>
-          ◉
-        </button>
-        <button className="touch-icon" aria-label="Reset car" onPointerDown={() => game?.triggerAction('reset')}>
-          ↺
-        </button>
-        </>}
-        {onlineReset && <button className="touch-icon" aria-label="Reset car" onPointerDown={() => game?.triggerAction('reset')}>
-          ↺
-        </button>}
-        <button className="touch-icon" aria-label={online ? 'Race menu' : 'Pause'} onPointerDown={() => game?.triggerAction('pause')}>
-          ❚❚
-        </button>
+      {top}
+    </div>
+  )
+}
+
+/** Tilt to steer, throttle on, hold left to brake, hold right for nitro. */
+function TiltLayout({ onFail, gears }: { onFail: () => void; gears: ReactNode }) {
+  const game = useGameInstance()
+  const [steer, setSteer] = useState(0)
+  const tilt = useRef<TiltSteering | null>(null)
+
+  useEffect(() => {
+    let last = 0
+    const t = new TiltSteering((s) => {
+      game?.setTouchInput({ steer: s })
+      // Repaint the indicator at most every other reading.
+      const now = performance.now()
+      if (now - last > 30) { last = now; setSteer(s) }
+    })
+    tilt.current = t
+    t.start()
+    game?.setTouchInput({ throttle: 1 })
+    // No reading at all (sensor blocked, desktop browser with touch): fall back to the pad.
+    const check = window.setTimeout(() => { if (!t.live) onFail() }, 2000)
+    return () => { window.clearTimeout(check); t.stop(); game?.setTouchInput(RELEASED) }
+  }, [game, onFail])
+
+  const brake = (on: boolean) => {
+    game?.setTouchInput({ brake: on ? 1 : 0, throttle: on ? 0 : 1 })
+  }
+
+  return <>
+    <Zone side="left" label="Brake" onChange={brake} />
+    <Zone side="right" label="Nitro" onChange={(nitro) => game?.setTouchInput({ nitro })} />
+    <div className="touch-tilt-bar" aria-hidden="true">
+      <Hold className="touch-btn touch-btn--small" label="Drift" onChange={(v) => game?.setTouchInput({ handbrake: v })} />
+      <div className="touch-tilt" role="meter" aria-label="Steering" aria-valuemin={-1} aria-valuemax={1} aria-valuenow={Math.round(steer * 100) / 100}>
+        <div className="touch-tilt__needle" style={{ transform: `rotate(${steer * 60}deg)` }} />
       </div>
+      <button className="touch-btn touch-btn--small" aria-label="Recentre tilt" onPointerDown={() => tilt.current?.recentre()}>Centre</button>
+      {gears}
+    </div>
+  </>
+}
+
+/** Half the screen, held: the brake on the left, nitro on the right. */
+function Zone({ side, label, onChange }: { side: 'left' | 'right'; label: string; onChange: (pressed: boolean) => void }) {
+  const [pressed, setPressed] = useState(false)
+  const set = (v: boolean) => { setPressed(v); onChange(v) }
+  return (
+    <div
+      className={`touch-zone touch-zone--${side}${pressed ? ' is-pressed' : ''}`}
+      role="button"
+      aria-label={label}
+      aria-pressed={pressed}
+      onPointerDown={(e) => { capture(e); set(true) }}
+      onPointerUp={() => set(false)}
+      onPointerCancel={() => set(false)}
+      onLostPointerCapture={() => set(false)}
+    >
+      <span>{label}</span>
     </div>
   )
 }
