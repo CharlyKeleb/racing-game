@@ -66,6 +66,7 @@ export function Settings({ onClose }: { onClose?: () => void }) {
           <Segmented<'auto' | 'manual'> help label="Transmission" value={settings.transmission} options={[['auto','Automatic'],['manual','Manual']]} onPick={transmission=>update({transmission})}/>
           <Segmented<'off' | 'corners' | 'full'> help label="Braking guide" value={settings.drivingLine} options={[['off','Off'],['corners','Corners'],['full','Full']]} onPick={drivingLine=>update({drivingLine})}/>
           <Segmented<number> help label="Launch assist" value={settings.launchAssist?1:0} options={[[0,'Off'],[1,'On']]} onPick={v=>update({launchAssist:v===1})}/>
+          <Segmented<'tilt' | 'pad'> help label="Touch controls" value={settings.touchControls} options={[['tilt','Tilt'],['pad','Pad']]} onPick={touchControls=>update({touchControls})}/>
           <p className="settings__help">Camera movement controls extra head motion, shake and view fades. Reduced-motion preference disables these too.</p>
           <SettingChoices<CameraMode> preview={camera=><SettingScene cockpit={camera==='cockpit'}/>} label="Camera" value={settings.camera} options={[[ 'chase','Chase'],['cockpit','Cockpit']]} onPick={camera=>update({camera})}/>
           {settings.camera === 'cockpit' && <CockpitSettings/>}

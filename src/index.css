@@ -626,6 +626,38 @@ html, body { overscroll-behavior: none; }
 .touch-top { position: absolute; top: max(var(--gutter), env(safe-area-inset-top)); right: max(var(--gutter), env(safe-area-inset-right)); display: flex; gap: 10px; }
 .touch-icon { width: 46px; height: 46px; font-size: 18px; color: var(--ink); background: rgba(8, 13, 26, 0.55); border: 1px solid var(--line); border-radius: 0; transform: skewX(var(--skew)); }
 
+/* Tilt layout: the halves of the screen are the brake (left) and nitro (right), invisible. */
+.touch--tilt .touch-top, .touch--tilt .touch-tilt-bar, .touch--tilt .touch-enable { z-index: 2; }
+.touch-zone { position: absolute; top: 0; bottom: 0; width: 50%; touch-action: none; }
+.touch-zone--left { left: 0; }
+.touch-zone--right { right: 0; }
+.touch-tilt-bar {
+  position: absolute; left: 50%; bottom: max(14px, env(safe-area-inset-bottom)); transform: translateX(-50%);
+  display: flex; gap: 10px; align-items: flex-end;
+}
+.touch-hint {
+  position: absolute; left: 50%; bottom: max(18px, env(safe-area-inset-bottom)); transform: translateX(-50%); pointer-events: none;
+  padding: 8px 14px; font-size: 13px; font-style: italic; text-transform: uppercase; letter-spacing: 0.06em; white-space: nowrap;
+  color: var(--ink); background: rgba(8, 13, 26, 0.6); transition: opacity 0.6s;
+}
+.touch-hint.is-gone { opacity: 0; }
+.touch-enable {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); display: grid; gap: 8px; text-align: center;
+  max-width: min(440px, calc(100vw - 32px)); padding: 18px 22px; color: var(--ink); font-family: var(--font-display);
+  background: rgba(8, 13, 26, 0.85); border: 1px solid var(--accent, #ffd200);
+}
+.touch-enable strong { font-size: 20px; font-style: italic; text-transform: uppercase; letter-spacing: 0.04em; }
+.touch-enable span { font-size: 14px; opacity: 0.8; }
+.touch-rotate { display: none; }
+@media (orientation: portrait) {
+  .touch-hint { white-space: normal; width: max-content; max-width: calc(100vw - 32px); text-align: center; }
+  .touch-rotate {
+    display: block; position: absolute; left: 50%; top: 38%; transform: translateX(-50%); z-index: 2; pointer-events: none;
+    padding: 8px 14px; font-size: 14px; font-style: italic; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--ink); background: rgba(8, 13, 26, 0.7); border: 1px solid var(--line);
+  }
+}
+
 /* HUD rearranged around the thumbs: speed top-centre, fps under the buttons. */
 .overlay--touch .speedo { top: max(6px, env(safe-area-inset-top)); bottom: auto; right: 50%; transform: translateX(50%); align-items: center; }
 .overlay--touch .gauge--speed { width: 124px; }
@@ -1758,3 +1790,27 @@ html, body { overscroll-behavior: none; }
 .payout p { margin: 6px 0; font-size: 13px; color: var(--muted); }
 .payout__cap { color: #ffcf7a !important; }
 @media (prefers-reduced-motion: reduce) { .hub-coins b { animation: none; } }
+
+/*
+ * Phones (short landscape or narrow portrait): a clear top. The speed moves to the bottom centre
+ * (empty in both touch layouts) as just the speed dial; the icons shrink; the FPS readout goes.
+ */
+@media (max-height: 480px), (max-width: 600px) {
+  .overlay--touch .hud-tl { transform: scale(0.62); }
+  .overlay--touch .speedo { top: auto; bottom: max(8px, env(safe-area-inset-bottom)); transform: translateX(50%) scale(0.78); transform-origin: bottom center; }
+  .overlay--touch .gauge--small { display: none; }
+  .overlay--touch .minimap { width: 92px; }
+  .overlay--touch .hud-fps { display: none; }
+  .touch-icon { width: 34px; height: 34px; font-size: 13px; background: rgba(8, 13, 26, 0.35); }
+  .touch-top { gap: 6px; }
+  .overlay--touch .touch-top { right: calc(max(var(--gutter), env(safe-area-inset-right)) + 102px); }
+  .touch-tilt-bar .touch-btn--small { width: 60px; height: 40px; font-size: 12px; }
+  .touch-tilt-bar { bottom: calc(max(8px, env(safe-area-inset-bottom)) + 96px); }
+  .touch-hint { bottom: auto; top: 58%; }
+  /* The commentator's card: a slim strip under the lap card, not a third of the screen. */
+  .overlay--touch .narration { top: calc(max(8px, env(safe-area-inset-top)) + 54px); width: min(300px, 44vw); padding: 6px 8px; gap: 8px; background: rgba(5, 9, 16, .78); }
+  .overlay--touch .narration__portrait { width: 34px; height: 40px; }
+  .overlay--touch .narration .eyebrow { font-size: 10px; }
+  .overlay--touch .narration__heading small { display: none; }
+  .overlay--touch .narration p { margin-top: 3px; min-height: 0; font-size: 13px; line-height: 1.15; }
+}
