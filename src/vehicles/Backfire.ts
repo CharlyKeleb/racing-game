@@ -12,6 +12,12 @@ export const CRACKLE = 1
 export const BANG = 2
 export type PopKind = typeof NONE | typeof CRACKLE | typeof BANG
 
+/** Per car (VehicleConfig.backfire): 1 = the default race-car spit. */
+export interface BackfireTuning {
+  overrun: number
+  upshift: number
+}
+
 export interface BackfireInput {
   /** Raw throttle pedal, 0..1. */
   throttle: number
@@ -74,6 +80,11 @@ export class Backfire {
   private lastGear = 1
   private burnoutNext = 0.12
   private seed = 2463534242
+  private readonly tuning: BackfireTuning
+
+  constructor(tuning: BackfireTuning = { overrun: 1, upshift: 1 }) {
+    this.tuning = tuning
+  }
 
   update(dt: number, s: BackfireInput): void {
     this.popped = NONE
@@ -86,9 +97,13 @@ export class Backfire {
     this.sinceHigh = s.throttle >= LIFT_FROM ? 0 : this.sinceHigh + dt
     if (s.throttle <= LIFT_TO && this.sinceHigh <= LIFT_WINDOW && s.revs >= OVERRUN_REVS && s.gear > 0 && this.burst === 0) {
       this.sinceHigh = Infinity
-      this.burst = 2 + Math.floor(this.random() * 4)
-      this.nextBurst = 0.02 + 0.05 * this.random()
-      if (this.random() < 0.35) this.fire(BANG, 0.7 + 0.3 * this.random())
+      // A quiet road exhaust only sometimes pops at all, and briefly; a race exhaust always, and long.
+      const overrun = this.tuning.overrun
+      if (this.random() < Math.min(1, overrun)) {
+        this.burst = Math.max(1, Math.round((2 + Math.floor(this.random() * 4)) * Math.min(1.6, overrun)))
+        this.nextBurst = 0.02 + 0.05 * this.random()
+        if (this.random() < 0.35 * Math.min(1.6, overrun)) this.fire(BANG, 0.7 + 0.3 * this.random())
+      }
     }
     if (this.burst > 0) {
       if (s.throttle > 0.5) this.burst = 0 // back on the power: the crackle stops
@@ -100,7 +115,7 @@ export class Backfire {
     }
 
     // A hard upshift: one big bang as the ignition cuts for the shift.
-    if (s.gear > this.lastGear && this.lastGear > 0 && s.throttle >= LIFT_FROM && s.revs >= UPSHIFT_REVS * 0.85 && this.random() < 0.75) {
+    if (s.gear > this.lastGear && this.lastGear > 0 && s.throttle >= LIFT_FROM && s.revs >= UPSHIFT_REVS * 0.85 && this.random() < Math.min(1, 0.75 * this.tuning.upshift)) {
       this.fire(BANG, 0.75 + 0.25 * this.random())
     }
     this.lastGear = s.gear

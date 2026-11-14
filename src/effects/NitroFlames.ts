@@ -144,6 +144,7 @@ const NO_POP: ExhaustPop = { flash: 0, kind: NONE, strength: 0, count: 0 }
  * no node twin. Nothing is drawn while there's no nitro and no pop.
  */
 export class NitroFlames {
+  private readonly flameScale: number
   readonly group = new THREE.Group()
   private readonly pipes: Pipe[] = []
   private readonly materials: THREE.Material[] = []
@@ -160,6 +161,8 @@ export class NitroFlames {
   static camera: THREE.Camera | null = null
 
   constructor(cfg: VehicleConfig) {
+    // This car's fireball size (VehicleConfig.backfire.flame): a race exhaust's big ball, a road car's lick.
+    this.flameScale = cfg.backfire?.flame ?? 1
     const glowTex = glowTexture()
     this.textures.push(glowTex)
     const glowMat = new THREE.SpriteMaterial({ map: glowTex, color: new THREE.Color(0xd6e4ff).multiplyScalar(1.7), blending: THREE.AdditiveBlending, depthWrite: false, fog: false, toneMapped: false })
@@ -270,7 +273,7 @@ export class NitroFlames {
     const big = pop.kind === BANG
     // Blooms fast, then hangs as it cools; drifts back off the pipe.
     const bloom = 1 - Math.pow(1 - Math.min(1, age * 2.2), 3)
-    const size = (big ? BANG_SIZE : CRACKLE_SIZE) * (0.35 + 0.65 * bloom) * (0.75 + 0.35 * pop.strength) * (1 + 0.12 * ((pop.count + i) % 3))
+    const size = (big ? BANG_SIZE : CRACKLE_SIZE) * this.flameScale * (0.35 + 0.65 * bloom) * (0.75 + 0.35 * pop.strength) * (1 + 0.12 * ((pop.count + i) % 3))
     p.ball.scale.set(size, size * 0.9, 1)
     p.ball.position.set(p.x, p.y + 0.02 * bloom, p.z - 0.05 - size * 0.45 - 0.2 * age)
     p.ballMat.map = this.fireballs[(pop.count * 2 + i) % FIREBALL_VARIANTS]
@@ -279,7 +282,7 @@ export class NitroFlames {
     p.ballMat.opacity = Math.pow(pop.flash, 0.6) * (0.75 + 0.25 * pop.strength)
     // The white flash at the pipe, over in the first third of its life.
     const flash = Math.max(0, 1 - age * 3)
-    const flashSize = (big ? 0.5 : 0.3) * (0.6 + 0.4 * pop.strength)
+    const flashSize = (big ? 0.5 : 0.3) * this.flameScale * (0.6 + 0.4 * pop.strength)
     p.flash.scale.set(flashSize, flashSize * OVAL, 1)
     p.flash.position.set(p.x, p.y, p.z - 0.04)
     p.flashMat.color.copy(fireColor(0, _fire))

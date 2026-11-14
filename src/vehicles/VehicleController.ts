@@ -125,7 +125,7 @@ export class VehicleController {
   /** Brake + full throttle at a standstill: driven tyres spin and smoke while the car is held. */
   readonly burnout = new Burnout()
   /** Exhaust pops and bangs: overrun crackle, hard upshifts, nitro lighting, burnouts. */
-  readonly backfire = new Backfire()
+  readonly backfire: Backfire
   private eventDrift: DriftConfig | null = null
   setDriftMode(enabled: boolean): void {
     this.eventDrift = enabled ? {...this.cfg.drift, minSpeed:9, entryLock:.4, baseAngle:.54, holdAngle:.8, minAngle:.18, exitTime:.55, counterExitTime:.9, scrub:.02, angleScrub:.45, turnInto:1.3} : null
@@ -179,6 +179,7 @@ export class VehicleController {
     this.ghost = ghost
     this.drivetrain = new Drivetrain(cfg.engine)
     this.nitro = new Nitro(cfg.nitro)
+    this.backfire = new Backfire(cfg.backfire)
     const [hx, , hz] = cfg.chassisHalfExtents
     this.yawInertia = (cfg.massKg / 3) * (hx * hx + hz * hz)
     const zs = cfg.wheels.map((w) => w.position[2])

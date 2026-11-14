@@ -147,5 +147,10 @@
   "maxDriftAngle": 0.6,
   "dragCoefficient": 0.42,
   "downforceCoefficient": 1.3,
-  "downforceFrontShare": 0.42
+  "downforceFrontShare": 0.42,
+  "backfire": {
+    "overrun": 0.4,
+    "upshift": 0.3,
+    "flame": 0.55
+  }
 }

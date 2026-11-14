@@ -64,6 +64,7 @@ export const CARS: CarEntry[] = [
     // tight, bright crackle on the overrun.
     voice: {
       pitch: 1, boomHz: 120, boomDb: 5, raspHz: 2600, raspDb: 4.5, drive: 1, airDb: 0.5, sub: 1, turbo: 1, burble: 0,
+      whistle: { lowHz: 2900, highHz: 5600, gain: 0.8 },
       whine: { ratio: 0, gain: 0 },
       pops: { pitch: 1.1, crackle: 1, bang: 0.8, thump: 0.7, toneHz: 9500 },
     },
@@ -91,6 +92,7 @@ export const CARS: CarEntry[] = [
     // whistle and dump, and anti-lag-style bangs.
     voice: {
       pitch: 1, boomHz: 95, boomDb: 6, raspHz: 2000, raspDb: 5.5, drive: 1.2, airDb: 1, sub: 0.9, turbo: 1.8, burble: 0.1,
+      whistle: { lowHz: 2300, highHz: 5000, gain: 1.8 },
       whine: { ratio: 0, gain: 0 },
       pops: { pitch: 0.95, crackle: 1.3, bang: 1.25, thump: 1, toneHz: 7500 },
     },
@@ -295,7 +297,8 @@ export const CARS: CarEntry[] = [
     // 4.0 biturbo hot-V V8 through side pipes: a thick, booming rumble, a soft turbo
     // whoosh and AMG's famous loud crackle and bang on the overrun.
     voice: {
-      pitch: 0.9, boomHz: 105, boomDb: 8.5, raspHz: 2400, raspDb: 3.5, drive: 1.35, airDb: -2, sub: 1.5, turbo: 1.1, burble: 0.45,
+      pitch: 0.9, boomHz: 105, boomDb: 8.5, raspHz: 2400, raspDb: 3.5, drive: 1.35, airDb: -2, sub: 1.5, turbo: 0.9, burble: 0.45,
+      whistle: { lowHz: 1800, highHz: 3400, gain: 0.7 },
       whine: { ratio: 0, gain: 0 },
       pops: { pitch: 0.85, crackle: 1.7, bang: 1.55, thump: 1.4, toneHz: 6400 },
     },
@@ -320,6 +323,7 @@ export const CARS: CarEntry[] = [
     // and a measured crackle.
     voice: {
       pitch: 1.06, boomHz: 120, boomDb: 7, raspHz: 2900, raspDb: 3.5, drive: 1.15, airDb: -1, sub: 1.25, turbo: 1.3, burble: 0.3,
+      whistle: { lowHz: 2500, highHz: 4600, gain: 1.0 },
       whine: { ratio: 0, gain: 0 },
       pops: { pitch: 0.95, crackle: 1.1, bang: 1.1, thump: 1.15, toneHz: 7200 },
     },
@@ -342,7 +346,8 @@ export const CARS: CarEntry[] = [
     // ABT's tuned twin-turbo V8 and sport exhaust: louder and rawer than the RS6 GT, harder
     // driven, more boost, and a sharper, angrier crackle.
     voice: {
-      pitch: 1.13, boomHz: 140, boomDb: 8, raspHz: 2500, raspDb: 5, drive: 1.4, airDb: 0, sub: 1.3, turbo: 1.6, burble: 0.4,
+      pitch: 1.13, boomHz: 140, boomDb: 8, raspHz: 2500, raspDb: 5, drive: 1.4, airDb: 0, sub: 1.3, turbo: 1.6, flutter: 0.35, burble: 0.4,
+      whistle: { lowHz: 2100, highHz: 4200, gain: 1.5 },
       whine: { ratio: 0, gain: 0 },
       pops: { pitch: 1.05, crackle: 1.6, bang: 1.35, thump: 1.0, toneHz: 8200 },
     },
