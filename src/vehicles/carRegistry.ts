@@ -241,11 +241,12 @@ export const CARS: CarEntry[] = [
       tyres: { squealHz: 600, tonal: 0.3, scrubHz: 660 },
       brakes: { hissHz: 3500, squealHz: 0, grind: 0.7, abs: false },
     },
-    // RB26 twin-turbo straight-six, from its own recording: the real howl, and the real
-    // whoosh and "stu-tu-tu-tu" on lift-off (lift-off.mp3). The procedural whistle adds the
-    // spool on boost; the procedural flutter only fills in for lifts below the clip's 4200 rpm.
+    // RB26 twin-turbo straight-six, from its own recording, left as recorded (no added
+    // exhaust colour or overdrive): the real howl, and the real whoosh and "stu-tu-tu-tu" on
+    // lift-off (lift-off.mp3, played loud). A strong procedural whistle and whoosh on boost,
+    // and the procedural flutter on every lift on boost, under the recording's.
     voice: {
-      pitch: 1, boomHz: 125, boomDb: 4, raspHz: 2900, raspDb: 4, drive: 1.05, airDb: 1, sub: 0.8, turbo: 1.4, flutter: 0.45, burble: 0,
+      pitch: 1, boomHz: 125, boomDb: 0.5, raspHz: 2900, raspDb: 0.5, drive: 0.75, airDb: 0, sub: 0.3, turbo: 3.5, flutter: 0.8, liftOff: 2.2, burble: 0,
       whine: { ratio: 0, gain: 0 },
       pops: { pitch: 1.15, crackle: 1.25, bang: 1.05, thump: 0.7, toneHz: 8800 },
     },

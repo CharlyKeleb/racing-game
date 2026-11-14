@@ -33,6 +33,8 @@ export interface EngineVoice {
    * blow-off "pssh". Omitted = 0.
    */
   flutter?: number
+  /** Loudness of the car's lift-off recording (lift-off.mp3), relative to the 911's. Omitted = 1. */
+  liftOff?: number
   /** Crossplane-V8 lope, 0..1: the exhaust pulses unevenly at the half order. */
   burble: number
   /**

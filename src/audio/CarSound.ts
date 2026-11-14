@@ -236,7 +236,7 @@ export class CarSound {
     }
     if (m.shiftUp) this.upshiftAt(t, rpmT)
     if (m.shiftDown) this.downshiftAt(t, rpmT)
-    if (m.liftOff && this.liftOffClip) this.playClip(this.liftOffClip, 0.3 + 0.3 * rpmT, t, v.pitch)
+    if (m.liftOff && this.liftOffClip) this.playClip(this.liftOffClip, (0.3 + 0.3 * rpmT) * (v.liftOff ?? 1), t, v.pitch)
     if (m.nitroStart) this.nitroWhooshAt(t)
     if (m.perfectStart) this.perfectBoomAt(t)
     this.scheduleCrackles(t, m.crackle)
