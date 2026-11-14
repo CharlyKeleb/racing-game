@@ -236,17 +236,18 @@ export const CARS: CarEntry[] = [
     selectable: true,
     stats: { power: 0.66, grip: 0.86, handling: 0.88, braking: 0.82 },
     specs: { powerHp: 615, torqueNm: 640, zeroToHundred: 3.4, topSpeedKmh: 315, drivetrain: 'RWD', weightKg: 1250 },
-    // Race slicks: scrub more than squeal. Big race brakes, no ABS: they grind.
+    // Race slicks: scrub more than squeal. Race brakes: a soft hiss, a little grind.
     noise: {
       tyres: { squealHz: 600, tonal: 0.3, scrubHz: 660 },
-      brakes: { hissHz: 3500, squealHz: 0, grind: 0.7, abs: false },
+      brakes: { hissHz: 3500, squealHz: 0, grind: 0.15, abs: false },
     },
-    // RB26 twin-turbo straight-six, from its own recording, left as recorded (no added
-    // exhaust colour or overdrive): the real howl, and the real whoosh and "stu-tu-tu-tu" on
-    // lift-off (lift-off.mp3, played loud). A strong procedural whistle and whoosh on boost,
-    // and the procedural flutter on every lift on boost, under the recording's.
+    // RB26 twin-turbo straight-six, matched to an NFS Heat Skyline reel: its own recording
+    // looped as recorded (no added colour), a loud single-tone turbo whistle around 2 kHz on
+    // boost, and on every lift or brake on boost a deep, slow "stuuu-stuuu-stuuu" flutter
+    // (plus the recording's own lift-off above 4200 rpm).
     voice: {
-      pitch: 1, boomHz: 125, boomDb: 0.5, raspHz: 2900, raspDb: 0.5, drive: 0.75, airDb: 0, sub: 0.3, turbo: 3.5, flutter: 0.8, liftOff: 2.2, burble: 0,
+      pitch: 1, boomHz: 125, boomDb: 0.5, raspHz: 2900, raspDb: 0.5, drive: 0.75, airDb: 0, sub: 0.3, turbo: 1.6, flutter: 1, liftOff: 2.2, burble: 0,
+      whistle: { lowHz: 1700, highHz: 2400, gain: 5 },
       whine: { ratio: 0, gain: 0 },
       pops: { pitch: 1.15, crackle: 1.25, bang: 1.05, thump: 0.7, toneHz: 8800 },
     },

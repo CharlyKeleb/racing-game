@@ -28,13 +28,19 @@ export interface EngineVoice {
   /** Turbos: whistle, whoosh and blow-off, relative to the 911's twin turbos (0 = naturally aspirated). */
   turbo: number
   /**
-   * Compressor surge, 0..1: lift off on boost and, with no blow-off valve to vent it, the air
-   * chatters back through the turbos, "stu-tu-tu-tu" (an RB26 Skyline). Replaces most of the
-   * blow-off "pssh". Omitted = 0.
+   * Compressor surge, 0..1: lift off (or brake) on boost and, with no blow-off valve to vent it,
+   * the air chatters back through the turbos, a deep "stuuu-stuuu-stuuu" that slows as the boost
+   * drains (an RB26 Skyline). Replaces most of the blow-off "pssh". Omitted = 0.
    */
   flutter?: number
   /** Loudness of the car's lift-off recording (lift-off.mp3), relative to the 911's. Omitted = 1. */
   liftOff?: number
+  /**
+   * The turbo whistle's pitch on boost (Hz, from first boost to full) and its level relative to
+   * the 911's. Omitted = 2600–6800 Hz at the `turbo` level. A big single-tone whistle that cuts
+   * through the engine (an RB26 Skyline) sits lower and much louder.
+   */
+  whistle?: { lowHz: number; highHz: number; gain: number }
   /** Crossplane-V8 lope, 0..1: the exhaust pulses unevenly at the half order. */
   burble: number
   /**

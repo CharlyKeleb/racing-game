@@ -222,8 +222,9 @@ export class CarSound {
     set(this.whine.frequency, (Math.max(m.rpm, 600) / 60) * v.whine.ratio, t, 0.02)
     set(this.whineGain.gain, running * v.whine.gain * (0.25 + 0.75 * on) * (0.3 + 0.7 * rpmT), t, 0.04)
 
-    set(this.whistle.frequency, 2600 + 4200 * m.spool, t, 0.08)
-    set(this.whistleGain.gain, 0.01 * m.spool * m.spool * v.turbo, t, 0.06)
+    const w = v.whistle
+    set(this.whistle.frequency, w ? w.lowHz + (w.highHz - w.lowHz) * m.spool : 2600 + 4200 * m.spool, t, 0.08)
+    set(this.whistleGain.gain, 0.01 * m.spool * m.spool * (w ? w.gain : v.turbo), t, 0.06)
     set(this.whooshGain.gain, 0.03 * m.spool * v.turbo, t, 0.06)
 
     set(this.nitroRushGain.gain, 0.07 * Math.min(s.nitro, 1.6), t, 0.08)
@@ -292,32 +293,32 @@ export class CarSound {
   }
 
   /**
-   * Compressor surge ("stu-tu-tu-tu"): with nowhere to vent, the boost chatters back through
-   * the compressor in quick breathy bursts, each a little lower and further apart as the
-   * pressure drains. More boost, more and louder chatters.
+   * Compressor surge ("stuuu-stuuu-stuuu"): with nowhere to vent, the boost chatters back
+   * through the compressor in deep, breathy surges, about 11 a second slowing to 7 as the
+   * pressure drains over a second or so (measured off an RB26's). More boost, longer and louder.
    */
   private flutterAt(when: number, strength: number): void {
     const ctx = this.ctx
     const s = Math.min(strength, 1.6)
-    const count = Math.round(5 + 6 * Math.min(s, 1.2))
-    let at = when + 0.015
-    let period = 0.05
-    for (let i = 0; i < count; i++) {
-      const fade = (1 - i / count) ** 1.2
+    const span = 0.7 + 0.6 * Math.min(s, 1)
+    let at = when + 0.02
+    let period = 0.085
+    for (let i = 0; at < when + span; i++) {
+      const fade = Math.max(0, 1 - (at - when) / span) ** 0.8
       const src = ctx.createBufferSource()
       src.buffer = this.noise
-      // A breathy, slightly tonal "tu": band-passed noise, its pitch sagging as the pressure drops.
-      const bp = biquad(ctx, 'bandpass', (1450 - 40 * i) * (0.95 + Math.random() * 0.1), 4.5, 0)
-      const body = biquad(ctx, 'peaking', 520, 1.2, 6)
+      // Each surge: a deep rush of air, its body around 150 Hz, its breath around 650 Hz.
+      const bp = biquad(ctx, 'bandpass', (680 - 18 * i) * (0.92 + Math.random() * 0.16), 1.1, 0)
+      const body = biquad(ctx, 'lowshelf', 180, 0.7, 9)
       const env = gain(ctx, 0)
-      const len = period * 0.72
+      const len = period * 0.8
       env.gain.setValueAtTime(0, at)
-      env.gain.linearRampToValueAtTime(0.42 * s * fade, at + 0.004)
+      env.gain.linearRampToValueAtTime(0.75 * s * fade, at + 0.012)
       env.gain.exponentialRampToValueAtTime(0.0001, at + len)
       src.connect(bp).connect(body).connect(env).connect(this.bus)
       src.start(at, Math.random() * 1.5, len + 0.01)
       at += period
-      period *= 1.07
+      period *= 1.06
     }
   }
 

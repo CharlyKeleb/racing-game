@@ -27,6 +27,12 @@ export interface EngineBank {
   /** Firing pulses per crankshaft revolution (flat-six: 3). */
   firingPerRev: number
   layers: EngineBankLayer[]
+  /**
+   * A loop bank (make_engine_loop.py): the whole PCM is one seamless loop recorded at this rpm.
+   * The player's car plays it as recorded, its speed following the rpm; `layers` still lets
+   * rivals play it through GranularEngine.
+   */
+  loop?: { rpm: number }
 }
 
 const MAX_GRAINS = 48

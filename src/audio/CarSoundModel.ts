@@ -39,6 +39,11 @@ const BURBLE_RPM = 4200
 const BURBLE_COOLDOWN = 2
 const LIFTED = 0.15
 const ON_THROTTLE = 0.55
+/**
+ * A lift is the pedal falling below LIFTED within this long of being past ON_THROTTLE. The pedal
+ * the engine gets is ramped, so it takes several frames to fall: never one frame's jump.
+ */
+const LIFT_WINDOW = 0.5
 
 /** Pedal as heard: how fast the engine note follows the throttle on / off, seconds. */
 const PEDAL_ATTACK = 0.06
@@ -84,6 +89,10 @@ export class CarSoundModel {
   perfectStart = false
 
   private prevThrottle = 0
+  /** Seconds since the pedal was last past ON_THROTTLE (a lift has to follow within LIFT_WINDOW). */
+  private sinceOn = Infinity
+  /** Boost when the pedal was last past ON_THROTTLE: what a lift vents. */
+  private spoolAtLift = 0
   private prevGear = 1
   private prevNitro = false
   private prevPerfect = false
@@ -96,16 +105,18 @@ export class CarSoundModel {
   private started = false
 
   update(i: CarSoundInput, dt: number): void {
-    const lifted = this.prevThrottle >= ON_THROTTLE && i.throttle < LIFTED
+    // Lifted: the (ramped) pedal crossed below LIFTED soon after being past ON_THROTTLE.
+    this.sinceOn = i.throttle >= ON_THROTTLE ? 0 : this.sinceOn + dt
+    const lifted = this.prevThrottle >= LIFTED && i.throttle < LIFTED && this.sinceOn <= LIFT_WINDOW
     const rpmT = (i.rpm - CRACKLE_RPM) / (CRACKLE_FULL_RPM - CRACKLE_RPM)
 
     // Turbos build boost under load with lag, and bleed it when you lift.
     const boostRpm = Math.min(1, Math.max(0, (i.rpm - SPOOL_RPM) / (SPOOL_FULL_RPM - SPOOL_RPM)))
     const target = i.throttle * boostRpm
     const tau = target > this.spool ? SPOOL_UP : SPOOL_DOWN
-    const spoolBefore = this.spool
+    if (i.throttle >= ON_THROTTLE) this.spoolAtLift = this.spool
     this.spool += (target - this.spool) * (1 - Math.exp(-dt / tau))
-    this.blowOff = lifted && spoolBefore > 0.4 ? spoolBefore : 0
+    this.blowOff = lifted && this.spoolAtLift > 0.4 ? this.spoolAtLift : 0
 
     // Overrun: unburnt fuel popping in the hot exhaust after a lift.
     if (i.throttle > LIFTED) {
@@ -181,7 +192,8 @@ export class CarSoundModel {
     this.rpm = this.load = this.cut = this.blip = this.pedal = 0
     this.cutLeft = this.blipLeft = this.glideLeft = 0
     this.started = false
-    this.spool = this.crackle = this.blowOff = this.burbleCooldown = 0
+    this.spool = this.crackle = this.blowOff = this.burbleCooldown = this.spoolAtLift = 0
+    this.sinceOn = Infinity
     this.shiftUp = this.shiftDown = this.liftOff = this.nitroStart = this.perfectStart = false
     this.prevThrottle = 0
     this.prevGear = 1
