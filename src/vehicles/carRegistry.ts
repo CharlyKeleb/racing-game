@@ -272,10 +272,11 @@ export const CARS: CarEntry[] = [
       brakes: { hissHz: 4100, squealHz: 2900, grind: 0.1, abs: true },
     },
     // Supercharged 6.2 HEMI V8, from a real Challenger SRT recording left largely as recorded:
-    // its own deep, lumpy rumble, a light supercharger whine over it, heavy thuds.
+    // its own deep, lumpy rumble and heavy thuds, under the blower's high "cat" wail: a smooth
+    // tone climbing from ~700 Hz to ~3 kHz with the revs, loudest on the throttle.
     voice: {
       pitch: 1, boomHz: 70, boomDb: 2.5, raspHz: 1500, raspDb: 1, drive: 1, airDb: 0, sub: 1, turbo: 0, burble: 0.3,
-      whine: { ratio: 10.5, gain: 0.04 },
+      whine: { ratio: 28, gain: 0.16 },
       pops: { pitch: 0.68, crackle: 0.7, bang: 1.65, thump: 1.95, toneHz: 4200 },
     },
   },
