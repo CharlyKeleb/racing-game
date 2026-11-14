@@ -27,10 +27,19 @@ export interface EngineVoice {
   sub: number
   /** Turbos: whistle, whoosh and blow-off, relative to the 911's twin turbos (0 = naturally aspirated). */
   turbo: number
+  /**
+   * Compressor surge, 0..1: lift off on boost and, with no blow-off valve to vent it, the air
+   * chatters back through the turbos, "stu-tu-tu-tu" (an RB26 Skyline). Replaces most of the
+   * blow-off "pssh". Omitted = 0.
+   */
+  flutter?: number
   /** Crossplane-V8 lope, 0..1: the exhaust pulses unevenly at the half order. */
   burble: number
-  /** A tone that follows the crank: a supercharger's whine or straight-cut gears (0 gain = none). */
-  whine: { ratio: number; gain: number }
+  /**
+   * A tone that follows the crank: a supercharger's whine or straight-cut gears (0 gain = none).
+   * `scream`: a bright, buzzy wave for a big blower's shriek (a Hellcat or Demon) instead of a hum.
+   */
+  whine: { ratio: number; gain: number; scream?: boolean }
   /** Exhaust pops and crackles. */
   pops: PopVoice
 }

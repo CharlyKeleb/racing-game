@@ -35,6 +35,11 @@
       "version": "20261103160000",
       "source": "0007_paris_leaderboard.sql",
       "sha256": "63cd371077626c162cff3f83b04b3e2913fa5b56d7bfe9687653c3b24516f0e4"
+    },
+    {
+      "version": "20261114160000",
+      "source": "0008_new_cars_leaderboard.sql",
+      "sha256": "4981949dd92eb72d2fcfc10a9cd1f9f21a624ac47fad7829656d97cddd3b3c55"
     }
   ]
 }

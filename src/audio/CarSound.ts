@@ -152,6 +152,8 @@ export class CarSound {
   /** The car's engine voice (see EngineVoice): its exhaust, character and pops. */
   setVoice(voice: EngineVoice): void {
     this.voice = voice
+    // A supercharger's scream is bright and buzzy; straight-cut gears and gentler blowers hum.
+    this.whine.type = voice.whine.scream ? 'sawtooth' : 'triangle'
     this.boom.frequency.value = voice.boomHz
     this.boom.gain.value = voice.boomDb
     this.raspEq.frequency.value = voice.raspHz
@@ -226,7 +228,12 @@ export class CarSound {
 
     set(this.nitroRushGain.gain, 0.07 * Math.min(s.nitro, 1.6), t, 0.08)
 
-    if (m.blowOff > 0 && v.turbo > 0) this.blowOffAt(t, m.blowOff * Math.min(v.turbo, 1.6))
+    if (m.blowOff > 0 && v.turbo > 0) {
+      const flutter = v.flutter ?? 0
+      const strength = m.blowOff * Math.min(v.turbo, 1.6)
+      if (flutter > 0) this.flutterAt(t, strength * flutter)
+      if (flutter < 1) this.blowOffAt(t, strength * (1 - 0.8 * flutter))
+    }
     if (m.shiftUp) this.upshiftAt(t, rpmT)
     if (m.shiftDown) this.downshiftAt(t, rpmT)
     if (m.liftOff && this.liftOffClip) this.playClip(this.liftOffClip, 0.3 + 0.3 * rpmT, t, v.pitch)
@@ -282,6 +289,36 @@ export class CarSound {
     env.gain.exponentialRampToValueAtTime(0.0001, when + 0.38)
     src.connect(hp).connect(bp).connect(env).connect(this.bus)
     src.start(when, Math.random(), 0.4)
+  }
+
+  /**
+   * Compressor surge ("stu-tu-tu-tu"): with nowhere to vent, the boost chatters back through
+   * the compressor in quick breathy bursts, each a little lower and further apart as the
+   * pressure drains. More boost, more and louder chatters.
+   */
+  private flutterAt(when: number, strength: number): void {
+    const ctx = this.ctx
+    const s = Math.min(strength, 1.6)
+    const count = Math.round(5 + 6 * Math.min(s, 1.2))
+    let at = when + 0.015
+    let period = 0.05
+    for (let i = 0; i < count; i++) {
+      const fade = (1 - i / count) ** 1.2
+      const src = ctx.createBufferSource()
+      src.buffer = this.noise
+      // A breathy, slightly tonal "tu": band-passed noise, its pitch sagging as the pressure drops.
+      const bp = biquad(ctx, 'bandpass', (1450 - 40 * i) * (0.95 + Math.random() * 0.1), 4.5, 0)
+      const body = biquad(ctx, 'peaking', 520, 1.2, 6)
+      const env = gain(ctx, 0)
+      const len = period * 0.72
+      env.gain.setValueAtTime(0, at)
+      env.gain.linearRampToValueAtTime(0.42 * s * fade, at + 0.004)
+      env.gain.exponentialRampToValueAtTime(0.0001, at + len)
+      src.connect(bp).connect(body).connect(env).connect(this.bus)
+      src.start(at, Math.random() * 1.5, len + 0.01)
+      at += period
+      period *= 1.07
+    }
   }
 
   /** Upshift: the model dips the note for the ignition cut; the pipes give one crack. */

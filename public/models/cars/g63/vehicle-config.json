@@ -1,0 +1,154 @@
+{
+  "id": "g63",
+  "name": "Mercedes-AMG G63",
+  "massKg": 2560,
+  "chassisHalfExtents": [
+    1.01,
+    0.52,
+    2.4
+  ],
+  "chassisCenter": [
+    0,
+    0.95,
+    -0.07
+  ],
+  "centerOfMass": [
+    0,
+    0.62,
+    -0.17
+  ],
+  "wheels": [
+    {
+      "id": "FL",
+      "position": [
+        0.836,
+        0.717,
+        1.441
+      ],
+      "radius": 0.397,
+      "width": 0.315,
+      "steered": true,
+      "driven": true,
+      "handbrake": false
+    },
+    {
+      "id": "FR",
+      "position": [
+        -0.836,
+        0.717,
+        1.441
+      ],
+      "radius": 0.397,
+      "width": 0.315,
+      "steered": true,
+      "driven": true,
+      "handbrake": false
+    },
+    {
+      "id": "RL",
+      "position": [
+        0.836,
+        0.717,
+        -1.442
+      ],
+      "radius": 0.395,
+      "width": 0.309,
+      "steered": false,
+      "driven": true,
+      "handbrake": true
+    },
+    {
+      "id": "RR",
+      "position": [
+        -0.836,
+        0.717,
+        -1.442
+      ],
+      "radius": 0.395,
+      "width": 0.309,
+      "steered": false,
+      "driven": true,
+      "handbrake": true
+    }
+  ],
+  "engine": {
+    "idleRpm": 750,
+    "redlineRpm": 6500,
+    "torqueCurve": [
+      [
+        750,
+        420
+      ],
+      [
+        2000,
+        780
+      ],
+      [
+        2500,
+        850
+      ],
+      [
+        3500,
+        850
+      ],
+      [
+        5000,
+        760
+      ],
+      [
+        6000,
+        690
+      ],
+      [
+        6500,
+        610
+      ]
+    ],
+    "gearRatios": [
+      -3.2,
+      5.35,
+      3.24,
+      2.25,
+      1.64,
+      1.21,
+      1.0,
+      0.87,
+      0.72,
+      0.6
+    ],
+    "finalDrive": 3.27,
+    "efficiency": 0.84,
+    "shiftUpRpm": 6200,
+    "shiftDownRpm": 3000,
+    "shiftTimeSec": 0.1
+  },
+  "frontDriveShare": 0.4,
+  "exhausts": [
+    [
+      0.34,
+      0.36,
+      -2.56
+    ],
+    [
+      -0.34,
+      0.36,
+      -2.56
+    ]
+  ],
+  "tires": {
+    "grip": 1.5,
+    "corneringStiffness": 8.5,
+    "shape": 1.65,
+    "handbrakeGripScale": 0.45,
+    "rollingResistance": 0.016,
+    "tractionControl": true
+  },
+  "brakeForce": 42000,
+  "steerFalloffSpeed": 8,
+  "yawStability": 8,
+  "driftAssist": 0.25,
+  "maxDriftAngle": 0.6,
+  "dragCoefficient": 0.62,
+  "downforceCoefficient": 0.2,
+  "downforceFrontShare": 0.5
+}

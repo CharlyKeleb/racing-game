@@ -103,6 +103,12 @@ export const CAR_PRICES: Readonly<Record<string, number>> = {
   diablo: 9000,
   charger: 12000,
   koenigsegg: 30000,
+  g63: 7000,
+  rs6gt: 10000,
+  r33: 11000,
+  rs6r: 14000,
+  gt3rs: 16000,
+  demon: 18000,
 }
 
 export function carPrice(id: string): number {
