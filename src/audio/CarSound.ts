@@ -53,6 +53,11 @@ export class CarSound {
   private readonly air: BiquadFilterNode
   private readonly whine: OscillatorNode
   private readonly whineGain: GainNode
+  /** The whine's pure tone, and its airy bands (a blower's rush) at the fundamental and octave. */
+  private readonly whineTone: GainNode
+  private readonly whineAir: GainNode
+  private readonly whineBand1: BiquadFilterNode
+  private readonly whineBand2: BiquadFilterNode
   private readonly exhaustGain: GainNode
   private readonly sub: OscillatorNode
   private readonly subGain: GainNode
@@ -122,7 +127,23 @@ export class CarSound {
     this.whine = ctx.createOscillator()
     this.whine.type = 'triangle'
     this.whineGain = gain(ctx, 0)
-    this.whine.connect(biquad(ctx, 'highpass', 300, 0.7, 0)).connect(this.whineGain).connect(this.bus)
+    this.whineGain.connect(this.bus)
+    this.whineTone = gain(ctx, 1)
+    this.whine.connect(biquad(ctx, 'highpass', 300, 0.7, 0)).connect(this.whineTone).connect(this.whineGain)
+    // A blower's whine is air, not a beep: noise through narrow bands at the rotor pitch and its octave.
+    const whineNoise = ctx.createBufferSource()
+    whineNoise.buffer = this.noise
+    whineNoise.loop = true
+    this.whineBand1 = biquad(ctx, 'bandpass', 600, 16, 0)
+    this.whineBand2 = biquad(ctx, 'bandpass', 1200, 16, 0)
+    this.whineAir = gain(ctx, 0)
+    const octave = gain(ctx, 0.45)
+    whineNoise.connect(this.whineBand1).connect(this.whineAir)
+    whineNoise.connect(this.whineBand2).connect(octave).connect(this.whineAir)
+    // Narrow bands pass little energy: make it up so `air` 1 matches the tone's loudness.
+    this.whineAir.connect(gain(ctx, 20)).connect(this.whineGain)
+    whineNoise.start()
+    this.sources.push(whineNoise)
 
     // Sub rumble: a flat-six's strong half order (1.5 per rev), felt more than heard.
     this.sub = ctx.createOscillator()
@@ -154,6 +175,9 @@ export class CarSound {
     this.voice = voice
     // A supercharger's scream is bright and buzzy; straight-cut gears and gentler blowers hum.
     this.whine.type = voice.whine.scream ? 'sawtooth' : 'triangle'
+    const air = Math.max(0, Math.min(1, voice.whine.air ?? 0))
+    this.whineTone.gain.value = 1 - air
+    this.whineAir.gain.value = air
     this.boom.frequency.value = voice.boomHz
     this.boom.gain.value = voice.boomDb
     this.raspEq.frequency.value = voice.raspHz
@@ -219,7 +243,10 @@ export class CarSound {
     set(this.lopeLfo.frequency, halfOrder, t, 0.03)
     set(this.lopeDepth.gain, 0.5 * v.burble * (1 - 0.6 * rpmT), t, 0.08)
     set(this.lope.gain, 1 - 0.5 * v.burble * (1 - 0.6 * rpmT), t, 0.08)
-    set(this.whine.frequency, (Math.max(m.rpm, 600) / 60) * v.whine.ratio, t, 0.02)
+    const whineHz = (Math.max(m.rpm, 600) / 60) * v.whine.ratio
+    set(this.whine.frequency, whineHz, t, 0.02)
+    set(this.whineBand1.frequency, Math.max(40, whineHz), t, 0.02)
+    set(this.whineBand2.frequency, Math.max(80, whineHz * 2), t, 0.02)
     set(this.whineGain.gain, running * v.whine.gain * (0.25 + 0.75 * on) * (0.3 + 0.7 * rpmT), t, 0.04)
 
     const w = v.whistle

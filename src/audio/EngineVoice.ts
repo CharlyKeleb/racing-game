@@ -45,9 +45,11 @@ export interface EngineVoice {
   burble: number
   /**
    * A tone that follows the crank: a supercharger's whine or straight-cut gears (0 gain = none).
-   * `scream`: a bright, buzzy wave for a big blower's shriek (a Hellcat or Demon) instead of a hum.
+   * `scream`: a bright, buzzy wave instead of a hum. `air` (0..1): how much of it is rushing air
+   * at the whine's pitch and octave rather than a pure tone; a twin-screw blower is mostly air,
+   * straight-cut gears are pure tone (0, the default).
    */
-  whine: { ratio: number; gain: number; scream?: boolean }
+  whine: { ratio: number; gain: number; scream?: boolean; air?: number }
   /** Exhaust pops and crackles. */
   pops: PopVoice
 }
