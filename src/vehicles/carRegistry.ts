@@ -277,7 +277,7 @@ export const CARS: CarEntry[] = [
     // octave, with a little tone, loudest on the throttle.
     voice: {
       pitch: 1, boomHz: 70, boomDb: 2.5, raspHz: 1500, raspDb: 1, drive: 1, airDb: 0, sub: 1, turbo: 0, burble: 0.3,
-      whine: { ratio: 12, gain: 0.075, air: 0.75 },
+      whine: { ratio: 13.6, gain: 0.07, air: 0.3 },
       pops: { pitch: 0.68, crackle: 0.7, bang: 1.65, thump: 1.95, toneHz: 4200 },
     },
   },
