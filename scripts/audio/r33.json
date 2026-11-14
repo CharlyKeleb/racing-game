@@ -1,5 +1,17 @@
 {
-  "comment": "Nissan Skyline GT-R (RB26 twin-turbo straight-six): 'Amazing Turbo Sound - Nissan GT-R Skyline R34!' re-uploaded to audio.com by david gabarre (see public/audio/r33/CREDITS.md; rights unconfirmed). Its steadiest stretch, looped (make_engine_loop.py).",
+  "comment": "Nissan Skyline GT-R stand-in: editboy23's CC0 'Import car revs on Chassis Dyno with Turbo' (Freesound #496171), a Toyota Supra 2JZ twin-turbo straight-six on a dyno (see public/audio/r33/CREDITS.md). Three firing pulses a revolution.",
   "firingPerRev": 3,
-  "loop": ["r34.wav", 10.15, 10.81, 3950]
+  "segments": [
+    ["idle", "supra.wav", 13.30, 14.60, 1110],
+    ["2200", "supra.wav", 0.60, 0.90, 2220],
+    ["2400", "supra.wav", 2.20, 2.55, 2350],
+    ["2900", "supra.wav", 5.10, 5.32, 2880],
+    ["3250", "supra.wav", 11.70, 12.00, 3240],
+    ["3450", "supra.wav", 8.70, 8.92, 3445],
+    ["4000", "supra.wav", 9.95, 10.30, 4060],
+    ["4200", "supra.wav", 3.90, 4.12, 4180],
+    ["4400", "supra.wav", 6.90, 7.10, 4390],
+    ["5600", "supra.wav", 22.50, 22.70, 5580],
+    ["6400", "supra.wav", 23.10, 23.30, 6390]
+  ]
 }
