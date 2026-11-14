@@ -260,7 +260,8 @@ export const CARS: CarEntry[] = [
     modelUrl: '/models/cars/demon/demon.glb',
     modelUrlLow: '/models/cars/demon/demon_low.glb',
     configUrl: '/models/cars/demon/vehicle-config.json',
-    audioUrl: '/audio/koenigsegg/',
+    // Its own recording: a real Challenger SRT's supercharged HEMI (see public/audio/demon/CREDITS.md).
+    audioUrl: '/audio/demon/',
     firingPerRev: 4,
     selectable: true,
     stats: { power: 0.9, grip: 0.55, handling: 0.5, braking: 0.58 },
@@ -270,11 +271,11 @@ export const CARS: CarEntry[] = [
       tyres: { squealHz: 760, tonal: 0.8, scrubHz: 700 },
       brakes: { hissHz: 4100, squealHz: 2900, grind: 0.1, abs: true },
     },
-    // Supercharged 6.2 Hemi V8: the 2.7 L blower screams over everything (the Hellcat
-    // "cat"), over a deep, lumpy rumble and heavy thuds.
+    // Supercharged 6.2 HEMI V8, from a real Challenger SRT recording left largely as recorded:
+    // its own deep, lumpy rumble, a light supercharger whine over it, heavy thuds.
     voice: {
-      pitch: 0.78, boomHz: 58, boomDb: 9.5, raspHz: 1250, raspDb: 2.5, drive: 1.35, airDb: -2, sub: 1.75, turbo: 0, burble: 0.85,
-      whine: { ratio: 10.5, gain: 0.14, scream: true },
+      pitch: 1, boomHz: 70, boomDb: 2.5, raspHz: 1500, raspDb: 1, drive: 1, airDb: 0, sub: 1, turbo: 0, burble: 0.3,
+      whine: { ratio: 10.5, gain: 0.04 },
       pops: { pitch: 0.68, crackle: 0.7, bang: 1.65, thump: 1.95, toneHz: 4200 },
     },
   },
