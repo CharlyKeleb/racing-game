@@ -1,0 +1,10 @@
+{
+  "comment": "Nissan Skyline GT-R (RB26 twin-turbo straight-six): 'Amazing Turbo Sound - Nissan GT-R Skyline R34!' as re-uploaded to audio.com by david gabarre (see public/audio/r33/CREDITS.md; rights unconfirmed).",
+  "firingPerRev": 3,
+  "segments": [
+    ["low", "r34.wav", 5.15, 5.45, 3440],
+    ["cruise", "r34.wav", 10.15, 10.45, 3940],
+    ["mid", "r34.wav", 7.95, 8.15, 4240],
+    ["high", "r34.wav", 0.92, 1.02, 5250]
+  ]
+}

@@ -230,8 +230,8 @@ export const CARS: CarEntry[] = [
     modelUrl: '/models/cars/r33/r33.glb',
     modelUrlLow: '/models/cars/r33/r33_low.glb',
     configUrl: '/models/cars/r33/vehicle-config.json',
-    // A straight-six: the flat-six recording fires at the same three pulses a revolution.
-    audioUrl: '/audio/porsche911/',
+    // Its own recording: a real RB26 Skyline revving, and its real turbo flutter on lift-off.
+    audioUrl: '/audio/r33/',
     firingPerRev: 3,
     selectable: true,
     stats: { power: 0.66, grip: 0.86, handling: 0.88, braking: 0.82 },
@@ -241,10 +241,11 @@ export const CARS: CarEntry[] = [
       tyres: { squealHz: 600, tonal: 0.3, scrubHz: 660 },
       brakes: { hissHz: 3500, squealHz: 0, grind: 0.7, abs: false },
     },
-    // RB26 twin-turbo straight-six: a smooth, rising howl, big turbo whistle on boost and,
-    // with no blow-off valve, the compressor's "stu-tu-tu-tu" every time you lift.
+    // RB26 twin-turbo straight-six, from its own recording: the real howl, and the real
+    // whoosh and "stu-tu-tu-tu" on lift-off (lift-off.mp3). The procedural whistle adds the
+    // spool on boost; the procedural flutter only fills in for lifts below the clip's 4200 rpm.
     voice: {
-      pitch: 1.08, boomHz: 125, boomDb: 5, raspHz: 2900, raspDb: 5.5, drive: 1.15, airDb: 1.5, sub: 0.9, turbo: 1.8, flutter: 1, burble: 0,
+      pitch: 1, boomHz: 125, boomDb: 4, raspHz: 2900, raspDb: 4, drive: 1.05, airDb: 1, sub: 0.8, turbo: 1.4, flutter: 0.45, burble: 0,
       whine: { ratio: 0, gain: 0 },
       pops: { pitch: 1.15, crackle: 1.25, bang: 1.05, thump: 0.7, toneHz: 8800 },
     },
