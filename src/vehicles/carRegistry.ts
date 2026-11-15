@@ -66,7 +66,7 @@ export const CARS: CarEntry[] = [
       pitch: 1, boomHz: 120, boomDb: 5, raspHz: 2600, raspDb: 4.5, drive: 1, airDb: 0.5, sub: 1, turbo: 1, burble: 0,
       whistle: { lowHz: 2900, highHz: 5600, gain: 0.8 },
       whine: { ratio: 0, gain: 0 },
-      pops: { pitch: 1.1, crackle: 1, bang: 0.8, thump: 0.7, toneHz: 9500 },
+      pops: { style: 'supercar', pitch: 1.1, crackle: 1, bang: 0.8, thump: 0.7, toneHz: 9500 },
     },
   },
   {
@@ -94,7 +94,7 @@ export const CARS: CarEntry[] = [
       pitch: 1, boomHz: 95, boomDb: 6, raspHz: 2000, raspDb: 5.5, drive: 1.2, airDb: 1, sub: 0.9, turbo: 1.8, burble: 0.1,
       whistle: { lowHz: 2300, highHz: 5000, gain: 1.8 },
       whine: { ratio: 0, gain: 0 },
-      pops: { pitch: 0.95, crackle: 1.3, bang: 1.25, thump: 1, toneHz: 7500 },
+      pops: { style: 'supercar', pitch: 0.95, crackle: 1.3, bang: 1.25, thump: 1, toneHz: 7500 },
     },
   },
   {
@@ -122,7 +122,7 @@ export const CARS: CarEntry[] = [
     voice: {
       pitch: 1.12, boomHz: 165, boomDb: 3, raspHz: 3200, raspDb: 7, drive: 1.45, airDb: 3, sub: 0.6, turbo: 0, burble: 0,
       whine: { ratio: 18, gain: 0.035 },
-      pops: { pitch: 1.35, crackle: 1.45, bang: 0.6, thump: 0.4, toneHz: 11500 },
+      pops: { style: 'antilag', pitch: 1.35, crackle: 1.45, bang: 0.6, thump: 0.4, toneHz: 11500 },
     },
   },
   {
@@ -148,7 +148,7 @@ export const CARS: CarEntry[] = [
     voice: {
       pitch: 1.5, boomHz: 140, boomDb: 3, raspHz: 3600, raspDb: 6, drive: 1.1, airDb: 4, sub: 0.5, turbo: 0, burble: 0,
       whine: { ratio: 22, gain: 0.025 },
-      pops: { pitch: 1.2, crackle: 1.1, bang: 0.9, thump: 0.6, toneHz: 10500 },
+      pops: { style: 'supercar', pitch: 1.2, crackle: 1.1, bang: 0.9, thump: 0.6, toneHz: 10500 },
     },
   },
   {
@@ -173,7 +173,7 @@ export const CARS: CarEntry[] = [
     voice: {
       pitch: 0.93, boomHz: 85, boomDb: 8, raspHz: 1800, raspDb: 3, drive: 1.3, airDb: -2, sub: 1.4, turbo: 0, burble: 0.55,
       whine: { ratio: 0, gain: 0 },
-      pops: { pitch: 0.8, crackle: 1, bang: 1.4, thump: 1.5, toneHz: 5500 },
+      pops: { style: 'antilag', pitch: 0.8, crackle: 1, bang: 1.4, thump: 1.5, toneHz: 5500 },
     },
   },
   {
@@ -198,7 +198,7 @@ export const CARS: CarEntry[] = [
     voice: {
       pitch: 0.85, boomHz: 70, boomDb: 9, raspHz: 1500, raspDb: 2, drive: 1.25, airDb: -3, sub: 1.6, turbo: 0, burble: 0.7,
       whine: { ratio: 9, gain: 0.05 },
-      pops: { pitch: 0.7, crackle: 0.8, bang: 1.5, thump: 1.8, toneHz: 4500 },
+      pops: { style: 'muscle', pitch: 0.7, crackle: 0.8, bang: 1.5, thump: 1.8, toneHz: 4500 },
     },
   },
   {
@@ -221,9 +221,9 @@ export const CARS: CarEntry[] = [
     // Naturally aspirated 4.0 flat-six to 9000 rpm: no turbos, a raw metallic shriek that
     // climbs and climbs, a tight bright crackle on the overrun.
     voice: {
-      pitch: 1.22, boomHz: 150, boomDb: 4, raspHz: 3300, raspDb: 6.5, drive: 1.15, airDb: 3, sub: 0.75, turbo: 0, burble: 0,
+      pitch: 1.22, boomHz: 150, boomDb: 4, raspHz: 3300, raspDb: 3.5, drive: 1.05, airDb: 0.5, sub: 0.75, turbo: 0, burble: 0,
       whine: { ratio: 0, gain: 0 },
-      pops: { pitch: 1.3, crackle: 0.9, bang: 0.55, thump: 0.45, toneHz: 11000 },
+      pops: { style: 'supercar', pitch: 1.3, crackle: 0.9, bang: 0.55, thump: 0.45, toneHz: 11000 },
     },
   },
   {
@@ -251,7 +251,7 @@ export const CARS: CarEntry[] = [
       pitch: 1, boomHz: 125, boomDb: 0.5, raspHz: 2900, raspDb: 0.5, drive: 0.75, airDb: 0, sub: 0.3, turbo: 1.6, flutter: 1, liftOff: 2.2, burble: 0,
       whistle: { lowHz: 1700, highHz: 2400, gain: 5 },
       whine: { ratio: 0, gain: 0 },
-      pops: { pitch: 1.15, crackle: 1.25, bang: 1.05, thump: 0.7, toneHz: 8800 },
+      pops: { style: 'antilag', pitch: 1.15, crackle: 1.25, bang: 1.05, thump: 0.7, toneHz: 8800 },
     },
   },
   {
@@ -278,7 +278,7 @@ export const CARS: CarEntry[] = [
     voice: {
       pitch: 1, boomHz: 70, boomDb: 2.5, raspHz: 1500, raspDb: 1, drive: 1, airDb: 0, sub: 1, turbo: 0, burble: 0.3,
       whine: { ratio: 13.6, gain: 0.07, air: 0.3 },
-      pops: { pitch: 0.68, crackle: 0.7, bang: 1.65, thump: 1.95, toneHz: 4200 },
+      pops: { style: 'muscle', pitch: 0.68, crackle: 0.7, bang: 1.65, thump: 1.95, toneHz: 4200 },
     },
   },
   {
@@ -303,32 +303,7 @@ export const CARS: CarEntry[] = [
       pitch: 0.9, boomHz: 105, boomDb: 8.5, raspHz: 2400, raspDb: 3.5, drive: 1.35, airDb: -2, sub: 1.5, turbo: 0.9, burble: 0.45,
       whistle: { lowHz: 1800, highHz: 3400, gain: 0.7 },
       whine: { ratio: 0, gain: 0 },
-      pops: { pitch: 0.85, crackle: 1.7, bang: 1.55, thump: 1.4, toneHz: 6400 },
-    },
-  },
-  {
-    id: 'rs6gt',
-    name: 'Audi RS6 GT Avant',
-    modelUrl: '/models/cars/rs6gt/rs6gt.glb',
-    modelUrlLow: '/models/cars/rs6gt/rs6gt_low.glb',
-    configUrl: '/models/cars/rs6gt/vehicle-config.json',
-    audioUrl: '/audio/koenigsegg/',
-    firingPerRev: 4,
-    selectable: true,
-    stats: { power: 0.74, grip: 0.7, handling: 0.66, braking: 0.72 },
-    specs: { powerHp: 630, torqueNm: 850, zeroToHundred: 3.3, topSpeedKmh: 305, drivetrain: 'AWD', weightKg: 2075 },
-    // Performance road tyres, carbon-ceramic brakes with ABS.
-    noise: {
-      tyres: { squealHz: 1020, tonal: 0.8, scrubHz: 880 },
-      brakes: { hissHz: 4000, squealHz: 0, grind: 0.25, abs: true },
-    },
-    // 4.0 TFSI twin-turbo V8: a smooth, cultured burble, strong turbo whistle and whoosh,
-    // and a measured crackle.
-    voice: {
-      pitch: 1.06, boomHz: 120, boomDb: 7, raspHz: 2900, raspDb: 3.5, drive: 1.15, airDb: -1, sub: 1.25, turbo: 1.3, burble: 0.3,
-      whistle: { lowHz: 2500, highHz: 4600, gain: 1.0 },
-      whine: { ratio: 0, gain: 0 },
-      pops: { pitch: 0.95, crackle: 1.1, bang: 1.1, thump: 1.15, toneHz: 7200 },
+      pops: { style: 'burble', pitch: 0.85, crackle: 1.7, bang: 1.55, thump: 1.4, toneHz: 6400 },
     },
   },
   {
@@ -346,13 +321,13 @@ export const CARS: CarEntry[] = [
       tyres: { squealHz: 980, tonal: 0.75, scrubHz: 860 },
       brakes: { hissHz: 4050, squealHz: 0, grind: 0.25, abs: true },
     },
-    // ABT's tuned twin-turbo V8 and sport exhaust: louder and rawer than the RS6 GT, harder
+    // ABT's tuned twin-turbo V8 and sport exhaust: louder and rawer than a stock RS6, harder
     // driven, more boost, and a sharper, angrier crackle.
     voice: {
       pitch: 1.13, boomHz: 140, boomDb: 8, raspHz: 2500, raspDb: 5, drive: 1.4, airDb: 0, sub: 1.3, turbo: 1.6, flutter: 0.35, burble: 0.4,
       whistle: { lowHz: 2100, highHz: 4200, gain: 1.5 },
       whine: { ratio: 0, gain: 0 },
-      pops: { pitch: 1.05, crackle: 1.6, bang: 1.35, thump: 1.0, toneHz: 8200 },
+      pops: { style: 'burble', pitch: 1.05, crackle: 1.6, bang: 1.35, thump: 1.0, toneHz: 8200 },
     },
   },
   {

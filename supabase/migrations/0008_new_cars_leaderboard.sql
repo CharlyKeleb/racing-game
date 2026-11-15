@@ -1,5 +1,5 @@
--- Six new cars (Porsche 911 GT3 RS, Nissan Skyline R33 LM, Dodge Challenger SRT Demon,
--- Mercedes-AMG G63, Audi RS6 GT Avant, ABT Audi RS6-R): their Time Trial laps are accepted.
+-- Five new cars (Porsche 911 GT3 RS, Nissan Skyline R33 LM, Dodge Challenger SRT Demon,
+-- Mercedes-AMG G63, ABT Audi RS6-R): their Time Trial laps are accepted.
 create or replace function public.submit_leaderboard_scores(entries jsonb)
 returns jsonb language plpgsql security definer set search_path = '' as $$
 declare
@@ -34,7 +34,7 @@ begin
     end if;
     points := (entry->>'score')::integer;
     if is_trial then
-      if coalesce(entry->>'car', '') not in ('porsche911','koenigsegg','bmw','diablo','amg','charger','gt3rs','r33','demon','g63','rs6gt','rs6r')
+      if coalesce(entry->>'car', '') not in ('porsche911','koenigsegg','bmw','diablo','amg','charger','gt3rs','r33','demon','g63','rs6r')
         or coalesce(entry->>'build', '') !~ '^e[0-3]-t(street|sport|race)-s(stock|sport|race)-w[0-2]-b[0-2]$'
         or points not between floor_ms and 3600000 then
         rejected := rejected + 1;

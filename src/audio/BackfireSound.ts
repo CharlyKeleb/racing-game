@@ -1,6 +1,6 @@
 import { BANG, type PopKind } from '../vehicles/Backfire'
 import { makeThumpPCM } from './ImpactPCM'
-import { DEFAULT_VOICE, type PopVoice } from './EngineVoice'
+import { DEFAULT_VOICE, type PopStyle, type PopVoice } from './EngineVoice'
 
 /** Where each recorded pop sits in backfire-bank.wav (scripts/audio/build-backfire-bank.mjs writes it). */
 export interface BackfireBankIndex {
@@ -8,9 +8,14 @@ export interface BackfireBankIndex {
   kinds: { crackle?: { source: string; start: number; length: number }[]; bang?: { source: string; start: number; length: number }[] }
 }
 
+interface Pop {
+  source: string
+  buffer: AudioBuffer
+}
+
 interface Bank {
-  crackle: AudioBuffer[]
-  bang: AudioBuffer[]
+  crackle: Pop[]
+  bang: Pop[]
   /** Low "POOO" under a bang: the recordings are short on body. */
   thump: AudioBuffer
 }
@@ -20,11 +25,11 @@ const banks = new WeakMap<BaseAudioContext, Bank>()
 export function sliceBackfireBank(ctx: BaseAudioContext, decoded: AudioBuffer, index: BackfireBankIndex): Bank {
   const scale = decoded.sampleRate / index.rate
   const data = decoded.getChannelData(0)
-  const cut = (list: { start: number; length: number }[] = []) => list.map(({ start, length }) => {
+  const cut = (list: { source: string; start: number; length: number }[] = []) => list.map(({ source, start, length }) => {
     const from = Math.round(start * scale), n = Math.max(1, Math.min(data.length - from, Math.round(length * scale)))
     const buffer = ctx.createBuffer(1, n, decoded.sampleRate)
     buffer.copyToChannel(data.subarray(from, from + n), 0)
-    return buffer
+    return { source, buffer }
   })
   const pcm = makeThumpPCM(1, ctx.sampleRate)
   const thump = ctx.createBuffer(1, pcm.length, ctx.sampleRate)
@@ -58,6 +63,24 @@ const THUMP_GAIN = 1.1
 const MAX_VOICES = 8
 
 /**
+ * How each pop style is made: which recordings it draws on (by source name in the bank),
+ * how they're pitched (on top of the car's own `pitch`) and levelled, and the darkest its
+ * exhaust tone may be. Bangs on a burble car are soft thuds, not cannon shots.
+ */
+const STYLES: Record<PopStyle, { crackle: string[]; bang: string[]; crackleRate: [number, number]; bangRate: [number, number]; crackleGain: number; bangGain: number; toneMaxHz: number }> = {
+  antilag: { crackle: ['antilag'], bang: ['engine'], crackleRate: [0.95, 1.2], bangRate: [0.95, 1.1], crackleGain: 1, bangGain: 0.8, toneMaxHz: 16000 },
+  supercar: { crackle: ['supercar', 'antilag'], bang: ['engine', 'deep'], crackleRate: [0.9, 1.12], bangRate: [0.86, 1], crackleGain: 1, bangGain: 1, toneMaxHz: 16000 },
+  burble: { crackle: ['supercar', 'antilag'], bang: ['deep'], crackleRate: [0.55, 0.72], bangRate: [0.7, 0.8], crackleGain: 0.7, bangGain: 0.55, toneMaxHz: 2600 },
+  muscle: { crackle: ['supercar'], bang: ['vintage', 'deep'], crackleRate: [0.62, 0.78], bangRate: [0.72, 0.86], crackleGain: 0.8, bangGain: 1.15, toneMaxHz: 5000 },
+}
+
+/** The recordings a style draws on, or all of that kind when the bank has none of them. */
+function pick(list: Pop[], sources: string[]): Pop[] {
+  const mine = list.filter((p) => sources.includes(p.source))
+  return mine.length ? mine : list
+}
+
+/**
  * One car's exhaust pops: the sharp crackle of the overrun and the big "POOO"
  * of a supercar upshift, nitro lighting or a burnout, from real recordings,
  * varied in pitch so a burst never repeats itself, and voiced per car (see
@@ -71,6 +94,8 @@ export class BackfireSound {
   private readonly voices = new Set<AudioBufferSourceNode>()
   private variant = 0
   private voice: PopVoice = DEFAULT_VOICE.pops
+  /** The style's recordings, picked once per bank and voice (not per pop). */
+  private picked: { bank: Bank; crackle: Pop[]; bang: Pop[] } | null = null
 
   constructor(ctx: BaseAudioContext, destination: AudioNode) {
     this.ctx = ctx
@@ -84,7 +109,8 @@ export class BackfireSound {
   /** The car's pops (see EngineVoice.pops). */
   setVoice(voice: PopVoice): void {
     this.voice = voice
-    this.tone.frequency.value = voice.toneHz
+    this.picked = null
+    this.tone.frequency.value = Math.min(voice.toneHz, STYLES[voice.style ?? 'supercar'].toneMaxHz)
   }
 
   /** Level a pop of this kind and strength plays at (before distance), for tests and the engine duck. */
@@ -97,15 +123,19 @@ export class BackfireSound {
   pop(kind: PopKind, strength: number): boolean {
     const bank = banks.get(this.ctx)
     if (!bank || kind === 0 || this.voices.size >= MAX_VOICES) return false
-    const list = kind === BANG ? bank.bang : bank.crackle
+    const v = this.voice
+    const style = STYLES[v.style ?? 'supercar']
+    if (this.picked?.bank !== bank) this.picked = { bank, crackle: pick(bank.crackle, style.crackle), bang: pick(bank.bang, style.bang) }
+    const list = kind === BANG ? this.picked.bang : this.picked.crackle
     if (!list.length) return false
     const at = this.ctx.currentTime
-    const v = this.voice
-    const level = BackfireSound.level(kind, strength) * (kind === BANG ? v.bang : v.crackle)
-    // Bangs a touch deeper, crackles scattered either side, around the car's own pitch.
-    const rate = v.pitch * (kind === BANG ? 0.86 + Math.random() * 0.14 : 0.9 + Math.random() * 0.22)
-    this.play(list[this.variant++ % list.length], rate, level, at)
-    if (kind === BANG) this.play(bank.thump, Math.sqrt(v.pitch) * (0.9 + Math.random() * 0.15), level * THUMP_GAIN * v.thump, at)
+    const bang = kind === BANG
+    const level = BackfireSound.level(kind, strength) * (bang ? v.bang * style.bangGain : v.crackle * style.crackleGain)
+    // Scattered across the style's range, around the car's own pitch, so a burst never repeats.
+    const [lo, hi] = bang ? style.bangRate : style.crackleRate
+    const rate = v.pitch * (lo + Math.random() * (hi - lo))
+    this.play(list[this.variant++ % list.length].buffer, rate, level, at)
+    if (bang) this.play(bank.thump, Math.sqrt(v.pitch) * (0.9 + Math.random() * 0.15), level * THUMP_GAIN * v.thump, at)
     return true
   }
 

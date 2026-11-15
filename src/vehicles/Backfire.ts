@@ -12,10 +12,16 @@ export const CRACKLE = 1
 export const BANG = 2
 export type PopKind = typeof NONE | typeof CRACKLE | typeof BANG
 
-/** Per car (VehicleConfig.backfire): 1 = the default race-car spit. */
+/**
+ * Per car (VehicleConfig.backfire): 1 = the default race-car spit, 0 = a car that doesn't pop
+ * (a quiet road exhaust; nitro still lights a bang). `pace` scales the gaps inside a burst:
+ * under 1 a quick rattle (an AMG V8's burble, an anti-lag race car), over 1 a slow, lazy
+ * "pop... pop" (a big muscle V8). Omitted = 1.
+ */
 export interface BackfireTuning {
   overrun: number
   upshift: number
+  pace?: number
 }
 
 export interface BackfireInput {
@@ -82,8 +88,11 @@ export class Backfire {
   private seed = 2463534242
   private readonly tuning: BackfireTuning
 
+  private readonly pace: number
+
   constructor(tuning: BackfireTuning = { overrun: 1, upshift: 1 }) {
     this.tuning = tuning
+    this.pace = Math.max(0.2, tuning.pace ?? 1)
   }
 
   update(dt: number, s: BackfireInput): void {
@@ -110,7 +119,7 @@ export class Backfire {
       else if ((this.nextBurst -= dt) <= 0) {
         this.fire(CRACKLE, (0.55 + 0.45 * this.random()) * Math.min(1, s.revs / OVERRUN_REVS))
         this.burst--
-        this.nextBurst = 0.06 + 0.1 * this.random()
+        this.nextBurst = (0.06 + 0.1 * this.random()) * this.pace
       }
     }
 
@@ -124,7 +133,7 @@ export class Backfire {
     if (s.nitroLit) this.fire(BANG, 1)
 
     // Burnout: irregular pops and the odd bang while it's really going.
-    if (s.burnout > 0.6 && s.throttle >= 0.6 && (this.burnoutNext -= dt) <= 0) {
+    if (this.tuning.overrun > 0 && s.burnout > 0.6 && s.throttle >= 0.6 && (this.burnoutNext -= dt) <= 0) {
       this.fire(this.random() < 0.3 ? BANG : CRACKLE, 0.6 + 0.4 * this.random())
       this.burnoutNext = 0.12 + 0.43 * this.random()
     }

@@ -12,6 +12,12 @@ export type PaintFinish = 'gloss' | 'metallic' | 'matte' | 'pearl'
 export type Stage = 0 | 1 | 2 | 3
 export type TireCompound = 'street' | 'sport' | 'race'
 export type SuspensionKit = 'stock' | 'sport' | 'race'
+/** Exhaust fitted in the garage: changes the sound, the pops and the flames, not the power. */
+export type ExhaustKit = 'stock' | 'catback' | 'resdelete' | 'xpipe' | 'straight'
+/** Turbo fitted in the garage: changes the whistle and what happens off boost, not the power. */
+export type TurboKit = 'stock' | 'single' | 'twin' | 'flutter' | 'eturbo'
+export const EXHAUST_KITS: readonly ExhaustKit[] = ['stock', 'catback', 'resdelete', 'xpipe', 'straight']
+export const TURBO_KITS: readonly TurboKit[] = ['stock', 'single', 'twin', 'flutter', 'eturbo']
 
 export interface CarBuild {
   spoiler: SpoilerId
@@ -33,6 +39,8 @@ export interface CarBuild {
   /** Weight reduction stage. */
   weight: 0 | 1 | 2
   brakes: 0 | 1 | 2
+  exhaust: ExhaustKit
+  turbo: TurboKit
 }
 
 export const DEFAULT_BUILD: CarBuild = {
@@ -53,6 +61,8 @@ export const DEFAULT_BUILD: CarBuild = {
   suspension: 'stock',
   weight: 0,
   brakes: 0,
+  exhaust: 'stock',
+  turbo: 'stock',
 }
 
 export const PAINT_PRESETS = [
@@ -94,6 +104,20 @@ const SUSPENSION: Record<SuspensionKit, { stiffness: number; damping: number; dr
 }
 const WEIGHT = [1, 0.95, 0.9] as const
 const BRAKES = [1, 1.15, 1.3] as const
+/**
+ * How often the exhaust pops on the overrun and bangs on upshifts, and how big the flames are:
+ * the car's own times `scale`, but at least `floor`, so a louder exhaust makes a car that doesn't
+ * pop from the factory (a Porsche, a Demon) start to.
+ */
+type Fire = { overrun: number; upshift: number; flame: number }
+const EXHAUST_FIRE: Record<ExhaustKit, { scale: Fire; floor: Fire }> = {
+  stock: { scale: { overrun: 1, upshift: 1, flame: 1 }, floor: { overrun: 0, upshift: 0, flame: 0 } },
+  catback: { scale: { overrun: 1.3, upshift: 1.25, flame: 1.1 }, floor: { overrun: 0.35, upshift: 0.25, flame: 0.6 } },
+  resdelete: { scale: { overrun: 1.25, upshift: 1.15, flame: 1.05 }, floor: { overrun: 0.3, upshift: 0.2, flame: 0.6 } },
+  xpipe: { scale: { overrun: 1.1, upshift: 1.1, flame: 1 }, floor: { overrun: 0.2, upshift: 0.15, flame: 0.6 } },
+  straight: { scale: { overrun: 2, upshift: 1.9, flame: 1.4 }, floor: { overrun: 0.9, upshift: 0.7, flame: 0.9 } },
+}
+const fire = (base: number, kit: ExhaustKit, k: keyof Fire) => Math.max(base * EXHAUST_FIRE[kit].scale[k], EXHAUST_FIRE[kit].floor[k])
 
 /** Returns a new config with the build's performance upgrades applied. */
 export function applyCarBuild(base: VehicleConfig, build: CarBuild): VehicleConfig {
@@ -102,6 +126,12 @@ export function applyCarBuild(base: VehicleConfig, build: CarBuild): VehicleConf
   return {
     ...base,
     massKg: base.massKg * WEIGHT[build.weight],
+    backfire: {
+      ...base.backfire,
+      overrun: fire(base.backfire.overrun, build.exhaust, 'overrun'),
+      upshift: fire(base.backfire.upshift, build.exhaust, 'upshift'),
+      flame: fire(base.backfire.flame, build.exhaust, 'flame'),
+    },
     brakeForce: base.brakeForce * BRAKES[build.brakes],
     maxSteerAngle: base.maxSteerAngle * susp.steer,
     engine: {
@@ -129,7 +159,8 @@ export function samePerformance(a: CarBuild, b: CarBuild): boolean {
     a.tires === b.tires &&
     a.suspension === b.suspension &&
     a.weight === b.weight &&
-    a.brakes === b.brakes
+    a.brakes === b.brakes &&
+    a.exhaust === b.exhaust
   )
 }
 
@@ -184,6 +215,8 @@ export function sanitizeBuild(raw: unknown): CarBuild {
     weight: pick(r.weight, [0, 1, 2] as const, d.weight),
     livery: sanitizeLivery(r.livery),
     brakes: pick(r.brakes, [0, 1, 2] as const, d.brakes),
+    exhaust: pick(r.exhaust, EXHAUST_KITS, d.exhaust),
+    turbo: pick(r.turbo, TURBO_KITS, d.turbo),
   }
 }
 

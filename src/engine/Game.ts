@@ -68,6 +68,7 @@ import { gameStore, type GamePhase, type Settings } from '../stores/gameStore'
 import { telemetryStore } from '../stores/telemetryStore'
 import { rivalTagStore, type RivalTag } from '../stores/rivalTagStore'
 import { applyCarBuild, samePerformance, type CarBuild } from '../vehicles/CarBuild'
+import { moddedVoice } from '../audio/SoundMods'
 import { CarLivery } from '../vehicles/CarLivery'
 import { buildPlaceholderCar, rigCarModel, type CarModel } from '../vehicles/CarModel'
 import { getCar, selectableCars, stepCar, type CarEntry } from '../vehicles/carRegistry'
@@ -466,7 +467,7 @@ export class Game {
     progress(0.6)
     const entry = getCar(carId)
     this.carId = entry.id
-    this.audio.setCarAudio(entry.audioUrl, entry.firingPerRev, entry.noise, entry.voice)
+    this.setCarAudio(entry)
     const build = gameStore.getState().build
     this.baseConfig = base
     gameStore.setState({ carName: base.name })
@@ -1322,7 +1323,7 @@ export class Game {
     const inShowroom = phase === 'menu' || phase === 'garage'
     this.effects.group.visible = !inShowroom
     if (inShowroom) this.setShowroomPad(true)
-    this.audio.setCarAudio(entry.audioUrl, entry.firingPerRev, entry.noise, entry.voice)
+    this.setCarAudio(entry)
     gameStore.setState({ carName: base.name })
     telemetryStore.setState({ redlineRpm: config.engine.redlineRpm })
     this.camera.cockpitCar = entry.id
@@ -1531,7 +1532,7 @@ export class Game {
       this.renderer.setHaze(this.haze)
       this.applySettings(settings)
       const entry = getCar(this.carId)
-      this.audio.setCarAudio(entry.audioUrl, entry.firingPerRev, entry.noise, entry.voice)
+      this.setCarAudio(entry)
       this.audio.resume()
       this.race.state = 'idle'
       this.resetCar()
@@ -2692,10 +2693,18 @@ export class Game {
     if (!inShowroom) this.environment.apply(this.renderer.scene)
   }
 
+  /** The car's recordings and voice, with the exhaust and turbo fitted in the garage. */
+  private setCarAudio(entry: ReturnType<typeof getCar>): void {
+    const build = gameStore.getState().build
+    const voice = moddedVoice(entry.voice, build.exhaust, build.turbo)
+    this.audio.setCarAudio(entry.audioUrl, entry.firingPerRev, entry.noise, voice)
+  }
+
   private applyBuild(build: CarBuild, prev: CarBuild): void {
     if (!this.vehicle) return
     this.livery.apply(build)
     void this.spoiler.apply(build)
+    if (build.exhaust !== prev.exhaust || build.turbo !== prev.turbo) this.setCarAudio(getCar(this.carId))
     if (samePerformance(build, prev)) return
     // Upgrades change mass, springs and engine, so rebuild the physics car in place.
     const model = this.vehicle.model
