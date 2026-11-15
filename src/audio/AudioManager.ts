@@ -27,6 +27,9 @@ const IGNITION_SETTLE = 1.5
 
 export type { CarSoundState }
 
+/** Lift-off burble for a car whose sound bank has no lift-off.mp3. */
+const SHARED_LIFT_OFF = '/audio/porsche911/lift-off.mp3'
+
 /**
  * Owns the AudioContext and the car's sound (CarSound).
  *
@@ -68,6 +71,9 @@ export class AudioManager {
   private ctx: AudioContext | null = null
   private master!: GainNode
   /** Last stage before the speakers (see unlock). */
+  /** The player's throttle as of the last update (0..1), for the pop dip. */
+  private throttle = 0
+  private sharedLiftOff: Promise<AudioBuffer | null> | null = null
   private limiter: DynamicsCompressorNode | null = null
   private sound: CarSound | null = null
   private carAudioUrl: string | null = null
@@ -195,7 +201,11 @@ export class AudioManager {
     limiter.ratio.value = 20
     limiter.attack.value = 0.001
     limiter.release.value = 0.12
-    this.master.connect(limiter).connect(ctx.destination)
+    // The limiter's 1 ms attack lets a pop's or a crash's first samples overshoot full
+    // scale by ~1 dB (measured); a soft ceiling rounds them off instead of clipping.
+    const ceiling = ctx.createWaveShaper()
+    ceiling.curve = softCeiling()
+    this.master.connect(limiter).connect(ceiling).connect(ctx.destination)
     this.setVolume(volume)
     this.carBus = ctx.createGain()
     // Engine and tyres duck under a crash (see impact), so the hit cuts
@@ -253,6 +263,16 @@ export class AudioManager {
     this.applyMix()
   }
 
+  /** The lift-off burble for cars whose bank has none (decoded once). */
+  private async loadSharedLiftOff(ctx: AudioContext): Promise<AudioBuffer | null> {
+    try {
+      const res = await fetch(SHARED_LIFT_OFF)
+      return res.ok ? await ctx.decodeAudioData(await res.arrayBuffer()) : null
+    } catch {
+      return null
+    }
+  }
+
   private async loadCarAudio(ctx: AudioContext, sound: CarSound): Promise<void> {
     const base = this.carAudioUrl
     if (!base) return
@@ -276,7 +296,9 @@ export class AudioManager {
       // answers a missing file with index.html) still gets its recorded engine.
       const decode = (buf: ArrayBuffer | null) => (buf ? ctx.decodeAudioData(buf).catch(() => null) : Promise.resolve(null))
       this.ignition = await decode(ignition)
-      sound.setLiftOffClip(await decode(liftOff))
+      // Most cars share a bank without a lift-off recording, so lifting played no burble at
+      // all on them: borrow the shared one (CarSound pitches it to the car and levels it).
+      sound.setLiftOffClip((await decode(liftOff)) ?? (await (this.sharedLiftOff ??= this.loadSharedLiftOff(ctx))))
 
       if (bank.loop) {
         // A loop bank: play the recording itself, looped, its speed set from the rpm each frame.
@@ -646,6 +668,7 @@ export class AudioManager {
   update(state: CarSoundState, tyres?: TyreBrakeInput): void {
     const ctx = this.ctx
     if (!ctx || !this.sound) return
+    this.throttle = state.throttle
     // Self-heal if anything else suspends the context while racing (another
     // library, the OS taking audio focus). Retry at most once a second.
     if (ctx.state !== 'running' && !this.paused) {
@@ -758,10 +781,14 @@ export class AudioManager {
     if (this.paused || kind === 0 || (this.scene !== 'race' && !this.menuEngine)) return
     const played = (car < 0 ? this.backfires : this.rivals[car]?.backfires)?.pop(kind, strength)
     // Your own pops: the engine dips for a moment so they punch through rather
-    // than being squashed into it by the limiter. A bang deeply, a crackle a little.
+    // than being squashed into it by the limiter. More gain only meant more limiting:
+    // the dip is what makes them stand out. A bang deeply, a crackle less. Off the
+    // throttle the engine is quiet already, and the dip would only cut the overrun
+    // burble and crackle the pops belong to (measured: -6 dB on every lift-off pop).
     if (played && car < 0) {
-      if (kind === BANG) this.duckEngine(0.6 * strength, 0.09)
-      else this.duckEngine(0.3 * strength, 0.04)
+      const onPower = 0.25 + 0.75 * Math.min(1, Math.max(0, this.throttle))
+      if (kind === BANG) this.duckEngine(0.75 * strength * onPower, 0.11)
+      else this.duckEngine(0.5 * strength * onPower, 0.05)
     }
   }
 
@@ -831,4 +858,14 @@ export class AudioManager {
     if (this.ctx && this.ctx !== Howler.ctx) void this.ctx.close()
     this.ctx = null
   }
+}
+
+/** Linear up to 0.85 of full scale, then eased into 1: the last stage before the speakers. */
+function softCeiling(): Float32Array<ArrayBuffer> {
+  const n = 2048, knee = 0.85, curve = new Float32Array(n)
+  for (let i = 0; i < n; i++) {
+    const x = (i / (n - 1)) * 2 - 1, a = Math.abs(x)
+    curve[i] = Math.sign(x) * (a <= knee ? a : knee + (1 - knee) * Math.tanh((a - knee) / (1 - knee)))
+  }
+  return curve
 }

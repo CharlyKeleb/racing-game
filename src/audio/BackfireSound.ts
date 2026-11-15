@@ -66,17 +66,21 @@ const BANG_GAIN = 3.6
 /** The sub thump under a bang, relative to it: the chest-thump of the "POOO". */
 const THUMP_GAIN = 1.3
 const MAX_VOICES = 8
+/** Presence lift on every pop (dB at 2.5 kHz). */
+const POP_PRESENCE_DB = 6
 
 /**
  * How each pop style is made: which recordings it draws on (by source name in the bank),
  * how they're pitched (on top of the car's own `pitch`) and levelled, and the darkest its
- * exhaust tone may be. Bangs on a burble car are soft thuds, not cannon shots.
+ * exhaust tone may be. Bangs on a burble car are rounder thuds, not cannon shots.
  */
 const STYLES: Record<PopStyle, { crackle: string[]; bang: string[]; crackleRate: [number, number]; bangRate: [number, number]; crackleGain: number; bangGain: number; toneMaxHz: number }> = {
   antilag: { crackle: ['antilag'], bang: ['engine'], crackleRate: [0.95, 1.2], bangRate: [0.95, 1.1], crackleGain: 1, bangGain: 0.8, toneMaxHz: 16000 },
   supercar: { crackle: ['supercar', 'antilag'], bang: ['engine', 'deep'], crackleRate: [0.9, 1.12], bangRate: [0.86, 1], crackleGain: 1, bangGain: 1, toneMaxHz: 16000 },
-  burble: { crackle: ['supercar', 'antilag'], bang: ['deep'], crackleRate: [0.55, 0.72], bangRate: [0.7, 0.8], crackleGain: 0.7, bangGain: 0.55, toneMaxHz: 2600 },
-  muscle: { crackle: ['supercar'], bang: ['vintage', 'deep'], crackleRate: [0.62, 0.78], bangRate: [0.72, 0.86], crackleGain: 0.8, bangGain: 1.15, toneMaxHz: 5000 },
+  // Burble and muscle were pitched and filtered so dark (a 2.6 kHz ceiling, crackles at ~0.6× speed)
+  // that laptop and phone speakers lost them: still the deeper, rounder styles, but audible.
+  burble: { crackle: ['supercar', 'antilag'], bang: ['deep'], crackleRate: [0.72, 0.88], bangRate: [0.78, 0.9], crackleGain: 1, bangGain: 0.85, toneMaxHz: 6000 },
+  muscle: { crackle: ['supercar'], bang: ['vintage', 'deep'], crackleRate: [0.7, 0.85], bangRate: [0.76, 0.9], crackleGain: 0.95, bangGain: 1.15, toneMaxHz: 6500 },
 }
 
 /** The recordings a style draws on, or all of that kind when the bank has none of them. */
@@ -96,6 +100,7 @@ export class BackfireSound {
   private readonly ctx: BaseAudioContext
   /** The car's exhaust tone: every pop goes through it. */
   private readonly tone: BiquadFilterNode
+  private readonly out: BiquadFilterNode
   private readonly voices = new Set<AudioBufferSourceNode>()
   private variant = 0
   private voice: PopVoice = DEFAULT_VOICE.pops
@@ -108,7 +113,14 @@ export class BackfireSound {
     this.tone.type = 'lowpass'
     this.tone.Q.value = 0.7
     this.tone.frequency.value = this.voice.toneHz
-    this.tone.connect(destination)
+    // The crack of a pop lives in the presence band: lift it so small speakers carry it.
+    const presence = ctx.createBiquadFilter()
+    presence.type = 'peaking'
+    presence.frequency.value = 2500
+    presence.Q.value = 0.8
+    presence.gain.value = POP_PRESENCE_DB
+    this.tone.connect(presence).connect(destination)
+    this.out = presence
   }
 
   /** The car's pops (see EngineVoice.pops). */
@@ -159,6 +171,7 @@ export class BackfireSound {
     for (const source of this.voices) { source.onended = null; source.stop(); source.disconnect() }
     this.voices.clear()
     this.tone.disconnect()
+    this.out.disconnect()
   }
 }
 

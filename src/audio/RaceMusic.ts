@@ -4,8 +4,8 @@ import { RACE_MUSIC_TRACKS, RacePlaylist, type MusicTrack } from './musicTracks'
 const LEVEL = 0.6
 const FADE_IN = 1.6
 const FADE_OUT = 0.8
-/** On top of the bed duck: music drops ~14 dB in all under a commentary line. */
-const COMMENTARY_LEVEL = 0.6
+/** On top of the bed duck (narrationMix): music drops ~14 dB in all under a commentary line. */
+const COMMENTARY_LEVEL = 0.38
 /** A callout chime gets a short dip, so it lands on the beat of the event rather than in the mix. */
 const CHIME_LEVEL = 0.55
 const CHIME_HOLD = 0.5

@@ -228,9 +228,10 @@ export const CARS: CarEntry[] = [
       brakes: { hissHz: 3900, squealHz: 0, grind: 0.35, abs: true },
     },
     // Naturally aspirated 4.0 flat-six to 9000 rpm: no turbos, a raw metallic shriek that
-    // climbs and climbs, a tight bright crackle on the overrun.
+    // climbs and climbs, a tight bright crackle on the overrun. Pitch 1: its 9000 rpm already
+    // climbs higher than the Carrera; 1.22 on top asked the 2873 rpm recording for 3.8x.
     voice: {
-      pitch: 1.22, boomHz: 150, boomDb: 4, raspHz: 3300, raspDb: 3.5, drive: 1.05, airDb: 0.5, sub: 0.75, turbo: 0, burble: 0,
+      pitch: 1, boomHz: 150, boomDb: 4, raspHz: 3300, raspDb: 3.5, drive: 1.05, airDb: 0.5, sub: 0.75, turbo: 0, burble: 0,
       whine: { ratio: 0, gain: 0 },
       pops: { style: 'supercar', pitch: 1.3, crackle: 0.9, bang: 0.55, thump: 0.45, toneHz: 11000 },
     },
