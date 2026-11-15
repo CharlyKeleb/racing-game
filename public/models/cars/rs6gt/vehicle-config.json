@@ -150,9 +150,5 @@
   "dragCoefficient": 0.46,
   "downforceCoefficient": 0.5,
   "downforceFrontShare": 0.45,
-  "backfire": {
-    "overrun": 0.5,
-    "upshift": 0.4,
-    "flame": 0.7
-  }
+  "backfire": { "overrun": 0, "upshift": 0, "flame": 0.7, "pace": 1 }
 }

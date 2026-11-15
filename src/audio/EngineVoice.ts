@@ -54,7 +54,18 @@ export interface EngineVoice {
   pops: PopVoice
 }
 
+/**
+ * What a car's pops are made of (BackfireSound picks recordings and shapes them by it):
+ *  - antilag: a dry, sharp machine-gun rattle (a rally or time-attack car, an LM Skyline).
+ *  - supercar: the crackle and "POOO" of an exotic on the overrun.
+ *  - burble: soft, low, rapid pops under the exhaust (an AMG or RS V8 road car's sport exhaust).
+ *  - muscle: few, slow, deep booms (a big American V8).
+ */
+export type PopStyle = 'antilag' | 'supercar' | 'burble' | 'muscle'
+
 export interface PopVoice {
+  /** Omitted = supercar. */
+  style?: PopStyle
   /** Playback rate: under 1 is deeper and slower, over 1 sharper. */
   pitch: number
   /** Overrun crackle and bang levels, relative to the 911. */

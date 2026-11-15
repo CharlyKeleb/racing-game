@@ -104,10 +104,13 @@ export interface NitroConfig {
   perfectDrainScale: number
 }
 
+/** Exhaust pops and flames (see Backfire.ts): 0 overrun and upshift = a car that doesn't pop. */
 export interface BackfireConfig {
   overrun: number
   upshift: number
   flame: number
+  /** Gaps inside a burst: under 1 a quick rattle, over 1 a slow, lazy pop. */
+  pace: number
 }
 
 export interface VehicleConfig {
@@ -261,7 +264,7 @@ export const DEFAULT_VEHICLE_CONFIG: VehicleConfig = {
   downforceFrontShare: 0.42,
   drift: DEFAULT_DRIFT,
   launch: DEFAULT_LAUNCH,
-  backfire: { overrun: 1, upshift: 1, flame: 1 },
+  backfire: { overrun: 1, upshift: 1, flame: 1, pace: 1 },
   nitro: {
     durationSec: 4,
     fillRate: 0.25,

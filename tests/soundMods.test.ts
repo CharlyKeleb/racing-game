@@ -43,3 +43,14 @@ describe('garage sound mods', () => {
     expect(sanitizeBuild({ paint: '#000000' }).turbo).toBe('stock')
   })
 })
+
+describe('garage exhaust and pops', () => {
+  it("a louder exhaust makes a car that doesn't pop start to; stock leaves it quiet", () => {
+    const quiet = { ...DEFAULT_VEHICLE_CONFIG, backfire: { overrun: 0, upshift: 0, flame: 0.6, pace: 1 } }
+    expect(applyCarBuild(quiet, DEFAULT_BUILD).backfire.overrun).toBe(0)
+    expect(applyCarBuild(quiet, { ...DEFAULT_BUILD, exhaust: 'catback' }).backfire.overrun).toBeGreaterThan(0)
+    const piped = applyCarBuild(quiet, { ...DEFAULT_BUILD, exhaust: 'straight' }).backfire
+    expect(piped.overrun).toBeGreaterThanOrEqual(0.9)
+    expect(piped.pace).toBe(1)
+  })
+})

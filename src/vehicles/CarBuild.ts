@@ -104,14 +104,20 @@ const SUSPENSION: Record<SuspensionKit, { stiffness: number; damping: number; dr
 }
 const WEIGHT = [1, 0.95, 0.9] as const
 const BRAKES = [1, 1.15, 1.3] as const
-/** How often the exhaust pops on the overrun and bangs on upshifts, and how big the flames are. */
-const EXHAUST_FIRE: Record<ExhaustKit, { overrun: number; upshift: number; flame: number }> = {
-  stock: { overrun: 1, upshift: 1, flame: 1 },
-  catback: { overrun: 1.3, upshift: 1.25, flame: 1.1 },
-  resdelete: { overrun: 1.25, upshift: 1.15, flame: 1.05 },
-  xpipe: { overrun: 1.1, upshift: 1.1, flame: 1 },
-  straight: { overrun: 2, upshift: 1.9, flame: 1.4 },
+/**
+ * How often the exhaust pops on the overrun and bangs on upshifts, and how big the flames are:
+ * the car's own times `scale`, but at least `floor`, so a louder exhaust makes a car that doesn't
+ * pop from the factory (a Porsche, a Demon) start to.
+ */
+type Fire = { overrun: number; upshift: number; flame: number }
+const EXHAUST_FIRE: Record<ExhaustKit, { scale: Fire; floor: Fire }> = {
+  stock: { scale: { overrun: 1, upshift: 1, flame: 1 }, floor: { overrun: 0, upshift: 0, flame: 0 } },
+  catback: { scale: { overrun: 1.3, upshift: 1.25, flame: 1.1 }, floor: { overrun: 0.35, upshift: 0.25, flame: 0.6 } },
+  resdelete: { scale: { overrun: 1.25, upshift: 1.15, flame: 1.05 }, floor: { overrun: 0.3, upshift: 0.2, flame: 0.6 } },
+  xpipe: { scale: { overrun: 1.1, upshift: 1.1, flame: 1 }, floor: { overrun: 0.2, upshift: 0.15, flame: 0.6 } },
+  straight: { scale: { overrun: 2, upshift: 1.9, flame: 1.4 }, floor: { overrun: 0.9, upshift: 0.7, flame: 0.9 } },
 }
+const fire = (base: number, kit: ExhaustKit, k: keyof Fire) => Math.max(base * EXHAUST_FIRE[kit].scale[k], EXHAUST_FIRE[kit].floor[k])
 
 /** Returns a new config with the build's performance upgrades applied. */
 export function applyCarBuild(base: VehicleConfig, build: CarBuild): VehicleConfig {
@@ -121,9 +127,10 @@ export function applyCarBuild(base: VehicleConfig, build: CarBuild): VehicleConf
     ...base,
     massKg: base.massKg * WEIGHT[build.weight],
     backfire: {
-      overrun: base.backfire.overrun * EXHAUST_FIRE[build.exhaust].overrun,
-      upshift: base.backfire.upshift * EXHAUST_FIRE[build.exhaust].upshift,
-      flame: base.backfire.flame * EXHAUST_FIRE[build.exhaust].flame,
+      ...base.backfire,
+      overrun: fire(base.backfire.overrun, build.exhaust, 'overrun'),
+      upshift: fire(base.backfire.upshift, build.exhaust, 'upshift'),
+      flame: fire(base.backfire.flame, build.exhaust, 'flame'),
     },
     brakeForce: base.brakeForce * BRAKES[build.brakes],
     maxSteerAngle: base.maxSteerAngle * susp.steer,

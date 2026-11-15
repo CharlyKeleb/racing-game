@@ -144,3 +144,44 @@ describe('per-car exhaust (VehicleConfig.backfire)', () => {
     expect(race).toBeGreaterThan(stock * 1.15)
   })
 })
+
+describe('pops per car', () => {
+  const lifts = (b: Backfire, n: number) => {
+    let pops = 0
+    for (let i = 0; i < n; i++) {
+      run(b, 0.5, () => ({ throttle: 1, revs: 0.9 }))
+      pops += run(b, 1, () => ({ throttle: 0, revs: 0.85 })).length
+    }
+    return pops
+  }
+
+  it("a car that doesn't pop stays quiet on lifts, upshifts and burnouts, but nitro still bangs", () => {
+    const b = new Backfire({ overrun: 0, upshift: 0 })
+    expect(lifts(b, 10)).toBe(0)
+    run(b, 0.5, () => ({ throttle: 1, revs: 0.95, gear: 2 }))
+    expect(run(b, DT, () => ({ throttle: 1, revs: 0.95, gear: 3 }))).toEqual([])
+    expect(run(b, 3, () => ({ throttle: 1, burnout: 1 }))).toEqual([])
+    expect(run(b, DT, () => ({ nitroLit: true }))).toEqual([[0, BANG]])
+  })
+
+  it('a quick pace rattles a burst out faster than a lazy one', () => {
+    const span = (pace: number) => {
+      const b = new Backfire({ overrun: 1.6, upshift: 1, pace })
+      run(b, 1, () => ({ throttle: 1, revs: 0.9 }))
+      const pops = run(b, 3, () => ({ throttle: 0, revs: 0.85 }), 1).filter(([, k]) => k === CRACKLE)
+      return (pops.at(-1)![0] - pops[0][0]) / (pops.length - 1)
+    }
+    expect(span(0.5)).toBeLessThan(span(1.6))
+  })
+
+  it('every car has its own pops, and the quiet road cars have none from the factory', async () => {
+    const { CARS } = await import('../src/vehicles/carRegistry')
+    const keys = CARS.map((c) => JSON.stringify(c.voice.pops))
+    expect(new Set(keys).size).toBe(keys.length)
+    for (const id of ['porsche911', 'gt3rs', 'demon', 'rs6gt']) {
+      const cfg = JSON.parse(readFileSync(`public/models/cars/${id}/vehicle-config.json`, 'utf8')) as { backfire: { overrun: number; upshift: number } }
+      expect(cfg.backfire.overrun, id).toBe(0)
+      expect(cfg.backfire.upshift, id).toBe(0)
+    }
+  })
+})
