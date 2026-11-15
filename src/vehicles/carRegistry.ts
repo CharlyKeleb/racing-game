@@ -221,7 +221,7 @@ export const CARS: CarEntry[] = [
     // Naturally aspirated 4.0 flat-six to 9000 rpm: no turbos, a raw metallic shriek that
     // climbs and climbs, a tight bright crackle on the overrun.
     voice: {
-      pitch: 1.22, boomHz: 150, boomDb: 4, raspHz: 3300, raspDb: 6.5, drive: 1.15, airDb: 3, sub: 0.75, turbo: 0, burble: 0,
+      pitch: 1.22, boomHz: 150, boomDb: 4, raspHz: 3300, raspDb: 3.5, drive: 1.05, airDb: 0.5, sub: 0.75, turbo: 0, burble: 0,
       whine: { ratio: 0, gain: 0 },
       pops: { style: 'supercar', pitch: 1.3, crackle: 0.9, bang: 0.55, thump: 0.45, toneHz: 11000 },
     },
@@ -307,31 +307,6 @@ export const CARS: CarEntry[] = [
     },
   },
   {
-    id: 'rs6gt',
-    name: 'Audi RS6 GT Avant',
-    modelUrl: '/models/cars/rs6gt/rs6gt.glb',
-    modelUrlLow: '/models/cars/rs6gt/rs6gt_low.glb',
-    configUrl: '/models/cars/rs6gt/vehicle-config.json',
-    audioUrl: '/audio/koenigsegg/',
-    firingPerRev: 4,
-    selectable: true,
-    stats: { power: 0.74, grip: 0.7, handling: 0.66, braking: 0.72 },
-    specs: { powerHp: 630, torqueNm: 850, zeroToHundred: 3.3, topSpeedKmh: 305, drivetrain: 'AWD', weightKg: 2075 },
-    // Performance road tyres, carbon-ceramic brakes with ABS.
-    noise: {
-      tyres: { squealHz: 1020, tonal: 0.8, scrubHz: 880 },
-      brakes: { hissHz: 4000, squealHz: 0, grind: 0.25, abs: true },
-    },
-    // 4.0 TFSI twin-turbo V8: a smooth, cultured burble, strong turbo whistle and whoosh,
-    // and a measured crackle.
-    voice: {
-      pitch: 1.06, boomHz: 120, boomDb: 7, raspHz: 2900, raspDb: 3.5, drive: 1.15, airDb: -1, sub: 1.25, turbo: 1.3, burble: 0.3,
-      whistle: { lowHz: 2500, highHz: 4600, gain: 1.0 },
-      whine: { ratio: 0, gain: 0 },
-      pops: { style: 'burble', pitch: 0.95, crackle: 1.1, bang: 1.1, thump: 1.15, toneHz: 7200 },
-    },
-  },
-  {
     id: 'rs6r',
     name: 'ABT Audi RS6-R',
     modelUrl: '/models/cars/rs6r/rs6r.glb',
@@ -346,7 +321,7 @@ export const CARS: CarEntry[] = [
       tyres: { squealHz: 980, tonal: 0.75, scrubHz: 860 },
       brakes: { hissHz: 4050, squealHz: 0, grind: 0.25, abs: true },
     },
-    // ABT's tuned twin-turbo V8 and sport exhaust: louder and rawer than the RS6 GT, harder
+    // ABT's tuned twin-turbo V8 and sport exhaust: louder and rawer than a stock RS6, harder
     // driven, more boost, and a sharper, angrier crackle.
     voice: {
       pitch: 1.13, boomHz: 140, boomDb: 8, raspHz: 2500, raspDb: 5, drive: 1.4, airDb: 0, sub: 1.3, turbo: 1.6, flutter: 0.35, burble: 0.4,

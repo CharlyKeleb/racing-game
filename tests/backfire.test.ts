@@ -178,7 +178,7 @@ describe('pops per car', () => {
     const { CARS } = await import('../src/vehicles/carRegistry')
     const keys = CARS.map((c) => JSON.stringify(c.voice.pops))
     expect(new Set(keys).size).toBe(keys.length)
-    for (const id of ['porsche911', 'gt3rs', 'demon', 'rs6gt']) {
+    for (const id of ['porsche911', 'gt3rs', 'demon']) {
       const cfg = JSON.parse(readFileSync(`public/models/cars/${id}/vehicle-config.json`, 'utf8')) as { backfire: { overrun: number; upshift: number } }
       expect(cfg.backfire.overrun, id).toBe(0)
       expect(cfg.backfire.upshift, id).toBe(0)
