@@ -12,6 +12,8 @@ export interface CarEntry {
   modelUrl: string
   /** Simplified mesh for the Low preset (npm run build:car-lod). */
   modelUrlLow?: string
+  /** AI rivals' model on the Low preset: a few draw calls, baked colours (scripts/cars/build-rival-lod.mjs). */
+  modelUrlRival?: string
   configUrl: string
   /** Engine recordings folder (engine-bank.wav/.json, ignition, lift-off); procedural engine if absent. */
   audioUrl?: string
@@ -48,6 +50,7 @@ export const CARS: CarEntry[] = [
     name: 'Porsche 911 Carrera 4S',
     modelUrl: '/models/cars/porsche911/porsche911.glb',
     modelUrlLow: '/models/cars/porsche911/porsche911_low.glb',
+    modelUrlRival: '/models/cars/porsche911/porsche911_rival.glb',
     configUrl: '/models/cars/porsche911/vehicle-config.json',
     audioUrl: '/audio/porsche911/',
     firingPerRev: 3,
@@ -74,6 +77,7 @@ export const CARS: CarEntry[] = [
     name: 'Koenigsegg One:1',
     modelUrl: '/models/cars/koenigsegg/koenigsegg.glb',
     modelUrlLow: '/models/cars/koenigsegg/koenigsegg_low.glb',
+    modelUrlRival: '/models/cars/koenigsegg/koenigsegg_rival.glb',
     configUrl: '/models/cars/koenigsegg/vehicle-config.json',
     // Regera onboard V8 recording, used as a stand-in for the One:1 (see audio credits).
     audioUrl: '/audio/koenigsegg/',
@@ -102,6 +106,7 @@ export const CARS: CarEntry[] = [
     name: 'BMW M3 E36 GTR',
     modelUrl: '/models/cars/bmw/bmw.glb',
     modelUrlLow: '/models/cars/bmw/bmw_low.glb',
+    modelUrlRival: '/models/cars/bmw/bmw_rival.glb',
     configUrl: '/models/cars/bmw/vehicle-config.json',
     // Stand-in until the car has its own recordings: the Porsche's real six
     // (an inline-six also fires 3 times per revolution), re-voiced (see voice).
@@ -130,6 +135,7 @@ export const CARS: CarEntry[] = [
     name: 'Lamborghini Diablo GT1',
     modelUrl: '/models/cars/diablo/diablo.glb',
     modelUrlLow: '/models/cars/diablo/diablo_low.glb',
+    modelUrlRival: '/models/cars/diablo/diablo_rival.glb',
     configUrl: '/models/cars/diablo/vehicle-config.json',
     // Stand-in until it has its own recordings: the Koenigsegg's V8, re-voiced as a V12 (see voice).
     audioUrl: '/audio/koenigsegg/',
@@ -156,6 +162,7 @@ export const CARS: CarEntry[] = [
     name: 'Mercedes-AMG GT3',
     modelUrl: '/models/cars/amg/amg.glb',
     modelUrlLow: '/models/cars/amg/amg_low.glb',
+    modelUrlRival: '/models/cars/amg/amg_rival.glb',
     configUrl: '/models/cars/amg/vehicle-config.json',
     // Stand-in until it has its own recordings: the Koenigsegg's V8, re-voiced (see voice).
     audioUrl: '/audio/koenigsegg/',
@@ -181,6 +188,7 @@ export const CARS: CarEntry[] = [
     name: 'Dodge Ice Charger',
     modelUrl: '/models/cars/charger/charger.glb',
     modelUrlLow: '/models/cars/charger/charger_low.glb',
+    modelUrlRival: '/models/cars/charger/charger_rival.glb',
     configUrl: '/models/cars/charger/vehicle-config.json',
     // Stand-in until it has its own recordings: the Koenigsegg's V8, re-voiced (see voice).
     audioUrl: '/audio/koenigsegg/',
@@ -206,6 +214,7 @@ export const CARS: CarEntry[] = [
     name: 'Porsche 911 GT3 RS',
     modelUrl: '/models/cars/gt3rs/gt3rs.glb',
     modelUrlLow: '/models/cars/gt3rs/gt3rs_low.glb',
+    modelUrlRival: '/models/cars/gt3rs/gt3rs_rival.glb',
     configUrl: '/models/cars/gt3rs/vehicle-config.json',
     // The Carrera's flat-six recording, re-voiced as the GT3 RS's 9000 rpm atmospheric engine.
     audioUrl: '/audio/porsche911/',
@@ -231,6 +240,7 @@ export const CARS: CarEntry[] = [
     name: 'Nissan Skyline GT-R R33 LM',
     modelUrl: '/models/cars/r33/r33.glb',
     modelUrlLow: '/models/cars/r33/r33_low.glb',
+    modelUrlRival: '/models/cars/r33/r33_rival.glb',
     configUrl: '/models/cars/r33/vehicle-config.json',
     // Its own recording: a real RB26 Skyline revving, and its real turbo flutter on lift-off.
     audioUrl: '/audio/r33/',
@@ -259,6 +269,7 @@ export const CARS: CarEntry[] = [
     name: 'Dodge Challenger SRT Demon',
     modelUrl: '/models/cars/demon/demon.glb',
     modelUrlLow: '/models/cars/demon/demon_low.glb',
+    modelUrlRival: '/models/cars/demon/demon_rival.glb',
     configUrl: '/models/cars/demon/vehicle-config.json',
     // Its own recording: a real Challenger SRT's supercharged HEMI (see public/audio/demon/CREDITS.md).
     audioUrl: '/audio/demon/',
@@ -286,6 +297,7 @@ export const CARS: CarEntry[] = [
     name: 'Mercedes-AMG G63',
     modelUrl: '/models/cars/g63/g63.glb',
     modelUrlLow: '/models/cars/g63/g63_low.glb',
+    modelUrlRival: '/models/cars/g63/g63_rival.glb',
     configUrl: '/models/cars/g63/vehicle-config.json',
     audioUrl: '/audio/koenigsegg/',
     firingPerRev: 4,
@@ -311,6 +323,7 @@ export const CARS: CarEntry[] = [
     name: 'ABT Audi RS6-R',
     modelUrl: '/models/cars/rs6r/rs6r.glb',
     modelUrlLow: '/models/cars/rs6r/rs6r_low.glb',
+    modelUrlRival: '/models/cars/rs6r/rs6r_rival.glb',
     configUrl: '/models/cars/rs6r/vehicle-config.json',
     audioUrl: '/audio/koenigsegg/',
     firingPerRev: 4,
@@ -367,4 +380,13 @@ export function stepCar(id: string, step: number): CarEntry {
   const list = selectableCars()
   const i = Math.max(0, list.findIndex((c) => c.id === id))
   return list[(((i + step) % list.length) + list.length) % list.length]
+}
+
+/**
+ * The model an AI rival loads. Low (phones) gets the rival LOD, so a full grid
+ * fits that preset's frame budget; the others keep the Low model, as before.
+ */
+export function rivalModelUrl(car: CarEntry, quality: string): string {
+  if (quality === 'low' && car.modelUrlRival) return car.modelUrlRival
+  return car.modelUrlLow ?? car.modelUrl
 }

@@ -72,7 +72,7 @@ import { pickRivals } from '../racing/rivalField'
 import { moddedVoice } from '../audio/SoundMods'
 import { CarLivery } from '../vehicles/CarLivery'
 import { buildPlaceholderCar, rigCarModel, type CarModel } from '../vehicles/CarModel'
-import { getCar, selectableCars, stepCar, type CarEntry } from '../vehicles/carRegistry'
+import { getCar, rivalModelUrl, selectableCars, stepCar, type CarEntry } from '../vehicles/carRegistry'
 import { Vehicle, type SpawnPoint } from '../vehicles/Vehicle'
 import { resolveVehicleConfig, type VehicleConfig, type WheelId } from '../vehicles/VehicleConfig'
 import { Environment } from '../world/Environment'
@@ -949,7 +949,7 @@ export class Game {
       const rivals = pickRivals(selectableCars().filter(car => car.id !== this.carId), opponentCount)
       const loaded = await Promise.all(rivals.map(async car => {
         const [scene, json] = await Promise.all([
-          this.assets.loadModel(car.modelUrlLow ?? car.modelUrl),
+          this.assets.loadModel(rivalModelUrl(car, settings.quality)),
           this.assets.loadJson<Partial<VehicleConfig>>(car.configUrl),
         ])
         return { car, scene, config: resolveVehicleConfig(json ?? undefined) }

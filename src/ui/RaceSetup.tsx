@@ -35,7 +35,7 @@ export function RaceSetup({ onClose }: { onClose(): void }) {
         </>}
         {settings.mode === 'quick' && <>
         <Segmented<number> label="Laps" value={settings.laps} options={[[1, '1'], [3, '3'], [5, '5']]} onPick={(laps) => update({ laps })} />
-        <Segmented<number> label="Opponents" value={settings.opponents} options={[[0, 'Solo'], [1, 'Duel'], [3, 'Grid of 4']]} onPick={(opponents) => update({ opponents })} />
+        <Segmented<number> label="Opponents" value={settings.opponents} options={[[0, 'Solo'], [1, 'Duel'], [3, 'Grid of 4'], [7, 'Grid of 8']]} onPick={(opponents) => update({ opponents })} />
         {settings.opponents > 0 && <Segmented<AiDifficulty> label="Rival difficulty" value={settings.difficulty} options={Object.entries(AI_DIFFICULTIES).map(([id, d]) => [id as AiDifficulty, d.label])} onPick={(difficulty) => update({ difficulty })} />}
         </>}
         <Segmented<TimeOfDay> label="Time of day" value={settings.timeOfDay}
