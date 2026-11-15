@@ -2569,7 +2569,7 @@ export class Game {
     const career = careerStore.getState().lastResult
     if (this.careerRun && career?.eventId === this.careerRun.id && career.firstWin) {
       const run = this.careerRun
-      lines.push({ label: run.id === SUMMIT ? `Career: ${run.name} (the top)` : `Career: ${run.name} won`, coins: careerWinBonus(run.rung, run.difficulty, run.id === SUMMIT), uncapped: true })
+      lines.push({ label: run.id === SUMMIT ? `Career: ${run.name} (the top)` : `Career: ${run.name} won`, coins: careerWinBonus(run.step, run.difficulty, run.id === SUMMIT), uncapped: true })
     }
     wallet.award(lines)
   }

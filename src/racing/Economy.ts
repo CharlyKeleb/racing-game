@@ -95,17 +95,17 @@ export function raceReward(r: RaceResult): RewardLine[] {
 /** What actually gets paid of `amount`, with `earnedToday` already paid today. */
 /** Career first-win prize per event, by difficulty, before the rung multiplier. */
 const CAREER_WIN = { legend: 750, mythic: 1500, impossible: 3000 } as const
-/** Each rung up pays this much more (rung 0 pays the base). */
-const CAREER_RUNG_STEP = 0.2
+/** Each step up the ladder pays this much more (the first step pays the base). */
+const CAREER_STEP_RISE = 0.1
 /** On top, for reaching the top of the ladder. */
 export const CAREER_SUMMIT_PRIZE = 10000
 
 /**
- * Coins for winning a career event the first time (repeats pay the race only). Higher rungs
+ * Coins for winning a career event the first time (repeats pay the race only). Later steps
  * and harder rivals pay more; The Summit pays a prize on top. Paid outside the daily cap.
  */
-export function careerWinBonus(rung: number, difficulty: AiDifficulty, summit = false): number {
-  return Math.round(CAREER_WIN[difficulty] * (1 + CAREER_RUNG_STEP * Math.max(0, rung)) / 50) * 50 + (summit ? CAREER_SUMMIT_PRIZE : 0)
+export function careerWinBonus(step: number, difficulty: AiDifficulty, summit = false): number {
+  return Math.round(CAREER_WIN[difficulty] * (1 + CAREER_STEP_RISE * Math.max(0, step)) / 50) * 50 + (summit ? CAREER_SUMMIT_PRIZE : 0)
 }
 
 export function capPayout(amount: number, earnedToday: number): number {

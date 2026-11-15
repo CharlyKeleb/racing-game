@@ -5,7 +5,7 @@ import { useGameInstance } from './GameContext'
 import { GiCoins } from 'react-icons/gi'
 import { DAILY_SOFT_CAP } from '../racing/Economy'
 import { useCareer, useGame, useTelemetry, useWallet } from './hooks'
-import { careerEvent, formatLap } from '../racing/Career'
+import { careerEvent, careerNext, formatLap } from '../racing/Career'
 import { careerStore } from '../stores/careerStore'
 import { Button, Panel } from './kit'
 import { LeaderboardResult } from './LeaderboardResult'
@@ -135,7 +135,7 @@ function CareerBanner() {
     <div className={`career-result career-result--${passed ? 'won' : 'lost'}`} role="status">
       <span className="eyebrow">Career · {event.name}</span>
       <h1>{passed ? (result?.firstWin ? 'EVENT WON' : 'WON AGAIN') : o?.kind === 'elimination' ? 'ELIMINATED' : 'NOT THIS TIME'}</h1>
-      <p>{detail}{passed && result?.firstWin && event.next.length > 0 ? ' The next rung is open.' : ''}{passed && event.next.length === 0 && event.id !== 'summit' ? ' A dead end: this route goes no higher.' : ''}{passed && event.id === 'summit' ? ' You reached the top of the ladder.' : ''}</p>
+      <p>{detail}{passed && result?.firstWin && careerNext(event.id) ? ` Next step open: ${careerNext(event.id)!.name}.` : ''}{passed && !careerNext(event.id) ? ' You reached the top of the ladder.' : ''}</p>
     </div>
   )
 }

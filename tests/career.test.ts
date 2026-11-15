@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { CAREER, CAREER_RUNGS, SUMMIT, careerEvent, careerPassed, careerStatus, eliminationDue, formatLap } from '../src/racing/Career'
+import { CAREER, CAREER_RUNGS, SUMMIT, careerCurrent, careerEvent, careerNext, careerPassed, careerStatus, eliminationDue, formatLap } from '../src/racing/Career'
 import { careerStore, CAREER_KEY } from '../src/stores/careerStore'
 import { mergeSnapshots } from '../src/cloud/saveData'
 import { RaceManager } from '../src/racing/RaceManager'
@@ -30,40 +30,38 @@ describe('career ladder', () => {
     expect(new Set(ids(CAREER)).size).toBe(CAREER.length)
   })
 
-  it('every link climbs one rung, and the columns keep to the 3-wide grid', () => {
-    for (const e of CAREER) {
-      expect(e.column).toBeGreaterThanOrEqual(0)
-      expect(e.column).toBeLessThanOrEqual(2)
-      for (const id of e.next) expect(careerEvent(id)?.rung, `${e.id} → ${id}`).toBe(e.rung + 1)
-    }
-    // No two events share a cell.
+  it('snakes up a 3-wide board, one step per cell, getting harder as it climbs', () => {
     expect(new Set(CAREER.map((e) => `${e.rung}/${e.column}`)).size).toBe(CAREER.length)
-  })
-
-  it('is a maze: the summit can be reached, but some routes dead-end', () => {
-    const reach = new Set(CAREER.filter((e) => e.rung === 0).map((e) => e.id))
-    for (let r = 0; r < CAREER_RUNGS; r++) for (const e of CAREER) if (reach.has(e.id)) e.next.forEach((id) => reach.add(id))
-    expect(reach.size).toBe(CAREER.length)
-    expect(reach.has(SUMMIT)).toBe(true)
-    const deadEnds = CAREER.filter((e) => e.next.length === 0 && e.id !== SUMMIT)
-    expect(deadEnds.length).toBeGreaterThanOrEqual(2)
-    // More than one way up: some event is opened from two different events.
-    expect(CAREER.some((e) => CAREER.filter((f) => f.next.includes(e.id)).length > 1)).toBe(true)
-    // The top rungs are Impossible.
+    CAREER.forEach((e, i) => {
+      expect(e.step).toBe(i)
+      if (i === 0) return
+      const prev = CAREER[i - 1]
+      // Each step is next to the one before: across the rung, or straight up at its end.
+      const across = e.rung === prev.rung && Math.abs(e.column - prev.column) === 1
+      const up = e.rung === prev.rung + 1 && e.column === prev.column
+      expect(across || up, `${prev.id} → ${e.id}`).toBe(true)
+    })
+    const rank = { legend: 0, mythic: 1, impossible: 2 } as const
+    for (let i = 1; i < CAREER.length; i++) expect(rank[CAREER[i].difficulty]).toBeGreaterThanOrEqual(rank[CAREER[i - 1].difficulty])
+    expect(CAREER[CAREER.length - 1].id).toBe(SUMMIT)
+    expect(CAREER_RUNGS).toBe(Math.ceil(CAREER.length / 3))
     expect(careerEvent(SUMMIT)?.difficulty).toBe('impossible')
     expect(careerEvent(SUMMIT)?.rivals).toBe(7)
   })
 
-  it('opens the bottom rung, then only what a win links to', () => {
+  it('opens one step at a time', () => {
     const none = new Set<string>()
-    expect(careerStatus('paris-sprint', none)).toBe('open')
-    expect(careerStatus('first-cut', none)).toBe('locked')
+    expect(careerCurrent(none)?.id).toBe('paris-sprint')
+    expect(CAREER.filter((e) => careerStatus(e.id, none) === 'open').map((e) => e.id)).toEqual(['paris-sprint'])
     const won = new Set(['paris-sprint'])
     expect(careerStatus('paris-sprint', won)).toBe('won')
-    expect(careerStatus('first-cut', won)).toBe('open')
-    expect(careerStatus('marina-shakedown', won)).toBe('open')
-    expect(careerStatus('dam-run', won)).toBe('locked')
-    expect(careerStatus(SUMMIT, won)).toBe('locked')
+    expect(careerStatus('bayview-hotlap', won)).toBe('open')
+    expect(careerStatus('first-cut', won)).toBe('locked')
+    expect(careerNext('paris-sprint')?.id).toBe('bayview-hotlap')
+    expect(careerNext(SUMMIT)).toBeUndefined()
+    // A step won out of order (an older save) doesn't skip the one below it.
+    expect(careerStatus('marina-shakedown', new Set(['paris-sprint', 'first-cut']))).toBe('locked')
+    expect(careerCurrent(new Set(CAREER.map((e) => e.id)))).toBeNull()
     expect(careerStatus('nope', won)).toBe('locked')
   })
 
@@ -148,9 +146,9 @@ describe('career prizes', () => {
     expect(careerWinBonus(3, 'mythic')).toBeGreaterThan(careerWinBonus(3, 'legend'))
     expect(careerWinBonus(3, 'impossible')).toBeGreaterThan(careerWinBonus(3, 'mythic'))
     const summit = careerEvent(SUMMIT)!
-    expect(careerWinBonus(summit.rung, summit.difficulty, true)).toBe(careerWinBonus(summit.rung, summit.difficulty) + CAREER_SUMMIT_PRIZE)
+    expect(careerWinBonus(summit.step, summit.difficulty, true)).toBe(careerWinBonus(summit.step, summit.difficulty) + CAREER_SUMMIT_PRIZE)
     // Clearing the ladder pays for both hypercars, but not many times over.
-    const total = CAREER.reduce((sum, e) => sum + careerWinBonus(e.rung, e.difficulty, e.id === SUMMIT), 0)
+    const total = CAREER.reduce((sum, e) => sum + careerWinBonus(e.step, e.difficulty, e.id === SUMMIT), 0)
     expect(total).toBeGreaterThan(carPrice('koenigsegg'))
     expect(total).toBeLessThan(3 * carPrice('koenigsegg'))
   })
