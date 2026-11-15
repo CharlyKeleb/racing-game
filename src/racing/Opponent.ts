@@ -7,7 +7,7 @@ import { rigCarModel } from '../vehicles/CarModel'
 import { rivalMaterial } from '../vehicles/RivalPaint'
 import type { VehicleConfig } from '../vehicles/VehicleConfig'
 import type { RaceTrack } from '../world/RaceTrack'
-import { DRIVER_PROFILES, LEGEND_EDGE, type AiDifficulty } from './AiProfiles'
+import { DRIVER_PROFILES, RIVAL_EDGE, type AiDifficulty, type CarEdge } from './AiProfiles'
 import { draftingStrength } from './Drafting'
 import { AiDriver, type DriverResources, type TrafficCar } from './AiDriver'
 import { RaceManager } from './RaceManager'
@@ -35,7 +35,8 @@ export class Opponent {
   private readonly track: RaceTrack
   constructor(id: number, scene: THREE.Group, stock: VehicleConfig, world: RAPIER.World, track: RaceTrack, spawn: SpawnPoint, difficulty: AiDifficulty = 'challenging') {
     this.id = id; this.world = world; this.track = track
-    const config = difficulty === 'legend' ? withLegendEdge(stock) : stock
+    const edge = RIVAL_EDGE[difficulty]
+    const config = edge ? withRivalEdge(stock, edge) : stock
     scene.traverse((object) => {
       const mesh = object as THREE.Mesh
       if (!mesh.isMesh) return
@@ -134,20 +135,24 @@ export class Opponent {
   }
 }
 
+/** Field spread from Legend up: every rival is a front-runner, so there's no easy car to pick off. */
+const FRONT_RUNNERS: Partial<Record<AiDifficulty, number>> = { legend: 0.99, mythic: 1, impossible: 1.01 }
+
 /**
  * Each rival's own pace. On most difficulties the field spreads out (the first rival slowest);
- * at Legend every rival is a front-runner, so there's no easy car to pick off.
+ * from Legend up every rival is a front-runner.
  */
 export function rivalPace(id: number, difficulty: AiDifficulty): number {
-  return difficulty === 'legend' ? 0.99 + Math.min(id, 7) * 0.012 : 0.94 + Math.min(id, 4) * 0.025
+  const base = FRONT_RUNNERS[difficulty]
+  return base !== undefined ? base + Math.min(id, 7) * 0.012 : 0.94 + Math.min(id, 4) * 0.025
 }
 
-/** A Legend rival's car: more torque, grip and brakes than stock (LEGEND_EDGE). */
-export function withLegendEdge(config: VehicleConfig): VehicleConfig {
+/** A rival's car with an edge over stock: more torque, grip and brakes (RIVAL_EDGE). */
+export function withRivalEdge(config: VehicleConfig, edge: CarEdge): VehicleConfig {
   return {
     ...config,
-    brakeForce: config.brakeForce * LEGEND_EDGE.brakes,
-    engine: { ...config.engine, torqueCurve: config.engine.torqueCurve.map(([rpm, nm]) => [rpm, nm * LEGEND_EDGE.torque]) },
-    tires: { ...config.tires, grip: config.tires.grip * LEGEND_EDGE.grip },
+    brakeForce: config.brakeForce * edge.brakes,
+    engine: { ...config.engine, torqueCurve: config.engine.torqueCurve.map(([rpm, nm]) => [rpm, nm * edge.torque]) },
+    tires: { ...config.tires, grip: config.tires.grip * edge.grip },
   }
 }

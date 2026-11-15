@@ -52,6 +52,12 @@ and is more consistent. Corner/braking planning shares of each car’s tire grip
 are 55%/50% for Relaxed, 80%/75% for Challenging and 88%/82% for Intense.
 Personality, pace and catch-up still modify the plan. The raw braking plan is
 capped by available brake force after the personality’s braking modifier. These change driving decisions, not vehicle physics.
+Above those sit three tiers that also give rivals' cars an edge over stock
+(`RIVAL_EDGE`: more torque, grip and brakes), make every rival a front-runner
+and never ease off when ahead. Legend (the default) is +14% torque, +5% grip and
++12% brakes. Mythic is +24%/+8%/+18%, with harder catch-up. Impossible is
++36%/+12%/+25%, with the strongest catch-up and quickest reactions. Wins pay 2×,
+2.6× and 3.5× the Challenging rate.
 Difficulty is chosen in Race setup and applied when the next field is created.
 
 `racing/Overtaking.ts` owns follow/draft/pass/yield decisions. It holds a target
