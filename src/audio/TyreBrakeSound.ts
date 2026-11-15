@@ -21,16 +21,16 @@ const MODES: readonly { ratio: number; q: number; level: number }[] = [
 ]
 /**
  * Overall loudness of each part at full level (before the car's bus).
- * Measured in game: a full drift's squeal sits ~6 dB under the engine at
- * part throttle, as a real slide does from the chase camera (it was 20 dB
- * under and lost in the engine).
+ * Measured in game: a launch's wheelspin and a hard corner's squeal had come
+ * up level with the engine (−12 dB against −13) and buried it. The engine
+ * leads, as in an arcade racer: a full slide now sits ~10 dB under it.
  */
-const SQUEAL_GAIN = 4.5
-const SCRUB_GAIN = 0.9
-const HISS_GAIN = 0.15
-const GRIND_GAIN = 0.5
-const BRAKE_SQUEAL_GAIN = 0.12
-const RUMBLE_GAIN = 1.4
+const SQUEAL_GAIN = 1.4
+const SCRUB_GAIN = 0.3
+const HISS_GAIN = 0.1
+const GRIND_GAIN = 0.3
+const BRAKE_SQUEAL_GAIN = 0.08
+const RUMBLE_GAIN = 0.9
 
 /**
  * One car's tyres and brakes as a Web Audio graph (see TyreBrakeModel for
