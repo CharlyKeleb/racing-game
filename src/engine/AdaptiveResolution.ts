@@ -35,9 +35,11 @@ export class AdaptiveResolution {
     const cap = quality === 'low' ? 1 : quality === 'ultra' ? 3 : showroom || quality === 'high' ? 2 : 1.5
     this.max = Math.min(display, cap)
     this.min = Math.min(this.max, quality === 'low' ? .55 : quality === 'ultra' ? 1 : .75)
-    // Start near the measured sustainable range, rather than paying for DPR 2
-    // until several poor one-second windows have passed. Quality remains user-selected.
-    this.ratio = Math.min(this.max, quality === 'low' ? .8 : quality === 'ultra' ? this.max : showroom ? 1.5 : 1)
+    // Low starts below its ceiling (phones). Medium and up start at it: starting
+    // races at DPR 1 drew a 2× screen at half resolution, so every car looked
+    // soft and jagged until eight good seconds let it climb. If the frame rate
+    // can't hold, two poor seconds bring it down a step.
+    this.ratio = quality === 'low' ? Math.min(this.max, .8) : this.max
   }
 
   resetWindow(): void {
