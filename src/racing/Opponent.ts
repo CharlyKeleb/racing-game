@@ -7,7 +7,7 @@ import { rigCarModel } from '../vehicles/CarModel'
 import { rivalMaterial } from '../vehicles/RivalPaint'
 import type { VehicleConfig } from '../vehicles/VehicleConfig'
 import type { RaceTrack } from '../world/RaceTrack'
-import { DRIVER_PROFILES, type AiDifficulty } from './AiProfiles'
+import { DRIVER_PROFILES, LEGEND_EDGE, type AiDifficulty } from './AiProfiles'
 import { draftingStrength } from './Drafting'
 import { AiDriver, type DriverResources, type TrafficCar } from './AiDriver'
 import { RaceManager } from './RaceManager'
@@ -33,8 +33,9 @@ export class Opponent {
   readonly id: number
   private readonly world: RAPIER.World
   private readonly track: RaceTrack
-  constructor(id: number, scene: THREE.Group, config: VehicleConfig, world: RAPIER.World, track: RaceTrack, spawn: SpawnPoint, difficulty: AiDifficulty = 'challenging') {
+  constructor(id: number, scene: THREE.Group, stock: VehicleConfig, world: RAPIER.World, track: RaceTrack, spawn: SpawnPoint, difficulty: AiDifficulty = 'challenging') {
     this.id = id; this.world = world; this.track = track
+    const config = difficulty === 'legend' ? withLegendEdge(stock) : stock
     scene.traverse((object) => {
       const mesh = object as THREE.Mesh
       if (!mesh.isMesh) return
@@ -48,7 +49,7 @@ export class Opponent {
     this.vehicle = new Vehicle(config, rigCarModel(scene, config), world, spawn)
     this.vehicle.controller.surfaceAt = (x, z) => track.surfaceAt(x, z)
     const front = config.wheels.find(w => w.id === 'FL')!, rear = config.wheels.find(w => w.id === 'RL')!
-    this.driver = new AiDriver(track.line, { wheelbase: Math.abs(front.position[2] - rear.position[2]), maxSteerAngle: config.maxSteerAngle, steerFalloffSpeed: config.steerFalloffSpeed, arcade: config.arcade, grip: config.tires.grip, peakSlip: peakSlipAngle(config.tires), steerPeakSlipScale: config.steerPeakSlipScale, downforcePerKg: config.downforceCoefficient / config.massKg, brakeDecel: config.brakeForce / config.massKg }, 0.94 + id * 0.025, DRIVER_PROFILES[(id - 1) % DRIVER_PROFILES.length], difficulty)
+    this.driver = new AiDriver(track.line, { wheelbase: Math.abs(front.position[2] - rear.position[2]), maxSteerAngle: config.maxSteerAngle, steerFalloffSpeed: config.steerFalloffSpeed, arcade: config.arcade, grip: config.tires.grip, peakSlip: peakSlipAngle(config.tires), steerPeakSlipScale: config.steerPeakSlipScale, downforcePerKg: config.downforceCoefficient / config.massKg, brakeDecel: config.brakeForce / config.massKg }, rivalPace(id, difficulty), DRIVER_PROFILES[(id - 1) % DRIVER_PROFILES.length], difficulty)
     this.pose = { id, x: 0, z: 0, heading: spawn.heading, speed: 0 }
     this.entry = { id, name: NAMES[(id - 1) % NAMES.length], player: false, lap: 0, checkpoint: 0, index: 0, finishMs: null, x: spawn.position.x, z: spawn.position.z }
     this.race = new RaceManager(track.checkpoints, 3, { onStateChange: () => {}, onLap: () => {} })
@@ -130,5 +131,23 @@ export class Opponent {
       }
     })
     for (const mat of materials) mat.dispose()
+  }
+}
+
+/**
+ * Each rival's own pace. On most difficulties the field spreads out (the first rival slowest);
+ * at Legend every rival is a front-runner, so there's no easy car to pick off.
+ */
+export function rivalPace(id: number, difficulty: AiDifficulty): number {
+  return difficulty === 'legend' ? 0.99 + Math.min(id, 7) * 0.012 : 0.94 + Math.min(id, 4) * 0.025
+}
+
+/** A Legend rival's car: more torque, grip and brakes than stock (LEGEND_EDGE). */
+export function withLegendEdge(config: VehicleConfig): VehicleConfig {
+  return {
+    ...config,
+    brakeForce: config.brakeForce * LEGEND_EDGE.brakes,
+    engine: { ...config.engine, torqueCurve: config.engine.torqueCurve.map(([rpm, nm]) => [rpm, nm * LEGEND_EDGE.torque]) },
+    tires: { ...config.tires, grip: config.tires.grip * LEGEND_EDGE.grip },
   }
 }

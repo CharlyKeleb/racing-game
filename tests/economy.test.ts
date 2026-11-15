@@ -61,21 +61,21 @@ describe('wallet', () => {
   })
 
   it('starts new players with coins and the starter cars, and keeps the car they already drive', () => {
-    const w = readWallet(null, 'diablo')
+    const w = readWallet(null, 'charger')
     expect(w.coins).toBe(STARTING_COINS)
-    expect(w.owned).toEqual(expect.arrayContaining([...STARTER_CARS, 'diablo']))
+    expect(w.owned).toEqual(expect.arrayContaining([...STARTER_CARS, 'charger']))
     // A saved wallet doesn't get the current car for free.
-    expect(readWallet(JSON.stringify({ coins: 10, owned: [] }), 'diablo').owned).not.toContain('diablo')
+    expect(readWallet(JSON.stringify({ coins: 10, owned: [] }), 'charger').owned).not.toContain('charger')
   })
 
   it('buys a car only with enough coins, once, and saves', () => {
     const s = walletStore.getState()
-    expect(s.buy('bmw')).toBe(false)
-    walletStore.setState({ coins: 3000 })
-    expect(walletStore.getState().buy('bmw')).toBe(true)
+    expect(s.buy('charger')).toBe(false)
+    walletStore.setState({ coins: 12500 })
+    expect(walletStore.getState().buy('charger')).toBe(true)
     expect(walletStore.getState().coins).toBe(500)
-    expect(walletStore.getState().buy('bmw')).toBe(false)
-    expect(JSON.parse(localStorage.getItem(WALLET_KEY)!).owned).toContain('bmw')
+    expect(walletStore.getState().buy('charger')).toBe(false)
+    expect(JSON.parse(localStorage.getItem(WALLET_KEY)!).owned).toContain('charger')
   })
 
   it('awards with the daily cap and remembers the payout', () => {

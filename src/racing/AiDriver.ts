@@ -1,7 +1,7 @@
 import { steeringLimit, type SteeringLimitConfig } from '../vehicles/SteeringLimit'
 import type { InputState } from '../input/InputManager'
 import type { Point3 } from './TrackProgress'
-import { AI_DIFFICULTIES, DRIVER_PROFILES, type AiDifficulty, type DriverProfile } from './AiProfiles'
+import { AI_DIFFICULTIES, CATCH_UP, DRIVER_PROFILES, type AiDifficulty, type DriverProfile } from './AiProfiles'
 import { Overtaking } from './Overtaking'
 import { TrackProgress } from './TrackProgress'
 
@@ -19,13 +19,6 @@ export interface SteeringConfig extends SteeringLimitConfig {
 const REFERENCE_GRIP = 1.25
 /** Straight-line speed the plan allows, m/s (×profile.straight); the engine caps it before this. */
 const STRAIGHT_CAP = 88
-/**
- * Catch-up: a rival behind the player asks for up to CATCH_UP more pace,
- * reaching it CATCH_UP_METRES back; one ahead eases by at most EASE_OFF.
- */
-const CATCH_UP = 0.08
-const CATCH_UP_METRES = 250
-const EASE_OFF = 0.02
 
 /** Numeric, deterministic controller. Owns inputs, never moves a rigid body. */
 export class AiDriver {
@@ -112,7 +105,7 @@ export class AiDriver {
     this.input.handbrake = this.input.nitro = false
   }
 
-  /** gap is meters behind the player (negative when ahead). Catch-up: see CATCH_UP / EASE_OFF. */
+  /** gap is meters behind the player (negative when ahead). Catch-up: see CATCH_UP in AiProfiles. */
   update(dt: number, pose: DriverPose, traffic: readonly TrafficCar[], id: number, gap: number, laneLimit: number, resources: DriverResources = EMPTY_RESOURCES): InputState {
     const index = this.progress.update(pose.x, pose.z)
     const n = this.line.length
@@ -152,7 +145,8 @@ export class AiDriver {
     const difficulty = AI_DIFFICULTIES[this.difficulty]
     const wantedSteer = clamp(-angle / available, -1, 1)
     this.input.steer += (wantedSteer - this.input.steer) * Math.min(1, dt / difficulty.reaction)
-    const rubber = 1 + clamp((gap / CATCH_UP_METRES) * CATCH_UP, -EASE_OFF, CATCH_UP)
+    const catchUp = CATCH_UP[this.difficulty]
+    const rubber = 1 + clamp((gap / catchUp.metres) * catchUp.catchUp, -catchUp.easeOff, catchUp.catchUp)
     this.targetSpeed = Math.min(this.speeds[index] * this.pace * rubber * difficulty.pace * (1 - difficulty.variation * (0.5 + 0.5 * Math.sin(this.elapsed * 0.37 + id * 2))), trafficSpeed)
     if (distanceFromLine > 5 || Math.abs(error) > 0.8) this.targetSpeed = Math.min(this.targetSpeed, 10)
     const delta = this.targetSpeed - pose.speed
@@ -177,7 +171,7 @@ export class AiDriver {
       this.input.brake = 0
       this.input.steer = Math.sign(this.input.steer) * Math.max(0.32, Math.abs(this.input.steer))
     }
-    const maxDriftSeconds = this.difficulty === 'relaxed' ? .65 : this.difficulty === 'intense' ? 1.5 : 1.1
+    const maxDriftSeconds = this.difficulty === 'relaxed' ? .65 : this.difficulty === 'challenging' ? 1.1 : 1.5
     if (resources.drifting && this.driftingFor > maxDriftSeconds) {
       // Release at every difficulty: a long bend must not latch a drift forever.
       // Faster rivals can hold a longer rotation, then resume grip steering.
