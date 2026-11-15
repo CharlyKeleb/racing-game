@@ -2,7 +2,7 @@ import type { WheelId } from '../vehicles/VehicleConfig'
 import { SPOILERS } from '../vehicles/SpoilerCatalog'
 import { PLATE_STYLES, type PlateStyle } from '../vehicles/PlateStyles'
 import { DEFAULT_LIVERY, hasLivery, type LiveryDesign, type StripePattern, type NumberPanel, type LiveryDecal } from '../vehicles/LiveryDesign'
-import { GiPaintBrush, GiCarWheel, GiIdCard, GiAutoRepair, GiCheckeredFlag, GiSave } from 'react-icons/gi'
+import { GiPaintBrush, GiCarWheel, GiIdCard, GiAutoRepair, GiCheckeredFlag, GiSave, GiFireDash } from 'react-icons/gi'
 import { useEffect, useState } from 'react'
 import { getCar } from '../vehicles/carRegistry'
 import { nextPresetName, PRESET_NAME_MAX, PRESET_SLOTS, previewPreset, sameBuild, type BuildPreset } from '../vehicles/BuildPresets'
@@ -13,15 +13,18 @@ import {
   RIM_PRESETS,
   type CarBuild,
   type PaintFinish,
+  type ExhaustKit,
   type Stage,
+  type TurboKit,
   type SuspensionKit,
   type TireCompound,
 } from '../vehicles/CarBuild'
 import { useGameInstance } from './GameContext'
 import { useGame } from './hooks'
 import { Button, ClassBadge, Panel, Segmented } from './kit'
+import { RevButton } from './RevButton'
 
-type Tab = 'paint' | 'wheels' | 'performance' | 'livery' | 'plates' | 'spoilers' | 'presets'
+type Tab = 'paint' | 'wheels' | 'performance' | 'sound' | 'livery' | 'plates' | 'spoilers' | 'presets'
 const TABS: [Tab, string][] = [
   ['paint', 'Paint'],
   ['wheels', 'Wheels'],
@@ -29,10 +32,11 @@ const TABS: [Tab, string][] = [
   ['livery', 'Livery'],
   ['plates', 'Plates'],
   ['performance', 'Upgrades'],
+  ['sound', 'Exhaust'],
   ['presets', 'Presets'],
 ]
 
-const tabIcons = { paint: GiPaintBrush, wheels: GiCarWheel, performance: GiAutoRepair, livery: GiCheckeredFlag, plates: GiIdCard, spoilers: GiAutoRepair, presets: GiSave }
+const tabIcons = { sound: GiFireDash, paint: GiPaintBrush, wheels: GiCarWheel, performance: GiAutoRepair, livery: GiCheckeredFlag, plates: GiIdCard, spoilers: GiAutoRepair, presets: GiSave }
 
 /**
  * The workshop: category tabs and their options. It lives in the festival
@@ -73,6 +77,7 @@ export function GarageWorkshop() {
         {tab === 'wheels' && <WheelsTab build={build} update={update} wheel={wheel} onWheel={setWheel} disabled={switching} />}
         {tab === 'spoilers' && <SpoilersTab build={build} update={update} disabled={switching}/>}
         {tab === 'performance' && <PerformanceTab build={build} update={update} />}
+        {tab === 'sound' && <SoundTab build={build} update={update} />}
         {tab === 'livery' && <LiveryTab build={build} update={update} disabled={switching} />}
         {tab === 'plates' && <PlatesTab build={build} update={update} disabled={switching} side={plateSide} onSide={setPlateSide} />}
         {tab === 'presets' && <PresetsTab build={build} disabled={switching} />}
@@ -314,6 +319,51 @@ function PerformanceTab({ build, update }: TabProps) {
         onPick={(brakes) => update({ brakes })}
       />
     </>
+  )
+}
+
+const EXHAUSTS: { id: ExhaustKit; name: string; note: string }[] = [
+  { id: 'stock', name: 'Stock', note: 'As it left the factory' },
+  { id: 'catback', name: 'Cat-back', note: 'Sport back box: more body and crackle' },
+  { id: 'resdelete', name: 'Resonator delete', note: 'Raspy and bright' },
+  { id: 'xpipe', name: 'X-pipe', note: 'Smoother and higher, an exotic note' },
+  { id: 'straight', name: 'Straight pipe', note: 'Deep, loud and raw, pops and flames on every lift' },
+]
+const TURBOS: { id: TurboKit; name: string; note: string }[] = [
+  { id: 'stock', name: 'Stock', note: 'The car as it came' },
+  { id: 'single', name: 'Big single', note: 'Loud single-scroll scream, big pssh off boost' },
+  { id: 'twin', name: 'Twin-scroll', note: 'Smooth, higher whistle, softer blow-off' },
+  { id: 'flutter', name: 'No BOV', note: 'Boost chatters back on a lift: stu-stu-stu' },
+  { id: 'eturbo', name: 'E-turbo', note: 'Electric spool, a high futuristic whine' },
+]
+
+/** Exhaust and turbo: how the car sounds, pops and spits flames. Power stays the same. */
+function SoundTab({ build, update }: TabProps) {
+  return (
+    <div className="sound-mods">
+      <div className="sound-mods__rev">
+        <p className="settings__help">Changes the sound, pops and flames, not the power. Hold to rev, then let go to hear the turbo.</p>
+        <RevButton />
+      </div>
+      <ModPicker label="Exhaust" options={EXHAUSTS} value={build.exhaust} onPick={(exhaust) => update({ exhaust })} />
+      <ModPicker label="Turbo" options={TURBOS} value={build.turbo} onPick={(turbo) => update({ turbo })} />
+    </div>
+  )
+}
+
+function ModPicker<T extends string>({ label, options, value, onPick }: { label: string; options: { id: T; name: string; note: string }[]; value: T; onPick(v: T): void }) {
+  return (
+    <div className="ui-field">
+      <span className="ui-field__label">{label} <em>{options.find((o) => o.id === value)?.name}</em></span>
+      <div className="sound-mods__grid" role="radiogroup" aria-label={label}>
+        {options.map((o) => (
+          <button key={o.id} role="radio" aria-checked={o.id === value} className={`sound-mods__option${o.id === value ? ' on' : ''}`} onClick={() => onPick(o.id)}>
+            <strong>{o.name}</strong>
+            <small>{o.note}</small>
+          </button>
+        ))}
+      </div>
+    </div>
   )
 }
 
