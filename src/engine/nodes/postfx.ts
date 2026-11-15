@@ -5,6 +5,7 @@ import { bloom } from 'three/addons/tsl/display/BloomNode.js'
 import { fxaa } from 'three/addons/tsl/display/FXAANode.js'
 import { smaa } from 'three/addons/tsl/display/SMAANode.js'
 import type { QualityPreset } from '../../stores/gameStore'
+import { msaaSamples } from '../AdaptiveResolution'
 import { HAZE_STRENGTH } from '../../effects/HeatHaze'
 import { BOOST_BLUR_CENTER, BOOST_BLUR_INNER, BOOST_BLUR_OUTER, BOOST_BLUR_SPREAD, boostBlurSamples } from '../../effects/BoostBlur'
 import type { HazeSource } from '../../effects/PostFX'
@@ -52,7 +53,9 @@ export class NodePostFX {
 
   private build(haze: HazeSource | null): void {
     const { scene, camera, quality } = this
-    const scenePass = pass(scene, camera)
+    // Ultra on a low-DPR screen: MSAA on the scene pass, as the WebGL stack (PostFX.ts).
+    const msaa = msaaSamples(quality, window.devicePixelRatio)
+    const scenePass = pass(scene, camera, msaa ? { samples: msaa } : {})
     const beauty = scenePass.getTextureNode('output')
     const vectors = texture(this.vectors.target.texture)
     const exposure = this.exposure
@@ -66,7 +69,7 @@ export class NodePostFX {
         motion.mulAssign(min(1, float(24).div(max(pixels, .001))))
         const sum = beauty.sample(at).toVar()
         const weight = float(1).toVar()
-        const samples = quality === 'high' ? 12 : quality === 'medium' ? 8 : 6
+        const samples = quality === 'low' ? 6 : quality === 'medium' ? 8 : 12
         Loop({ start: 1, end: samples, type: 'int', condition: '<' }, ({ i }) => {
           const t = float(i).div(samples - 1).sub(.5)
           const sampleUV = at.add(motion.mul(t)).clamp(0, 1)
@@ -116,7 +119,7 @@ export class NodePostFX {
     color = vec4(select(bad, vec3(0), max(min(raw.rgb, MAX_SCENE_RADIANCE), 0)), raw.a)
     const glow = bloom(color, 0.35, 0.5, 1.2)
     glow.smoothWidth.value = 0.2
-    glow.setResolutionScale(quality === 'high' ? 0.5 : quality === 'medium' ? 0.35 : 0.25)
+    glow.setResolutionScale(quality === 'low' ? 0.25 : quality === 'medium' ? 0.35 : 0.5)
     const toned = renderOutput(color.add(glow))
     // VignetteEffect's default technique (WebGL stack), written with the edges in rising order.
     const fade = smoothstep(VIGNETTE_OFFSET * 0.799, 0.8, distance(screenUV, vec2(0.5)).mul(VIGNETTE_DARKNESS + VIGNETTE_OFFSET)).oneMinus()

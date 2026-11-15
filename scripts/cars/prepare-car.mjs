@@ -231,44 +231,53 @@ if (cfg.flattenTextures) {
 }
 
 // ── 4. Optimize ──────────────────────────────────────────────────────────────
-// keepUniqueNames: the caliper / tail-light clones differ from their source only by name.
-await doc.transform(prune(), dedup({ keepUniqueNames: true }), weld())
-const before = triangleCount()
-for (const mesh of root.listMeshes()) {
-  for (const prim of mesh.listPrimitives()) {
-    const [ratio, error] = ratioFor(mesh.getName(), prim.getMaterial()?.getName() ?? '')
-    if (ratio < 1) simplifyPrimitive(prim, { simplifier: MeshoptSimplifier, ratio, error, lockBorder: false })
-  }
-}
-await doc.transform(
-  prune(),
-  textureCompress({ encoder: sharp, targetFormat: 'webp', resize: [cfg.textureSize, cfg.textureSize], quality: 82 }),
-)
-const after = triangleCount()
+// Two detail levels from the same split model. The full model (Medium and up,
+// the garage) keeps the detail that shows up close: cfg.full overrides the
+// decimation and texture size for it (round tyres, intact spokes, 2K textures).
+// The Low model takes the original path, cfg.simplify then cfg.lowRatio, so
+// raising the full model's detail never makes Low heavier.
+const low = cloneDocument(doc)
+const before = triangleCount(doc)
+await optimize(doc, cfg.full?.simplify ?? cfg.simplify, cfg.full?.textureSize ?? cfg.textureSize, cfg.full?.textureQuality ?? 82)
+await optimize(low, cfg.simplify, cfg.textureSize, 82)
+const after = triangleCount(doc)
 
-/** [ratio, error] for a primitive: the first cfg.simplify entry whose regex matches. */
-function ratioFor(meshName, matName) {
-  for (const [re, r, err] of cfg.simplify) if (re.test(meshName) || re.test(matName)) return [r, err ?? cfg.simplifyError]
+/** Weld, decimate per cfg-style [regex, ratio, error] rules, compress textures, merge draw calls. */
+async function optimize(d, rules, textureSize, quality) {
+  // keepUniqueNames: the caliper / tail-light clones differ from their source only by name.
+  await d.transform(prune(), dedup({ keepUniqueNames: true }), weld())
+  for (const mesh of d.getRoot().listMeshes()) {
+    for (const prim of mesh.listPrimitives()) {
+      const [ratio, error] = ratioFor(rules, mesh.getName(), prim.getMaterial()?.getName() ?? '')
+      if (ratio < 1) simplifyPrimitive(prim, { simplifier: MeshoptSimplifier, ratio, error, lockBorder: false })
+    }
+  }
+  await d.transform(
+    prune(),
+    textureCompress({ encoder: sharp, targetFormat: 'webp', resize: [textureSize, textureSize], quality }),
+  )
+  // One draw call per material per node: the split above leaves a primitive per
+  // brake piece, light half and so on. keepNamed keeps the contract's nodes apart.
+  // cfg.mergePlain folds look-alike plain materials together first (as Low always does).
+  if (cfg.mergePlain) mergePlainMaterials(d)
+  await d.transform(prune(), join({ keepNamed: true }))
+}
+
+/** [ratio, error] for a primitive: the first rule whose regex matches. */
+function ratioFor(rules, meshName, matName) {
+  for (const [re, r, err] of rules) if (re.test(meshName) || re.test(matName)) return [r, err ?? cfg.simplifyError]
   return [1, 0]
 }
 
-function triangleCount() {
+function triangleCount(d) {
   let t = 0
-  for (const m of root.listMeshes()) for (const p of m.listPrimitives()) t += (p.getIndices()?.getCount() ?? p.getAttribute('POSITION').getCount()) / 3
+  for (const m of d.getRoot().listMeshes()) for (const p of m.listPrimitives()) t += (p.getIndices()?.getCount() ?? p.getAttribute('POSITION').getCount()) / 3
   return t
 }
-
-// One draw call per material per node: the split above leaves a primitive per
-// brake piece, light half and so on. keepNamed keeps the contract's nodes apart.
-// cfg.mergePlain folds look-alike plain materials together first (as Low always does).
-if (cfg.mergePlain) mergePlainMaterials(doc)
-await doc.transform(prune(), join({ keepNamed: true }))
 
 // ── 5. Write the full and Low-preset models ──────────────────────────────────
 const outDir = resolve(cfg.outDir)
 await mkdir(outDir, { recursive: true })
-// The Low copy is simplified from the unquantized model, so clone before meshopt.
-const low = cloneDocument(doc)
 await doc.transform(meshopt({ encoder: MeshoptEncoder, level: 'medium' }))
 await io.write(`${outDir}/${cfg.id}.glb`, doc)
 

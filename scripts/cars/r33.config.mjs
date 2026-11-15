@@ -22,4 +22,12 @@ export default {
   flattenTextures: 64,
   mergePlain: true,
   textureSize: 1024,
+  // Full model (Medium and up, the garage): round tyres and whole spokes, light decimation elsewhere.
+  full: {
+    simplify: [
+      [/^int1$/, 0.5, 0.005],
+    ],
+    textureSize: 2048,
+    textureQuality: 90,
+  },
 }

@@ -48,7 +48,7 @@ export function Settings({ onClose }: { onClose?: () => void }) {
         {section === 'graphics' && <>
           <Segmented<TrackLook> label="Track appearance" value={settings.trackLook} options={[[ 'default','Track default'],['road-focus','Road focus']]} onPick={trackLook=>update({trackLook})}/>
           <p className="settings__help">Road focus darkens neutral asphalt and softens terrain colours on every circuit. Markings, signs and lights stay readable.</p>
-          <SettingChoices<QualityPreset> preview={quality=><SettingScene quality={quality}/>} label="Visual quality" value={settings.quality} options={[[ 'low','Low'],['medium','Medium'],['high','High']]} onPick={quality=>update({quality})}/>
+          <SettingChoices<QualityPreset> preview={quality=><SettingScene quality={quality}/>} label="Visual quality" value={settings.quality} options={[[ 'low','Low'],['medium','Medium'],['high','High'],['ultra','Ultra']]} onPick={quality=>update({quality})}/>
           <p className="settings__help">Illustrative previews. Low favors speed; High adds richer lighting and detail.</p>
           <SettingChoices<number> preview={v=><SettingScene effects={v===1}/>} label="Post effects" value={settings.postfx?1:0} options={[[1,'On'],[0,'Off']]} onPick={v=>update({postfx:v===1})}/>
           <Segmented<RendererKind> help label="Renderer" value={settings.renderer} options={[['webgl','WebGL'],['webgpu','WebGPU (beta)']]} onPick={renderer=>{ if (renderer === settings.renderer) return; update({renderer}); window.location.reload() }}/>

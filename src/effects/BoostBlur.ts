@@ -19,7 +19,7 @@ export const BOOST_BLUR_OUTER = 0.95
 
 /** Samples per pixel by preset. */
 export function boostBlurSamples(quality: QualityPreset): number {
-  return quality === 'high' ? 12 : quality === 'medium' ? 9 : 6
+  return quality === 'low' ? 6 : quality === 'medium' ? 9 : 12
 }
 
 /**

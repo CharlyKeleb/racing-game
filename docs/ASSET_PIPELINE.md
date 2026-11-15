@@ -43,7 +43,10 @@ center**, or it will wobble when it spins.
 - Merge materials where possible. Target ≤ ~30 draw calls.
 
 ### Budgets
-- ≤ ~150k triangles for the hero car, with wheels ≤ ~10k each.
+- Full model (`<id>.glb`, Medium and up and the garage): ≤ ~200k triangles. Don't
+  decimate the tyres and rims here: in the garage close-up a decimated tyre reads
+  as a polygon and the spokes break up.
+- Low model (`<id>_low.glb`): ≲ 35k triangles and ≲ 25 draw calls.
 - Textures ≤ 2048². Compress with `gltf-transform` or `gltfpack` (meshopt) for
   release builds.
 
@@ -99,7 +102,11 @@ The script:
 3. Splits the four wheels out of shared tyre, rim and brake meshes. Parts are matched by node or material name. Brake parts are split per piece: round pieces centred on the axle (discs) go on the wheel, and off-centre pieces (calipers) go on `Chassis` with a `caliper` material.
 4. Splits a lights mesh into `headlight` and `taillight` materials.
 5. Renames materials for the livery (`paint`, `rim`) and fixes alpha modes.
-6. Decimates to budget and re-encodes textures as WebP.
+6. Decimates to budget and re-encodes textures as WebP, separately for each model.
+   `cfg.full` (`simplify`, `textureSize`, `textureQuality`) sets the full model's
+   detail. The Low model always takes `cfg.simplify` and `cfg.textureSize`, then
+   `cfg.lowRatio`, so raising the full model's detail never makes Low heavier.
+   Without `cfg.full`, both models come out as they did before it existed.
 7. Writes `<id>.glb` and `<id>_low.glb` (meshopt).
 
 It prints the axle centres, radii, widths and bounds that `vehicle-config.json` needs.

@@ -1,3 +1,4 @@
+import type { QualityPreset } from '../stores/gameStore'
 import * as THREE from 'three'
 import { BRAKE, LIFT, type BrakingGuide } from '../racing/BrakingGuide'
 import type { Point3 } from '../racing/TrackProgress'
@@ -60,7 +61,7 @@ export class DrivingLine {
     this.mesh.visible = false
   }
 
-  setQuality(quality: 'low' | 'medium' | 'high'): void {
+  setQuality(quality: QualityPreset): void {
     this.count = quality === 'low' ? AHEAD.low : AHEAD.high
   }
 

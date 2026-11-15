@@ -245,9 +245,12 @@ export class Showroom {
     const pmrem = backend.nodes
       ? new backend.nodes.PMREMGenerator(this.renderer as never) as unknown as THREE.PMREMGenerator
       : new THREE.PMREMGenerator(this.renderer as THREE.WebGLRenderer)
-    // Blurred (sigma 0.06): sharp, the lamp bulbs and tubes became bright pin-points
-    // that sparkled across the clear coat.
-    const target = pmrem.fromScene(bakeScene, 0.06, 0.1, 80, { size: 256, position: new THREE.Vector3(0, 1.1, 0) })
+    // Low: small and blurred (sigma 0.06). Medium and up: a 512 px cube with
+    // little blur, so the clear coat mirrors the room's shutters, lamps and
+    // walls instead of a flat smear. (The pin-point sparkle that once forced the
+    // blur came from the metallic flakes' oversized cells; see PaintFinish.ts.)
+    const sharp = this.wantsHigh
+    const target = pmrem.fromScene(bakeScene, sharp ? 0.025 : 0.06, 0.1, 80, { size: sharp ? 512 : 256, position: new THREE.Vector3(0, 1.1, 0) })
     pmrem.dispose()
     this.disposables.push(target)
 

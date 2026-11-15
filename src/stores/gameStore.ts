@@ -20,7 +20,9 @@ import type { RendererKind } from '../engine/backend'
  */
 
 export type GamePhase = 'boot' | 'menu' | 'garage' | 'loading' | 'intro' | 'countdown' | 'racing' | 'paused' | 'finished' | 'online'
-export type QualityPreset = 'low' | 'medium' | 'high'
+/** Visual presets, lightest first. Ultra is High plus native resolution (4K on a 4K screen), MSAA and 4K shadows. */
+export type QualityPreset = 'low' | 'medium' | 'high' | 'ultra'
+export const QUALITY_PRESETS: readonly QualityPreset[] = ['low', 'medium', 'high', 'ultra']
 export type CameraMode = 'chase' | 'cockpit'
 export type Weather = 'dry' | 'rain'
 
@@ -216,6 +218,7 @@ const defaultSettings: Settings = {
 /** Coerces every field to a valid value: saved data and settings patches can carry stale or unknown ids. */
 function sanitizeSettings(merged: Settings): Settings {
   if (merged.trackLook !== 'default' && merged.trackLook !== 'road-focus') merged.trackLook = defaultSettings.trackLook
+  if (!QUALITY_PRESETS.includes(merged.quality)) merged.quality = defaultSettings.quality
   const savedCockpits = merged.cockpits
   merged.cockpits = {}
   for (const car of selectableCars()) if (savedCockpits && typeof savedCockpits === 'object' && Object.hasOwn(savedCockpits, car.id)) merged.cockpits[car.id] = sanitizeCockpit(savedCockpits[car.id], car.id)

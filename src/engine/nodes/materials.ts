@@ -1,9 +1,9 @@
-import type { PaintFinishUniforms } from '../../vehicles/PaintFinish'
+import { PAINT_FLAKE_DENSITY, type PaintFinishUniforms } from '../../vehicles/PaintFinish'
 import type { RainSurfaceUniforms } from '../../effects/RainSurface'
 import { rainClearance } from './rainSurface'
 import * as THREE from 'three/webgpu'
 import {
-  abs, attribute, cameraPosition, cameraViewMatrix, modelNormalMatrix, normalView, positionView, floor, fract, clamp, cos, cross, float, fwidth, length, materialColor, materialOpacity, max, min, mix, mod, modelViewMatrix, normalize,
+  abs, attribute, cameraPosition, cameraViewMatrix, modelNormalMatrix, modelScale, normalView, positionView, floor, fract, clamp, cos, cross, float, fwidth, length, materialColor, materialOpacity, max, min, mix, mod, modelViewMatrix, normalize,
   positionGeometry, positionLocal, reference, reflector, select, sin, smoothstep, step, texture, uniform, uv, varying, vec2, vec3, vec4,
 } from 'three/tsl'
 import { SkyMesh } from 'three/addons/objects/SkyMesh.js'
@@ -119,17 +119,19 @@ function paintPearlColor(base: THREE.Node<'vec3'>, finish: PaintFinishUniforms) 
 }
 export function premiumPaintMaterial(finish: PaintFinishUniforms): THREE.MeshPhysicalNodeMaterial {
   const material = new THREE.MeshPhysicalNodeMaterial({ name: 'livery_paint' })
-  const grain = positionLocal.mul(220)
+  // Metres, not the mesh's quantized units (see PaintFinish.ts).
+  const grain = varying(positionLocal.mul(modelScale), 'vPaintLocal').mul(PAINT_FLAKE_DENSITY)
   const cell = floor(grain)
   const hash = fract(sin(vec3(
     cell.dot(vec3(127.1, 311.7, 74.7)), cell.dot(vec3(269.5, 183.3, 246.1)), cell.dot(vec3(113.5, 271.9, 124.6)),
   )).mul(43758.5453))
   const width = fwidth(grain)
-  const filter = float(1).sub(smoothstep(.12, .35, max(width.x, max(width.y, width.z))))
-  const strength = smoothstep(.82, .94, hash.x).mul(filter).mul(reference('value', 'float', finish.uPaintFlake))
+  const filter = float(1).sub(smoothstep(.15, .4, max(width.x, max(width.y, width.z))))
+  const dot = float(1).sub(smoothstep(.22, .38, length(fract(grain).sub(.5))))
+  const strength = smoothstep(.82, .94, hash.x).mul(dot).mul(filter).mul(reference('value', 'float', finish.uPaintFlake))
   // Transform the object-space perturbation using the object's normal matrix.
   const tilt = cameraViewMatrix.mul(vec4(modelNormalMatrix.mul(hash.mul(2).sub(1)), 0)).xyz
-  material.normalNode = normalize(normalView.add(tilt.sub(normalView.mul(normalView.dot(tilt))).mul(strength).mul(.38)))
+  material.normalNode = normalize(normalView.add(tilt.sub(normalView.mul(normalView.dot(tilt))).mul(strength).mul(.3)))
   material.roughnessNode = mix(reference('roughness', 'float', material), .11, strength)
   material.colorNode = paintPearlColor(materialColor.rgb, finish)
   return material

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { AdaptiveResolution } from '../src/engine/AdaptiveResolution'
+import { AdaptiveResolution, msaaSamples } from '../src/engine/AdaptiveResolution'
 import { readRenderDiagnostics } from '../src/engine/renderDiagnostics'
 
 function seconds(controller: AdaptiveResolution, count: number, fps: number) {
@@ -9,27 +9,43 @@ function seconds(controller: AdaptiveResolution, count: number, fps: number) {
 }
 
 describe('adaptive resolution', () => {
-  it('starts conservatively and respects the display and selected quality ceilings', () => {
-    expect(new AdaptiveResolution('high', 2).ratio).toBe(1)
+  it('starts Medium and up at their ceiling and respects the display and selected quality ceilings', () => {
+    expect(new AdaptiveResolution('high', 2).ratio).toBe(2)
+    expect(new AdaptiveResolution('medium', 2).ratio).toBe(1.5)
     expect(new AdaptiveResolution('medium', 3).max).toBe(1.5)
     const lowDpr = new AdaptiveResolution('high', .5)
     seconds(lowDpr, 30, 30)
     expect(lowDpr.ratio).toBe(.5)
     expect(new AdaptiveResolution('low', 3).ratio).toBe(.8)
   })
+  it('renders Ultra at the native resolution (4K on a 4K screen), never below one pixel per CSS pixel', () => {
+    const ultra = new AdaptiveResolution('ultra', 2)
+    expect(ultra.ratio).toBe(2)
+    expect(new AdaptiveResolution('ultra', 4).max).toBe(3)
+    expect(new AdaptiveResolution('ultra', 1).ratio).toBe(1)
+    seconds(ultra, 60, 20)
+    expect(ultra.ratio).toBe(1)
+  })
+  it('uses MSAA only on Ultra, and only where the pixels are big', () => {
+    expect(msaaSamples('ultra', 1)).toBe(4)
+    expect(msaaSamples('ultra', 2)).toBe(0)
+    expect(msaaSamples('high', 1)).toBe(0)
+    expect(msaaSamples('low', 1)).toBe(0)
+  })
   it('renders the garage sharper on Medium and High, but not on Low or beyond the display', () => {
     const medium = new AdaptiveResolution('medium', 2, true)
     expect(medium.max).toBe(2)
-    expect(medium.ratio).toBe(1.5)
+    expect(medium.ratio).toBe(2)
     expect(new AdaptiveResolution('high', 3, true).max).toBe(2)
     expect(new AdaptiveResolution('medium', 1, true).ratio).toBe(1)
     expect(new AdaptiveResolution('low', 2, true).max).toBe(1)
     // Still drops when the frame rate can't hold.
     seconds(medium, 4, 30)
-    expect(medium.ratio).toBeCloseTo(1.35)
+    expect(medium.ratio).toBeCloseTo(1.85)
   })
   it('does not resize on a single poor window or a stall', () => {
     const controller = new AdaptiveResolution('high', 2)
+    controller.ratio = 1
     expect(seconds(controller, 1, 30)).toBe(0)
     expect(controller.update(.25)).toBe(false)
     expect(controller.update(-.1)).toBe(false)
@@ -38,6 +54,7 @@ describe('adaptive resolution', () => {
   })
   it('bounds downward changes and requires sustained headroom to recover', () => {
     const controller = new AdaptiveResolution('high', 2)
+    controller.ratio = 1
     expect(seconds(controller, 2, 30)).toBe(0)
     expect(seconds(controller, 2, 30)).toBe(1)
     expect(controller.ratio).toBe(.85)
@@ -47,6 +64,7 @@ describe('adaptive resolution', () => {
   })
   it('does not accumulate recovery through neutral or hidden windows', () => {
     const controller = new AdaptiveResolution('high', 2)
+    controller.ratio = 1
     seconds(controller, 5, 60)
     controller.resetWindow()
     seconds(controller, 5, 60)

@@ -11,16 +11,22 @@ export function setPaintFinish(uniforms: PaintFinishUniforms, finish: PaintFinis
   uniforms.uPaintPearl.value = finish === 'pearl' ? 1 : 0
 }
 
-// Object-space grains remain attached to panels. Derivative filtering keeps
-// flakes to close-ups (several pixels each, the garage): at chase distance they
-// read as speckled noise on the paint, not sparkle. Same numbers in the TSL twin.
+/** Flake cells per metre. ~1.7 mm: sub-pixel (filtered away) at chase distance, a glint at 4K close-ups. */
+export const PAINT_FLAKE_DENSITY = 600
+
+// Grains stay attached to the panels: object space, but in metres. The vertex
+// position alone is in the mesh's *quantized* units (KHR_mesh_quantization puts
+// a ~2.5× dequantization scale on the node), which made each flake a 1 cm
+// square that read as blocky pixels on the paint. Each flake is a round dot in
+// its cell, and derivative filtering fades it before it shrinks under ~3 px, so
+// the paint never speckles. Same numbers in the TSL twin (engine/nodes/materials.ts).
 export function patchPaintFinish(material: THREE.MeshPhysicalMaterial, uniforms: PaintFinishUniforms): void {
   const compile = material.onBeforeCompile
   const key = material.customProgramCacheKey()
   material.onBeforeCompile = (shader, renderer) => {
     compile.call(material, shader, renderer)
     Object.assign(shader.uniforms, uniforms)
-    shader.vertexShader = 'varying vec3 vPaintLocal;\n' + shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvPaintLocal=position;')
+    shader.vertexShader = 'varying vec3 vPaintLocal;\n' + shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvPaintLocal=position*vec3(length(modelMatrix[0].xyz),length(modelMatrix[1].xyz),length(modelMatrix[2].xyz));')
     shader.fragmentShader = `varying vec3 vPaintLocal;
       uniform float uPaintFlake; uniform float uPaintPearl; uniform mat3 normalMatrix;
       vec3 paintHash(vec3 p) {
@@ -32,16 +38,17 @@ export function patchPaintFinish(material: THREE.MeshPhysicalMaterial, uniforms:
       vec3 pearlTint=mix(vec3(1.,.78,.93),vec3(.70,.91,1.),paintAngle);
       diffuseColor.rgb=mix(diffuseColor.rgb,diffuseColor.gbr,paintAngle*uPaintPearl*.4)*mix(vec3(1.),pearlTint,uPaintPearl*.65);`)
     shader.fragmentShader = shader.fragmentShader.replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
-      vec3 grainPosition=vPaintLocal*220.;
+      vec3 grainPosition=vPaintLocal*${PAINT_FLAKE_DENSITY.toFixed(1)};
       vec3 grainHash=paintHash(floor(grainPosition));
       vec3 grainWidth=fwidth(grainPosition);
-      float grainFilter=1.-smoothstep(.12,.35,max(grainWidth.x,max(grainWidth.y,grainWidth.z)));
-      float grainStrength=smoothstep(.82,.94,grainHash.x)*grainFilter*uPaintFlake;
+      float grainFilter=1.-smoothstep(.15,.4,max(grainWidth.x,max(grainWidth.y,grainWidth.z)));
+      float grainDot=1.-smoothstep(.22,.38,length(fract(grainPosition)-.5));
+      float grainStrength=smoothstep(.82,.94,grainHash.x)*grainDot*grainFilter*uPaintFlake;
       roughnessFactor=mix(roughnessFactor,.11,grainStrength);`)
     shader.fragmentShader = shader.fragmentShader.replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
       vec3 grainTilt=normalMatrix*(grainHash*2.-1.);
       grainTilt-=normal*dot(normal,grainTilt);
-      normal=normalize(normal+grainTilt*grainStrength*.38);`)
+      normal=normalize(normal+grainTilt*grainStrength*.3);`)
   }
-  material.customProgramCacheKey = () => key + ':premium-paint-v2'
+  material.customProgramCacheKey = () => key + ':premium-paint-v3'
 }
