@@ -689,8 +689,6 @@ html, body { overscroll-behavior: none; }
 .race-setup .ui-panel { width: 100%; box-sizing: border-box; }
 .race-setup__note { color: var(--muted); font-size: 13px; }
 .race-setup .ui-segmented button { min-width: 0; }
-.race-setup .ui-segmented[aria-label="Rival difficulty"] { display: grid; grid-template-columns: repeat(3, 1fr); }
-.race-setup .ui-segmented[aria-label="Rival difficulty"] button { padding: 0 4px; font-size: 14px; letter-spacing: 0.01em; }
 @media (max-width: 720px) {
   .menu-rev { margin-top: 6px; }
 }

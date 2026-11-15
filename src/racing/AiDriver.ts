@@ -19,6 +19,8 @@ export interface SteeringConfig extends SteeringLimitConfig {
 const REFERENCE_GRIP = 1.25
 /** Straight-line speed the plan allows, m/s (×profile.straight); the engine caps it before this. */
 const STRAIGHT_CAP = 88
+/** Longest an AI handbrake rotation is held before it resumes grip steering. */
+const MAX_DRIFT_SECONDS = 1.5
 
 /** Numeric, deterministic controller. Owns inputs, never moves a rigid body. */
 export class AiDriver {
@@ -54,7 +56,7 @@ export class AiDriver {
   readonly line: readonly Point3[]
   readonly pace: number
   private readonly config: SteeringConfig
-  constructor(line: readonly Point3[], config: SteeringConfig, pace = 1, profile: DriverProfile = DRIVER_PROFILES[0], difficulty: AiDifficulty = 'challenging') {
+  constructor(line: readonly Point3[], config: SteeringConfig, pace = 1, profile: DriverProfile = DRIVER_PROFILES[0], difficulty: AiDifficulty = 'legend') {
     this.line = line; this.config = config; this.pace = pace
     this.profile = profile; this.difficulty = difficulty
     if (line.length < 3) throw new Error('AI requires a closed racing line with at least three points')
@@ -171,10 +173,9 @@ export class AiDriver {
       this.input.brake = 0
       this.input.steer = Math.sign(this.input.steer) * Math.max(0.32, Math.abs(this.input.steer))
     }
-    const maxDriftSeconds = this.difficulty === 'relaxed' ? .65 : this.difficulty === 'challenging' ? 1.1 : 1.5
-    if (resources.drifting && this.driftingFor > maxDriftSeconds) {
+    if (resources.drifting && this.driftingFor > MAX_DRIFT_SECONDS) {
       // Release at every difficulty: a long bend must not latch a drift forever.
-      // Faster rivals can hold a longer rotation, then resume grip steering.
+      // Hold the rotation briefly, then resume grip steering.
       this.input.handbrake = false
       this.input.steer = 0
       this.input.throttle = Math.min(this.input.throttle,0.6)

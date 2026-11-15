@@ -27,28 +27,22 @@ describe('rival field', () => {
 })
 
 describe('Legend difficulty', () => {
-  it('is the hardest: faster, later braking, quicker hands, no easing off', () => {
-    const { legend, intense } = AI_DIFFICULTIES
-    expect(legend.pace).toBeGreaterThan(intense.pace)
-    expect(legend.cornerGripShare).toBeGreaterThan(intense.cornerGripShare)
-    expect(legend.brakeGripShare).toBeGreaterThan(intense.brakeGripShare)
-    expect(legend.reaction).toBeLessThan(intense.reaction)
+  it('is the easiest difficulty left; the old easier ones are gone', () => {
+    expect(Object.keys(AI_DIFFICULTIES)).toEqual(['legend', 'mythic', 'impossible'])
     expect(CATCH_UP.legend.easeOff).toBe(0)
-    expect(CATCH_UP.legend.catchUp).toBeGreaterThan(CATCH_UP.intense.catchUp)
-    expect(isAiDifficulty('legend')).toBe(true)
+    for (const old of ['relaxed', 'challenging', 'intense']) expect(isAiDifficulty(old)).toBe(false)
   })
 
   it('every Legend rival is a front-runner with a stronger car', () => {
     for (let id = 1; id <= 7; id++) expect(rivalPace(id, 'legend')).toBeGreaterThanOrEqual(1)
-    expect(rivalPace(1, 'challenging')).toBeCloseTo(0.965)
-    const edged = withRivalEdge(DEFAULT_VEHICLE_CONFIG, RIVAL_EDGE.legend!)
+    const edged = withRivalEdge(DEFAULT_VEHICLE_CONFIG, RIVAL_EDGE.legend)
     expect(edged.tires.grip).toBeGreaterThan(DEFAULT_VEHICLE_CONFIG.tires.grip)
     expect(edged.engine.torqueCurve[0][1]).toBeGreaterThan(DEFAULT_VEHICLE_CONFIG.engine.torqueCurve[0][1])
   })
 })
 
 describe('Mythic and Impossible', () => {
-  const ladder: AiDifficulty[] = ['intense', 'legend', 'mythic', 'impossible']
+  const ladder: AiDifficulty[] = ['legend', 'mythic', 'impossible']
   const steps = ladder.slice(1).map((d, i) => [ladder[i], d] as const)
 
   it('each step is harder than the one before', () => {
@@ -60,19 +54,18 @@ describe('Mythic and Impossible', () => {
       expect(b.reaction, harder).toBeLessThan(a.reaction)
       expect(CATCH_UP[harder].catchUp, harder).toBeGreaterThan(CATCH_UP[easier].catchUp)
       expect(CATCH_UP[harder].easeOff, harder).toBe(0)
-      if (easier !== 'intense') for (let id = 1; id <= 7; id++) expect(rivalPace(id, harder)).toBeGreaterThan(rivalPace(id, easier))
+      for (let id = 1; id <= 7; id++) expect(rivalPace(id, harder)).toBeGreaterThan(rivalPace(id, easier))
       expect(isAiDifficulty(harder)).toBe(true)
     }
   })
 
-  it('rivals get a bigger car edge at each step, and lower tiers race stock cars', () => {
-    for (const [easier, harder] of steps.slice(1)) {
-      const a = RIVAL_EDGE[easier]!, b = RIVAL_EDGE[harder]!
+  it('rivals get a bigger car edge at each step', () => {
+    for (const [easier, harder] of steps) {
+      const a = RIVAL_EDGE[easier], b = RIVAL_EDGE[harder]
       expect(b.torque).toBeGreaterThan(a.torque)
       expect(b.grip).toBeGreaterThan(a.grip)
       expect(b.brakes).toBeGreaterThan(a.brakes)
     }
-    for (const d of ['relaxed', 'challenging', 'intense'] as const) expect(RIVAL_EDGE[d]).toBeUndefined()
     expect(isAiDifficulty('godlike')).toBe(false)
     expect(isAiDifficulty('toString')).toBe(false)
   })

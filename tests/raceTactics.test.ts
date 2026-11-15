@@ -75,19 +75,18 @@ it('uses earned nitro for a safe pass, but refuses boosts into traffic or a corn
 })
 
 it('difficulty changes competitive pace and braking; personalities have different strengths', () => {
-  const relaxed = new AiDriver(straight,config,1,DRIVER_PROFILES[0],'relaxed')
-  const intense = new AiDriver(straight,config,1,DRIVER_PROFILES[0],'intense')
-  relaxed.update(1/60,pose,[],1,0,5)
-  intense.update(1/60,pose,[],1,0,5)
-  expect(intense.targetSpeed).toBeGreaterThan(relaxed.targetSpeed)
   const legend = new AiDriver(straight,config,1,DRIVER_PROFILES[0],'legend')
-  legend.update(1/60,pose,[],1,0,5)
-  expect(legend.targetSpeed).toBeGreaterThan(intense.targetSpeed)
-  // Ahead of the player, Legend doesn't ease off; Intense does a little.
-  const leadL = new AiDriver(straight,config,1,DRIVER_PROFILES[0],'legend'), leadI = new AiDriver(straight,config,1,DRIVER_PROFILES[0],'intense')
-  leadL.update(1/60,pose,[],1,-300,5); leadI.update(1/60,pose,[],1,-300,5)
-  expect(leadL.targetSpeed / legend.targetSpeed).toBeCloseTo(1, 5)
-  expect(leadI.targetSpeed / intense.targetSpeed).toBeLessThan(1)
+  const mythic = new AiDriver(straight,config,1,DRIVER_PROFILES[0],'mythic')
+  const impossible = new AiDriver(straight,config,1,DRIVER_PROFILES[0],'impossible')
+  for (const d of [legend, mythic, impossible]) d.update(1/60,pose,[],1,0,5)
+  expect(mythic.targetSpeed).toBeGreaterThan(legend.targetSpeed)
+  expect(impossible.targetSpeed).toBeGreaterThan(mythic.targetSpeed)
+  // Ahead of the player, no difficulty eases off.
+  for (const [d, base] of [['legend', legend], ['impossible', impossible]] as const) {
+    const lead = new AiDriver(straight,config,1,DRIVER_PROFILES[0],d)
+    lead.update(1/60,pose,[],1,-300,5)
+    expect(lead.targetSpeed / base.targetSpeed).toBeCloseTo(1, 5)
+  }
   expect(DRIVER_PROFILES[0].corner).toBeGreaterThan(DRIVER_PROFILES[1].corner)
   expect(DRIVER_PROFILES[1].straight).toBeGreaterThan(DRIVER_PROFILES[0].straight)
   expect(DRIVER_PROFILES[2].style).toBe('drift')

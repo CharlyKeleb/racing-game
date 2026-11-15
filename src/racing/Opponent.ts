@@ -33,10 +33,9 @@ export class Opponent {
   readonly id: number
   private readonly world: RAPIER.World
   private readonly track: RaceTrack
-  constructor(id: number, scene: THREE.Group, stock: VehicleConfig, world: RAPIER.World, track: RaceTrack, spawn: SpawnPoint, difficulty: AiDifficulty = 'challenging') {
+  constructor(id: number, scene: THREE.Group, stock: VehicleConfig, world: RAPIER.World, track: RaceTrack, spawn: SpawnPoint, difficulty: AiDifficulty = 'legend') {
     this.id = id; this.world = world; this.track = track
-    const edge = RIVAL_EDGE[difficulty]
-    const config = edge ? withRivalEdge(stock, edge) : stock
+    const config = withRivalEdge(stock, RIVAL_EDGE[difficulty])
     scene.traverse((object) => {
       const mesh = object as THREE.Mesh
       if (!mesh.isMesh) return
@@ -135,16 +134,15 @@ export class Opponent {
   }
 }
 
-/** Field spread from Legend up: every rival is a front-runner, so there's no easy car to pick off. */
-const FRONT_RUNNERS: Partial<Record<AiDifficulty, number>> = { legend: 0.99, mythic: 1, impossible: 1.01 }
+/** The slowest rival's own pace at each difficulty. */
+const FRONT_RUNNERS: Record<AiDifficulty, number> = { legend: 0.99, mythic: 1, impossible: 1.01 }
 
 /**
- * Each rival's own pace. On most difficulties the field spreads out (the first rival slowest);
- * from Legend up every rival is a front-runner.
+ * Each rival's own pace: every rival is a front-runner, so there's no easy car to pick off.
+ * Later grid slots are slightly quicker.
  */
 export function rivalPace(id: number, difficulty: AiDifficulty): number {
-  const base = FRONT_RUNNERS[difficulty]
-  return base !== undefined ? base + Math.min(id, 7) * 0.012 : 0.94 + Math.min(id, 4) * 0.025
+  return FRONT_RUNNERS[difficulty] + Math.min(id, 7) * 0.012
 }
 
 /** A rival's car with an edge over stock: more torque, grip and brakes (RIVAL_EDGE). */
