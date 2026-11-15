@@ -4,7 +4,9 @@ import { formatTime } from '../racing/LapTimer'
 import { useGameInstance } from './GameContext'
 import { GiCoins } from 'react-icons/gi'
 import { DAILY_SOFT_CAP } from '../racing/Economy'
-import { useGame, useTelemetry, useWallet } from './hooks'
+import { useCareer, useGame, useTelemetry, useWallet } from './hooks'
+import { careerEvent, careerNext, formatLap } from '../racing/Career'
+import { careerStore } from '../stores/careerStore'
 import { Button, Panel } from './kit'
 import { LeaderboardResult } from './LeaderboardResult'
 
@@ -22,11 +24,13 @@ export function Results() {
   const total = useTelemetry((s) => s.totalMs)
   const best = useTelemetry((s) => s.bestLapMs)
   const trial = useGame(s => s.settings.mode === 'timeTrial')
+  const career = useCareer(s => s.active)
   if (trial) return <TrialResults />
   return (
     <div className={`screen screen--center ${drift ? '' : 'screen--race-results'}`}>
       <Panel title={drift ? 'Drift complete' : undefined} className="results-panel">
-        {!drift && <div className="race-result__hero">
+        <CareerBanner />
+        {!drift && !career && <div className="race-result__hero">
           <span className="eyebrow">{track} / RACE RESULT</span>
           <h1>{field === 1 ? 'RUN COMPLETE' : position === 1 ? 'VICTORY' : 'RACE COMPLETE'}</h1>
           <div className="race-result__position">{field === 1 ? 'SOLO' : `P${position}`}<small>{field > 1 ? ` / ${field}` : ' RUN'}</small></div>
@@ -49,12 +53,14 @@ export function Results() {
         <PayoutSummary />
         {drift && <LeaderboardResult mode="drift" />}
         {standings.length > 1 && <ol className="race-standings" aria-label="Race standings">{standings.map(s => <li key={s.id} className={s.player ? 'race-standings__player' : ''}><b>{s.position}</b><span>{s.name}</span><span className="mono">{s.finishMs === null ? 'Racing' : formatTime(s.finishMs)}</span></li>)}</ol>}
-        <Button variant="primary" size="lg" onClick={() => game?.startRace()} autoFocus>
-          {drift ? 'Drift again' : 'Race again'}
-        </Button>
-        <Button variant="ghost" onClick={() => game?.quitToMenu()}>
-          Main menu
-        </Button>
+        {career ? <CareerButtons /> : <>
+          <Button variant="primary" size="lg" onClick={() => game?.startRace()} autoFocus>
+            {drift ? 'Drift again' : 'Race again'}
+          </Button>
+          <Button variant="ghost" onClick={() => game?.quitToMenu()}>
+            Main menu
+          </Button>
+        </>}
       </Panel>
     </div>
   )
@@ -82,15 +88,17 @@ function TrialResults() {
   const car = useGame(s => s.carName)
   const t = useTelemetry(useShallow(s => ({ best: s.trialSessionBestMs, pb: s.trialPersonalBestMs, laps: s.trialLaps, valid: s.trialValidLaps, total: s.totalMs })))
   const newPb = t.best !== null && t.best === t.pb
+  const career = useCareer(s => s.active)
   return (
     <div className="screen screen--center screen--race-results">
       <Panel className="results-panel">
-        <div className="race-result__hero">
+        <CareerBanner />
+        {!career && <div className="race-result__hero">
           <span className="eyebrow">{track} / TIME TRIAL / {car}</span>
           <h1>{newPb ? 'NEW PERSONAL BEST' : 'SESSION COMPLETE'}</h1>
           <div className="race-result__position mono">{formatTime(t.best)}<small> SESSION BEST</small></div>
           <p>{t.best === null ? 'No valid lap this time. Drive through every checkpoint without a reset.' : newPb ? 'That lap is the new benchmark for this car and build.' : `Your personal best still stands at ${formatTime(t.pb)}.`}</p>
-        </div>
+        </div>}
         <dl className="results">
           <dt>Personal best</dt>
           <dd className="mono">{formatTime(t.pb)}</dd>
@@ -101,9 +109,41 @@ function TrialResults() {
         </dl>
         <PayoutSummary />
         <LeaderboardResult mode="timeTrial" />
-        <Button variant="primary" size="lg" onClick={() => game?.startRace()} autoFocus>New session</Button>
-        <Button variant="ghost" onClick={() => game?.quitToMenu()}>Main menu</Button>
+        {career ? <CareerButtons /> : <>
+          <Button variant="primary" size="lg" onClick={() => game?.startRace()} autoFocus>New session</Button>
+          <Button variant="ghost" onClick={() => game?.quitToMenu()}>Main menu</Button>
+        </>}
       </Panel>
     </div>
   )
+}
+
+/** Career: did this run win the event, and why not. */
+function CareerBanner() {
+  const result = useCareer(s => s.lastResult)
+  const active = useCareer(s => s.active)
+  const event = active ? careerEvent(active) : undefined
+  if (!event) return null
+  const passed = result?.passed ?? false
+  const o = result?.outcome
+  const detail = !o ? 'Run ended.'
+    : o.kind === 'race' ? (passed ? `P${o.position} of ${o.field}. Event won.` : `P${o.position} of ${o.field}. Only ${event.maxPosition === 1 ? 'a win' : `P${event.maxPosition} or better`} clears it.`)
+    : o.kind === 'elimination' ? (passed ? 'Last car standing.' : `Knocked out on lap ${o.lap}. Stay out of last when the leader starts a lap.`)
+    : passed ? `${formatLap(o.bestLapMs ?? 0)} beats the ${formatLap(event.targetMs ?? 0)} target.`
+    : `${o.bestLapMs === null ? 'No valid lap' : formatLap(o.bestLapMs)} against a ${formatLap(event.targetMs ?? 0)} target.`
+  return (
+    <div className={`career-result career-result--${passed ? 'won' : 'lost'}`} role="status">
+      <span className="eyebrow">Career · {event.name}</span>
+      <h1>{passed ? (result?.firstWin ? 'EVENT WON' : 'WON AGAIN') : o?.kind === 'elimination' ? 'ELIMINATED' : 'NOT THIS TIME'}</h1>
+      <p>{detail}{passed && result?.firstWin && careerNext(event.id) ? ` Next step open: ${careerNext(event.id)!.name}.` : ''}{passed && !careerNext(event.id) ? ' You reached the top of the ladder.' : ''}</p>
+    </div>
+  )
+}
+
+function CareerButtons() {
+  const game = useGameInstance()
+  return <>
+    <Button variant="primary" size="lg" onClick={() => game?.startRace()} autoFocus>Retry event</Button>
+    <Button variant="ghost" onClick={() => { careerStore.setState({ showLadder: true }); game?.quitToMenu() }}>Back to career</Button>
+  </>
 }

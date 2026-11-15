@@ -123,6 +123,13 @@ export class RaceManager {
     }
   }
 
+  /** Out of the race early (an elimination, or the last car left): stop the clock and finish. */
+  retire(): void {
+    if (this.state !== 'racing') return
+    this.timer.running = false
+    this.setState('finished')
+  }
+
   private setState(state: RaceState): void {
     this.state = state
     this.events.onStateChange(state)

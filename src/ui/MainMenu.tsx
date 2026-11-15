@@ -4,7 +4,7 @@ import { lobbyStore } from '../multiplayer/lobbyStore'
 import { driftEvent } from '../racing/driftEvents'
 import { AccountButton, AccountDialog } from './Account'
 import { accountStore } from '../stores/accountStore'
-import { GiCheckeredFlag, GiStopwatch, GiRaceCar, GiRoad, GiHomeGarage, GiGears, GiSteeringWheel, GiPathDistance, GiPodium, GiCoins } from 'react-icons/gi'
+import { GiCheckeredFlag, GiStopwatch, GiRaceCar, GiRoad, GiHomeGarage, GiGears, GiSteeringWheel, GiPathDistance, GiPodium, GiCoins, GiStairsGoal } from 'react-icons/gi'
 import { lazy, Suspense, useEffect, useState, type ComponentType } from 'react'
 import { buildStats, carClass, DEFAULT_BUILD, performanceRank } from '../vehicles/CarBuild'
 import { getCar, selectableCars } from '../vehicles/carRegistry'
@@ -23,11 +23,13 @@ import trackPreviews from './trackPreviews.json'
 import { RevButton } from './RevButton'
 import { MenuMusicBar } from './MenuMusicBar'
 import { TIME_PRESETS } from '../world/timeOfDay'
+import { careerStore } from '../stores/careerStore'
 
 const OnlineLobby = lazy(() => import('./OnlineLobby').then(module => ({ default: module.OnlineLobby })))
 
 const SettingsDialog = lazy(() => import('./Settings').then(module => ({ default: module.SettingsDialog })))
 const GarageWorkshop = lazy(() => import('./Garage').then(module => ({ default: module.GarageWorkshop })))
+const CareerLadder = lazy(() => import('./CareerLadder').then(module => ({ default: module.CareerLadder })))
 const Leaderboards = lazy(() => import('./Leaderboards').then(module => ({ default: module.Leaderboards })))
 
 /**
@@ -38,13 +40,18 @@ const Leaderboards = lazy(() => import('./Leaderboards').then(module => ({ defau
  * along the bottom. The Garage tab is the garage phase (its camera framing),
  * shown in place: the hub stays mounted across both phases.
  */
-type Tab = 'play' | 'cars' | 'garage' | 'leaderboard'
-const TAB_ORDER: Tab[] = ['play', 'cars', 'garage', 'leaderboard']
+type Tab = 'play' | 'career' | 'cars' | 'garage' | 'leaderboard'
+const TAB_ORDER: Tab[] = ['play', 'career', 'cars', 'garage', 'leaderboard']
 
 export function MainMenu() {
   const game = useGameInstance()
   const phase = useGame((s) => s.phase)
-  const [picked, setPicked] = useState<Exclude<Tab, 'garage'>>('play')
+  // Back to career from a career event's results reopens the ladder.
+  const [picked, setPicked] = useState<Exclude<Tab, 'garage'>>(() => {
+    if (!careerStore.getState().showLadder) return 'play'
+    careerStore.setState({ showLadder: false })
+    return 'career'
+  })
   const tab: Tab = phase === 'garage' ? 'garage' : picked
   // A sign-in link that failed opens the account dialog, to say why.
   const [dialog, setDialog] = useState<'settings' | 'setup' | 'tracks' | 'account' | 'online' | null>(() => accountStore.getState().returnError ? 'account' : lobbyStore.getState().status === 'connected' || lobbyStore.getState().error ? 'online' : null)
@@ -97,6 +104,7 @@ export function MainMenu() {
 
   const tabs: { id: Tab | 'garage' | 'settings'; label: string; Icon: ComponentType<{ 'aria-hidden'?: boolean }> }[] = [
     { id: 'play', label: 'Play', Icon: GiCheckeredFlag },
+    { id: 'career', label: 'Career', Icon: GiStairsGoal },
     { id: 'cars', label: 'Cars', Icon: GiSteeringWheel },
     { id: 'garage', label: 'Garage', Icon: GiHomeGarage },
     { id: 'leaderboard', label: 'Ranks', Icon: GiPodium },
@@ -130,7 +138,7 @@ export function MainMenu() {
       </header>
 
       {/* In the garage the workshop takes this rail, so nothing covers the car being inspected. */}
-      {tab !== 'garage' && <aside className="hub-car">
+      {tab !== 'garage' && tab !== 'career' && <aside className="hub-car">
         <CarPicker />
         <CarCard />
         <div className="hub-car__tools">
@@ -139,8 +147,9 @@ export function MainMenu() {
         </div>
       </aside>}
 
-      <section className={`hub-panel${tab === 'garage' ? ' hub-panel--left' : ''}`} key={tab} aria-label={tab === 'play' ? 'Events' : tab === 'cars' ? 'Cars' : tab === 'leaderboard' ? 'Leaderboards' : 'Garage'}>
+      <section className={`hub-panel${tab === 'garage' ? ' hub-panel--left' : ''}`} key={tab} aria-label={tab === 'play' ? 'Events' : tab === 'career' ? 'Career' : tab === 'cars' ? 'Cars' : tab === 'leaderboard' ? 'Leaderboards' : 'Garage'}>
         {tab === 'play' && <PlayMosaic onOnline={() => setDialog('online')} onSetup={() => setDialog('setup')} onTracks={() => setDialog('tracks')} />}
+        {tab === 'career' && <Suspense fallback={<div className="hub-loading" role="status">Opening your career…</div>}><CareerLadder /></Suspense>}
         {tab === 'cars' && <CarList />}
         {tab === 'garage' && <Suspense fallback={<div className="hub-loading" role="status">Opening the garage…</div>}><GarageWorkshop /></Suspense>}
         {tab === 'leaderboard' && <Suspense fallback={<div className="hub-loading" role="status">Opening the leaderboards…</div>}><Leaderboards onAccount={() => setDialog('account')} onDrive={() => go('play')} /></Suspense>}

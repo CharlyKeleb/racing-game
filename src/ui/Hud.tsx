@@ -159,12 +159,14 @@ function HudLeaderboard() {
 }
 
 function HudFeedback() {
-  const t = useTelemetry(useShallow(s => ({ drafting: s.drafting > .15, driftActive: s.driftActive, driftBanked: s.driftBanked, driftScore: s.driftScore, nitroMissed: s.nitroMissed, nitroPerfect: s.nitroPerfect, nitroWindow: s.nitroWindow, wrongWay: s.wrongWay, missedCheckpoint: s.missedCheckpoint })))
+  const t = useTelemetry(useShallow(s => ({ drafting: s.drafting > .15, driftActive: s.driftActive, driftBanked: s.driftBanked, driftScore: s.driftScore, nitroMissed: s.nitroMissed, nitroPerfect: s.nitroPerfect, nitroWindow: s.nitroWindow, wrongWay: s.wrongWay, missedCheckpoint: s.missedCheckpoint, knockedOut: s.knockedOut, carsLeft: s.carsLeft })))
   const drift = useGame(s => s.settings.mode === 'drift')
   const phase = useGame(s => s.phase)
   return (
     <>
       {t.drafting && phase === 'racing' && <div className="hud-drafting"><span>Slipstream</span><b>Building nitro</b></div>}
+      {t.carsLeft > 0 && phase === 'racing' && <div className="hud-elimination" aria-live="polite"><span>Elimination</span><b>{t.carsLeft} left</b><small>Last car out every lap</small></div>}
+      {t.knockedOut && <div className="hud-knockout" role="alert">{t.knockedOut === 'You' ? 'You are out' : `${t.knockedOut} is out`}</div>}
       {t.wrongWay ? <div className="hud-wrongway">Wrong way</div> : t.missedCheckpoint && <div className="hud-wrongway hud-wrongway--missed">Missed checkpoint<small>Press R to go back</small></div>}
 
       {drift ? <DriftComboHud /> : t.driftActive ? (

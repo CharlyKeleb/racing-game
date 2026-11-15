@@ -14,6 +14,8 @@ vi.mock('../src/ui/hooks', () => ({
   useTelemetry: (select: (s: ReturnType<typeof telemetryStore.getState>) => unknown) => select(telemetryStore.getState()),
   // No payout in these tests: the results screen leaves the coins panel out.
   useWallet: (select: (s: { lastPayout: null; coins: number }) => unknown) => select({ lastPayout: null, coins: 0 }),
+  // Not in a career event: the ordinary race results.
+  useCareer: (select: (s: { active: null; lastResult: null }) => unknown) => select({ active: null, lastResult: null }),
 }))
 
 it('runs the finish at normal speed, skips and resets cleanly', () => {

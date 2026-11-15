@@ -121,6 +121,9 @@ export interface Telemetry {
   wrongWay: boolean
   /** Drove on past the next gate without crossing it: the race won't count progress until a reset. */
   missedCheckpoint: boolean
+  /** Career elimination: who was just knocked out (shown ~3 s), and cars still in (0 outside one). */
+  knockedOut: string | null
+  carsLeft: number
 }
 
 export const initialTelemetry: Telemetry = {
@@ -209,6 +212,8 @@ export const initialTelemetry: Telemetry = {
   distanceLeft: 0,
   wrongWay: false,
   missedCheckpoint: false,
+  knockedOut: null,
+  carsLeft: 0,
 }
 
 export const telemetryStore = createStore<Telemetry>()(() => initialTelemetry)
