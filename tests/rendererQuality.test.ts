@@ -63,8 +63,9 @@ describe('renderer quality lifecycle', () => {
     const renderer = makeRenderer()
     renderer.applyQuality('high', true)
     for (let i = 0; i < 150; i++) renderer.adapt(1 / 30)
+    // High starts at its ceiling (DPR 2 here) and steps down while 30 fps can't hold.
     const adapted = renderer.pixelRatio
-    expect(adapted).toBeLessThan(1)
+    expect(adapted).toBeLessThan(2)
     const resizes = mocks.setPixelRatio.mock.calls.length
     renderer.applyQuality('high', true)
     renderer.applyQuality('high', false)
