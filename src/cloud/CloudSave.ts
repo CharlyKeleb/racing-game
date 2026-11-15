@@ -1,3 +1,4 @@
+import { careerStore } from '../stores/careerStore'
 import { IdentityHistory } from './IdentityHistoryLoader'
 import { Leaderboards } from './Leaderboards'
 import type { LeaderboardQuery } from './leaderboardData'
@@ -222,6 +223,7 @@ export class CloudSave {
         else writeSnapshot(localStorage, next)
         gameStore.getState().reloadSaved()
         walletStore.getState().reloadSaved()
+        careerStore.getState().reloadSaved()
       }
       localStorage.setItem(LAST_PLAYER_KEY, playerId)
     } catch {

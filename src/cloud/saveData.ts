@@ -19,7 +19,8 @@ export interface SaveSnapshot {
 const PREFIX = 'racing-game:'
 const SETTINGS_KEY = `${PREFIX}settings`
 const WALLET_KEY = `${PREFIX}wallet`
-const WHOLE_KEYS = new Set([SETTINGS_KEY, `${PREFIX}builds`, `${PREFIX}presets`, WALLET_KEY])
+const CAREER_KEY = `${PREFIX}career`
+const WHOLE_KEYS = new Set([SETTINGS_KEY, `${PREFIX}builds`, `${PREFIX}presets`, WALLET_KEY, CAREER_KEY])
 const TRIAL_PREFIX = `${PREFIX}trial:`
 const DRIFT_PREFIX = `${PREFIX}drift:`
 export const DEVICE_SETTINGS = ['quality', 'renderer', 'postfx', 'motionBlur'] as const
@@ -96,7 +97,14 @@ function mergeEntry(key: string, local: string, cloud: string): string {
   if (key === `${PREFIX}builds`) return mergeObjects(local, cloud, (_mine, theirs) => theirs)
   if (key === `${PREFIX}presets`) return mergeObjects(local, cloud, mergePresetLists)
   if (key === WALLET_KEY) return mergeWallets(local, cloud)
+  if (key === CAREER_KEY) return mergeCareers(local, cloud)
   return cloud
+}
+
+/** Career: an event won on either device stays won. */
+function mergeCareers(local: string, cloud: string): string {
+  const won = (v: string) => { const p = parse(v) as { won?: unknown } | null; return Array.isArray(p?.won) ? p.won.filter((id): id is string => typeof id === 'string') : [] }
+  return JSON.stringify({ won: [...new Set([...won(local), ...won(cloud)])] })
 }
 
 function parse(value: string): unknown {

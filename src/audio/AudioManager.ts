@@ -707,6 +707,13 @@ export class AudioManager {
     void this.ctx?.resume()
   }
 
+  /** One rival leaves the race (eliminated): its sound stops, the others keep their indices in order. */
+  removeOpponent(index: number): void {
+    this.rivals[index]?.dispose()
+    this.rivals.splice(index, 1)
+    this.rivalNoise.splice(index, 1)
+  }
+
   clearOpponents(): void {
     for (const rival of this.rivals) rival.dispose()
     this.rivals = []

@@ -61,6 +61,8 @@ import { RaceCallouts } from '../racing/RaceCallouts'
 import { COUNTDOWN_SEC, RaceManager, START_LIGHTS, startLightsLit } from '../racing/RaceManager'
 import { draftingStrength } from '../racing/Drafting'
 import { Opponent } from '../racing/Opponent'
+import { careerEvent, eliminationDue, type CareerEvent, type CareerOutcome } from '../racing/Career'
+import { careerStore } from '../stores/careerStore'
 import { MISSED_GATE_METRES, RaceStandings, type RaceEntry } from '../racing/RaceStandings'
 import { RecoveryMonitor } from '../racing/RecoveryMonitor'
 import type { TrafficCar } from '../racing/AiDriver'
@@ -230,6 +232,12 @@ export class Game {
   /** Session clock (race totalMs) at the last split, for the HUD flash. */
   private trialSplitAtMs = -Infinity
   private trialEnded = false
+  /** The career event being driven (null outside career), and its elimination state. */
+  private careerRun: CareerEvent | null = null
+  /** The last knock-out, for the HUD. */
+  private eliminationNotice: { name: string; atMs: number } | null = null
+  private eliminatedCount = 0
+  private playerEliminated = false
   private driftPersonalBest = 0
   private driftNewBest = false
   private driftLastX = 0
@@ -934,6 +942,12 @@ export class Game {
     this.callouts.reset()
     this.finishGapMs = null
     this.trialEnded = false
+    const careerId = careerStore.getState().active
+    this.careerRun = careerId ? careerEvent(careerId) ?? null : null
+    this.eliminatedCount = 0
+    this.playerEliminated = false
+    this.eliminationNotice = null
+    if (this.careerRun) careerStore.setState({ lastResult: null })
     this.driftChallenge.reset(driftEvent(settings.driftEvent))
     this.driftNewBest = false
     this.driftPersonalBest = readDriftRecord(settings.track,settings.driftEvent).score
@@ -1427,6 +1441,97 @@ export class Game {
     this.rainSpray?.clear()
     this.lensDrops?.clear()
     gameStore.getState().setPhase('menu')
+    this.leaveCareerEvent()
+  }
+
+  /**
+   * Career: drive an event from the ladder. Its car, circuit, laps, field and difficulty take
+   * over the race setup (yours comes back when you leave it), then the race starts once the
+   * car and circuit have loaded.
+   */
+  startCareerEvent(id: string): void {
+    const event = careerEvent(id)
+    if (!event || this.onlineRaceId) return
+    const { settings } = gameStore.getState()
+    const stash = { mode: settings.mode, track: settings.track, car: settings.car, laps: settings.laps, opponents: settings.opponents, difficulty: settings.difficulty }
+    careerStore.getState().begin(id, stash)
+    if (careerStore.getState().active !== id) return
+    gameStore.getState().updateSettings({
+      mode: event.kind === 'timeTrial' ? 'timeTrial' : 'quick',
+      track: event.track, car: event.car, laps: event.laps, opponents: event.rivals, difficulty: event.difficulty,
+    })
+    const started = performance.now()
+    const go = () => {
+      if (this.disposed || careerStore.getState().active !== id) return
+      const s = gameStore.getState()
+      if (s.carSwitching || s.trackSwitching) {
+        if (performance.now() - started < 60000) setTimeout(go, 100)
+        return
+      }
+      this.startRace()
+    }
+    setTimeout(go, 0)
+  }
+
+  /** Out of a career event (to the menu): your own race setup comes back. */
+  private leaveCareerEvent(): void {
+    this.careerRun = null
+    const stash = careerStore.getState().end()
+    if (stash) gameStore.getState().updateSettings(stash)
+  }
+
+  /** The career event's outcome, once its race or session is over. */
+  private recordCareer(): void {
+    const run = this.careerRun
+    if (!run) return
+    const outcome: CareerOutcome = run.kind === 'timeTrial'
+      ? { kind: 'timeTrial', bestLapMs: this.trial.sessionBest?.lapMs ?? null }
+      : run.kind === 'elimination'
+        ? { kind: 'elimination', eliminated: this.playerEliminated, lap: this.race.lap }
+        : { kind: 'race', position: this.finishPosition, field: this.finishFieldSize }
+    careerStore.getState().record(outcome)
+  }
+
+  /**
+   * Elimination: each time the leader starts a new lap, the last car still running is out.
+   * Out yourself and the race is over; the last one left wins it.
+   */
+  private updateElimination(): void {
+    const order = this.standings.snapshot(this.entries).filter(row => row.finishMs === null).map(row => row.id)
+    const leader = this.entries.find(e => e.id === order[0])
+    const due = eliminationDue(order, Math.max(1, leader?.lap ?? 1), this.eliminatedCount)
+    if (due === null) return
+    this.eliminatedCount++
+    if (due === this.playerEntry.id) {
+      this.playerEliminated = true
+      this.eliminationNotice = { name: 'You', atMs: this.race.timer.totalMs }
+      this.race.retire()
+      return
+    }
+    const name = this.entries.find(e => e.id === due)?.name ?? 'A rival'
+    this.removeOpponent(due)
+    this.eliminationNotice = { name, atMs: this.race.timer.totalMs }
+    // Last one standing.
+    if (this.opponents.length === 0) this.race.retire()
+  }
+
+  /** One rival leaves mid-race: out of every per-rival list, so the rest keep lining up. */
+  private removeOpponent(id: number): void {
+    const i = this.opponents.findIndex(o => o.id === id)
+    if (i < 0) return
+    const opponent = this.opponents[i]
+    opponent.dispose()
+    this.opponents.splice(i, 1)
+    this.traffic = this.traffic.filter(car => car !== opponent.pose)
+    this.entries = this.entries.filter(entry => entry !== opponent.entry)
+    this.rivalRevs.splice(i, 1)
+    this.awarenessCars.splice(i, 1)
+    this.rivalTags = this.rivalTags.filter(tag => tag.id !== id)
+    rivalTagStore.setState({ tags: this.rivalTags })
+    this.opponentFlames.get(id)?.dispose()
+    this.opponentFlames.delete(id)
+    this.audio.removeOpponent(i)
+    this.standingsPublishedAt = -Infinity
   }
 
   resetCar(): void {
@@ -1589,6 +1694,7 @@ export class Game {
     this.race.state = 'finished'
     this.finishPosition = 1
     this.finishFieldSize = 1
+    this.recordCareer()
     this.payRace()
     gameStore.getState().setPhase('finished')
     this.audio.resume()
@@ -1845,11 +1951,15 @@ export class Game {
     this.playerEntry.z = position.z
     // Time Trial: driving past a gate without going through it voids the lap.
     if (racing && this.trial.valid && gameStore.getState().settings.mode === 'timeTrial' && this.standings.overrun(this.playerEntry) > MISSED_GATE_METRES) this.trial.invalidate('missed')
+    if (this.careerRun?.kind === 'elimination' && this.race.state === 'racing') this.updateElimination()
     if (this.race.state === 'finished' && this.playerEntry.finishMs === null) {
       this.playerEntry.finishMs = this.race.timer.totalMs
       const standings = this.standings.snapshot(this.entries)
       this.finishPosition = standings.find(row => row.player)?.position ?? 1
-      this.finishFieldSize = this.entries.length
+      // Elimination: the whole starting field counts (knocked-out rivals are gone from entries).
+      this.finishFieldSize = this.entries.length + (this.careerRun?.kind === 'elimination' ? this.eliminatedCount - (this.playerEliminated ? 1 : 0) : 0)
+      if (this.playerEliminated) this.finishPosition = this.finishFieldSize - this.eliminatedCount + 1
+      this.recordCareer()
       this.payRace()
       this.finishGapMs = this.nearestFinishGap()
       this.finish.start(matchMedia('(prefers-reduced-motion: reduce)').matches)
@@ -2562,6 +2672,8 @@ export class Game {
       distanceLeft: this.distanceLeft(),
       wrongWay: this.wrongWayTime > WRONG_WAY_DELAY,
       missedCheckpoint: this.race.state === 'racing' && !this.race.freeRoam && !!this.standings && this.standings.overrun(this.playerEntry) > MISSED_GATE_METRES,
+      knockedOut: this.eliminationNotice && this.race.timer.totalMs - this.eliminationNotice.atMs < 3000 ? this.eliminationNotice.name : null,
+      carsLeft: this.careerRun?.kind === 'elimination' ? this.entries.length - (this.playerEliminated ? 1 : 0) : 0,
       freeRoam: this.race.freeRoam,
       trialLap: this.trial.laps.length + 1,
       trialLaps: this.trial.laps.length,
