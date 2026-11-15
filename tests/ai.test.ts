@@ -120,10 +120,11 @@ it('drives a complete checkpoint-validated procedural lap using real vehicle phy
   } finally { opponent.dispose(); track.dispose(); physics.dispose() }
 }, 30000)
 
-it.each(['bmw', 'porsche911', 'koenigsegg', 'mixed', 'mixed relaxed', 'mixed intense', 'mixed legend', 'drift-park', 'drift-park relaxed', 'drift-park intense', 'drift-park legend'])('races a three-car %s field over track collision for two laps', async (scenario) => {
+it.each(['bmw', 'porsche911', 'koenigsegg', 'mixed', 'mixed relaxed', 'mixed intense', 'mixed legend', 'drift-park', 'drift-park relaxed', 'drift-park intense', 'drift-park legend', 'bayview', 'bayview legend'])('races a three-car %s field over track collision for two laps', async (scenario) => {
   const [field, preset] = scenario.split(' ')
   const driftPark = field === 'drift-park'
-  const car = driftPark ? 'mixed' : field
+  const city = field === 'bayview' ? 'u2city' : null
+  const car = driftPark || city ? 'mixed' : field
   const difficulty = (preset ?? 'challenging') as import('../src/racing/AiProfiles').AiDifficulty
   const { readFile } = await import('node:fs/promises')
   const { GLTFLoader } = await import('three/examples/jsm/loaders/GLTFLoader.js')
@@ -141,7 +142,7 @@ it.each(['bmw', 'porsche911', 'koenigsegg', 'mixed', 'mixed relaxed', 'mixed int
       return loader.parseAsync(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength), '')
     },
   }
-  const track = await StreamedTrack.load(`/models/tracks/${driftPark ? 'drift-park' : 'nurburgring'}/track.json`, { assets: assets as unknown as import('../src/engine/AssetManager').AssetManager, world: physics.world, renderer: {} as THREE.WebGLRenderer, camera: new THREE.PerspectiveCamera(), scene: new THREE.Scene(), quality: 'low' })
+  const track = await StreamedTrack.load(`/models/tracks/${driftPark ? 'drift-park' : city ?? 'nurburgring'}/track.json`, { assets: assets as unknown as import('../src/engine/AssetManager').AssetManager, world: physics.world, renderer: {} as THREE.WebGLRenderer, camera: new THREE.PerspectiveCamera(), scene: new THREE.Scene(), quality: 'low' })
   const config = resolveVehicleConfig(JSON.parse(await readFile(`public/models/cars/${car === 'mixed' ? 'bmw' : car}/vehicle-config.json`, 'utf8')))
   const configs = car === 'mixed' ? await Promise.all(['bmw', 'porsche911', 'koenigsegg'].map(async id => resolveVehicleConfig(JSON.parse(await readFile(`public/models/cars/${id}/vehicle-config.json`, 'utf8'))))) : [config, config, config]
   const grid = startingGrid(track.line,track.spawn.position,4)
@@ -163,7 +164,7 @@ it.each(['bmw', 'porsche911', 'koenigsegg', 'mixed', 'mixed relaxed', 'mixed int
   const incidents: unknown[] = []
   const boosts = [0,0,0], drifts = [0,0,0]
   try {
-    for (let i = 0; i < 60 * 1000 && opponents.some(o => o.race.state !== 'finished'); i++) {
+    for (let i = 0; i < 60 * 1400 && opponents.some(o => o.race.state !== 'finished'); i++) {
       const b = blocker.body.translation()
       blockedPose.x = b.x; blockedPose.z = b.z
       blocker.fixedUpdate({ throttle: 0, brake: 0, steer: 0, handbrake: true, nitro: false }, 1 / 60)
@@ -183,10 +184,9 @@ it.each(['bmw', 'porsche911', 'koenigsegg', 'mixed', 'mixed relaxed', 'mixed int
     expect(opponents.map(o=>o.race.timer.laps.length)).toEqual([2,2,2])
     expect(respawns.reduce((sum,spy)=>sum+spy.mock.calls.length,0)).toBe(0)
     expect(recoveries, JSON.stringify({incidents, boosts, drifts})).toBe(0)
-    if (!driftPark) {
-      expect(boosts.reduce((sum,n)=>sum+n,0), JSON.stringify({boosts,drifts})).toBeGreaterThan(0)
-      expect(drifts[2], JSON.stringify({boosts,drifts})).toBeGreaterThan(0)
-    }
+    if (!driftPark) expect(boosts.reduce((sum,n)=>sum+n,0), JSON.stringify({boosts,drifts})).toBeGreaterThan(0)
+    // The drift driver's flick needs a medium-speed bend: a circuit has them, a city's right angles don't.
+    if (!driftPark && !city) expect(drifts[2], JSON.stringify({boosts,drifts})).toBeGreaterThan(0)
   } finally { for (const o of opponents) o.dispose(); physics.world.removeRigidBody(blocker.body); track.dispose(); physics.dispose() }
 }, 30000)
 

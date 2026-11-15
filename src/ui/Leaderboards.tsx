@@ -1,3 +1,4 @@
+import { recordTrack } from '../racing/routeVersions'
 import { useEffect, useState } from 'react'
 import { GiPodium } from 'react-icons/gi'
 import { buildClass, formatGap, formatScore, sameQuery, type LeaderboardMode, type LeaderboardQuery, type LeaderboardRow } from '../cloud/leaderboardData'
@@ -53,7 +54,7 @@ export function Leaderboards({ onAccount, onDrive }: { onAccount(): void; onDriv
   const [event, setEvent] = useState<DriftEventId>(settings.driftEvent)
   const [scope, setScope] = useState<'all' | 'car'>('all')
   const track = TRACKS[trackIndex]
-  const query: LeaderboardQuery = { mode, track: track.id, event, car: mode === 'timeTrial' && scope === 'car' ? settings.car : null }
+  const query: LeaderboardQuery = { mode, track: recordTrack(track.id), event, car: mode === 'timeTrial' && scope === 'car' ? settings.car : null }
   const { car } = query
   const state = useLeaderboard()
   // The store may still hold another board for a moment: never show it under this title.
@@ -65,7 +66,7 @@ export function Leaderboards({ onAccount, onDrive }: { onAccount(): void; onDriv
   const stepTrack = (by: number) => setTrackIndex((i) => (i + by + TRACKS.length) % TRACKS.length)
   const refresh = () => { void game?.loadLeaderboard(query) }
 
-  useEffect(() => { void game?.loadLeaderboard({ mode, track: track.id, event, car }) }, [game, mode, track.id, event, car])
+  useEffect(() => { void game?.loadLeaderboard({ mode, track: recordTrack(track.id), event, car }) }, [game, mode, track.id, event, car])
 
   const noun = mode === 'drift' ? 'score' : 'lap'
   return (

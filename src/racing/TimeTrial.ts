@@ -1,3 +1,4 @@
+import { recordTrack } from './routeVersions'
 import type { CarBuild } from '../vehicles/CarBuild'
 import { noteLocalSave } from '../stores/accountStore'
 
@@ -113,7 +114,7 @@ export function trialBuildKey(build: Pick<CarBuild, 'engine' | 'tires' | 'suspen
 }
 
 function storageKey(track: string, car: string, buildKey: string): string {
-  return `racing-game:trial:${track}:${car}:${buildKey}:v1`
+  return `racing-game:trial:${recordTrack(track)}:${car}:${buildKey}:v1`
 }
 
 export function readTrialRecord(track: string, car: string, buildKey: string): TrialLap | null {

@@ -40,6 +40,11 @@
       "version": "20261114160000",
       "source": "0008_new_cars_leaderboard.sql",
       "sha256": "aca8007174c24e4adfedb3e7ffb0b5bfb7eecc0cad58ab0708a6ea29035b7c2f"
+    },
+    {
+      "version": "20261115120000",
+      "source": "0009_bayview_route.sql",
+      "sha256": "3bdf62a2a0dd2b06bbfa3fbb04fc31543dbe4928824e936f3d6e6437a241d05a"
     }
   ]
 }
