@@ -201,7 +201,7 @@ const defaultSettings: Settings = {
   transmission: 'auto',
   roamHud: true,
   roamGuide: true,
-  difficulty: 'challenging',
+  difficulty: 'legend',
   opponents: 3,
   laps: 3,
   track: 'nurburgring',
@@ -233,7 +233,7 @@ function sanitizeSettings(merged: Settings): Settings {
   if (!['drift', 'timeTrial', 'freeRoam'].includes(merged.mode)) merged.mode = 'quick'
   if (typeof merged.roamHud !== 'boolean') merged.roamHud = defaultSettings.roamHud
   if (typeof merged.roamGuide !== 'boolean') merged.roamGuide = defaultSettings.roamGuide
-  if (!isAiDifficulty(merged.difficulty)) merged.difficulty = 'challenging'
+  if (!isAiDifficulty(merged.difficulty)) merged.difficulty = 'legend'
   merged.opponents = [0, 1, 3].includes(merged.opponents) ? merged.opponents : 3
   if (!isTimeOfDay(merged.timeOfDay)) merged.timeOfDay = defaultSettings.timeOfDay
   if (merged.weather !== 'rain') merged.weather = 'dry'

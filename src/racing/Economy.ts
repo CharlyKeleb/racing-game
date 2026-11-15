@@ -23,7 +23,7 @@ export interface QuickRaceResult {
   /** Your best lap this race, and your best ever on this track (null: first time here). */
   bestLapMs: number | null
   previousBestLapMs: number | null
-  difficulty: 'relaxed' | 'challenging' | 'intense'
+  difficulty: 'relaxed' | 'challenging' | 'intense' | 'legend'
 }
 
 export interface TrialResult {
@@ -51,7 +51,7 @@ export const STARTING_COINS = 500
 const FINISH = 60
 const PER_LAP = 20
 const PODIUM = [150, 80, 40]
-const DIFFICULTY = { relaxed: 0.75, challenging: 1, intense: 1.3 } as const
+const DIFFICULTY = { relaxed: 0.75, challenging: 1, intense: 1.3, legend: 2 } as const
 const LAP_RECORD = 75
 const FIRST_LAP_RECORD = 25
 const TRIAL_PER_LAP = 15
@@ -95,19 +95,22 @@ export function capPayout(amount: number, earnedToday: number): number {
   return full + Math.floor((amount - full) * OVER_CAP_RATE)
 }
 
-/** Car prices in coins. Owned from the start: PRICE 0. Unlisted cars cost nothing (placeholders). */
+/**
+ * Car prices in coins. Owned from the start: PRICE 0. Unlisted cars cost nothing (placeholders).
+ * Every car is free but the two hypercars you earn: the Dodge Ice Charger and the Koenigsegg.
+ */
 export const CAR_PRICES: Readonly<Record<string, number>> = {
   porsche911: 0,
-  bmw: 2500,
-  amg: 6000,
-  diablo: 9000,
+  bmw: 0,
+  amg: 0,
+  diablo: 0,
   charger: 12000,
   koenigsegg: 30000,
-  g63: 7000,
-  r33: 11000,
-  rs6r: 14000,
-  gt3rs: 16000,
-  demon: 18000,
+  g63: 0,
+  r33: 0,
+  rs6r: 0,
+  gt3rs: 0,
+  demon: 0,
 }
 
 export function carPrice(id: string): number {

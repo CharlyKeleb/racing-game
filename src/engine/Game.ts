@@ -68,6 +68,7 @@ import { gameStore, type GamePhase, type Settings } from '../stores/gameStore'
 import { telemetryStore } from '../stores/telemetryStore'
 import { rivalTagStore, type RivalTag } from '../stores/rivalTagStore'
 import { applyCarBuild, samePerformance, type CarBuild } from '../vehicles/CarBuild'
+import { pickRivals } from '../racing/rivalField'
 import { moddedVoice } from '../audio/SoundMods'
 import { CarLivery } from '../vehicles/CarLivery'
 import { buildPlaceholderCar, rigCarModel, type CarModel } from '../vehicles/CarModel'
@@ -943,8 +944,9 @@ export class Game {
     this.audio.unlock(settings.masterVolume)
     gameStore.getState().setPhase('loading')
     try {
-      const choices = selectableCars().filter(car => car.id !== this.carId)
-      const rivals = Array.from({ length: opponentCount }, (_, i) => choices[i % choices.length])
+      // Every other car can be on the grid: a fresh random field each race, no repeats until
+      // every car has a seat.
+      const rivals = pickRivals(selectableCars().filter(car => car.id !== this.carId), opponentCount)
       const loaded = await Promise.all(rivals.map(async car => {
         const [scene, json] = await Promise.all([
           this.assets.loadModel(car.modelUrlLow ?? car.modelUrl),
@@ -1773,13 +1775,16 @@ export class Game {
     } else if (racing) {
       const centre = this.track.line[this.progress.update(body.x, body.z)]
       const input = this.input.state
+      // Free Roam is for exploring: any street, any height, however far from the route. Only
+      // a flipped or wedged car comes back (and falling off the world, above).
+      const roaming = this.race.freeRoam
       const reason = this.recovery.update(dt, {
-        drop: body.y - centre.y,
+        drop: roaming ? 0 : body.y - centre.y,
         upY: 1 - 2 * (rotation.x * rotation.x + rotation.z * rotation.z),
         speed: Math.abs(this.vehicle.controller.forwardSpeed),
         // A held burnout is pedals-down and not moving on purpose: not "stuck".
         pedal: this.vehicle.controller.burnout.holding ? 0 : Math.max(input.throttle, input.brake),
-        offLine: gameStore.getState().settings.mode === 'drift' ? 0 : Math.hypot(body.x - centre.x, body.z - centre.z),
+        offLine: roaming || gameStore.getState().settings.mode === 'drift' ? 0 : Math.hypot(body.x - centre.x, body.z - centre.z),
       })
       if (reason) this.resetToCheckpoint()
     }

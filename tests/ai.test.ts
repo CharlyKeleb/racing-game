@@ -120,7 +120,7 @@ it('drives a complete checkpoint-validated procedural lap using real vehicle phy
   } finally { opponent.dispose(); track.dispose(); physics.dispose() }
 }, 30000)
 
-it.each(['bmw', 'porsche911', 'koenigsegg', 'mixed', 'mixed relaxed', 'mixed intense', 'drift-park', 'drift-park relaxed', 'drift-park intense'])('races a three-car %s field over track collision for two laps', async (scenario) => {
+it.each(['bmw', 'porsche911', 'koenigsegg', 'mixed', 'mixed relaxed', 'mixed intense', 'mixed legend', 'drift-park', 'drift-park relaxed', 'drift-park intense', 'drift-park legend'])('races a three-car %s field over track collision for two laps', async (scenario) => {
   const [field, preset] = scenario.split(' ')
   const driftPark = field === 'drift-park'
   const car = driftPark ? 'mixed' : field
