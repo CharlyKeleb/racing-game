@@ -55,11 +55,16 @@ export async function loadBackfireRecordings(ctx: BaseAudioContext, base = '/aud
   }
 }
 
-/** Mix level of a crackle and of a bang at full strength: loud, a supercar's pops are. */
-const CRACKLE_GAIN = 1.2
-const BANG_GAIN = 2.2
+/**
+ * Mix level of a crackle and of a bang at full strength: loud, a supercar's pops are.
+ * The engine bed runs hot into the master limiter (about −5 dBFS RMS at full throttle),
+ * so pops need this much, plus the engine duck in AudioManager.backfire, to stand out
+ * instead of being squashed into it. At 1.2 / 2.2 players barely heard them.
+ */
+const CRACKLE_GAIN = 2.4
+const BANG_GAIN = 3.6
 /** The sub thump under a bang, relative to it: the chest-thump of the "POOO". */
-const THUMP_GAIN = 1.1
+const THUMP_GAIN = 1.3
 const MAX_VOICES = 8
 
 /**

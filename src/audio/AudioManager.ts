@@ -599,6 +599,8 @@ export class AudioManager {
   setMenuEngine(on: boolean): void {
     if (on === this.menuEngine) return
     this.menuEngine = on
+    // The menu music steps back while you rev, so the engine and its pops are heard.
+    this.music?.setDucked(on)
     this.applyMix()
   }
 
@@ -752,11 +754,15 @@ export class AudioManager {
 
   /** An exhaust pop: `car` -1 is the player, otherwise the rival's index (heard where it is). */
   backfire(car: number, kind: PopKind, strength: number): void {
-    if (this.paused || kind === 0 || this.scene !== 'race') return
+    // On track, or in the garage while you rev it (Game.garagePops).
+    if (this.paused || kind === 0 || (this.scene !== 'race' && !this.menuEngine)) return
     const played = (car < 0 ? this.backfires : this.rivals[car]?.backfires)?.pop(kind, strength)
-    // Your own bang: the engine dips for a moment so the "POOO" punches through
-    // rather than being squashed into it by the limiter.
-    if (played && car < 0 && kind === BANG) this.duckEngine(0.45 * strength, 0.06)
+    // Your own pops: the engine dips for a moment so they punch through rather
+    // than being squashed into it by the limiter. A bang deeply, a crackle a little.
+    if (played && car < 0) {
+      if (kind === BANG) this.duckEngine(0.6 * strength, 0.09)
+      else this.duckEngine(0.3 * strength, 0.04)
+    }
   }
 
   /** Drop the player's engine and tyres by `depth` (0..1), hold briefly, then recover. */

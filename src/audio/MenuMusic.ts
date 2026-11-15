@@ -4,6 +4,8 @@ import type { MusicTrack } from './musicTracks'
 const LEVEL = 0.22
 const FADE_IN = 0.9
 const FADE_OUT = 0.55
+/** Music level under a garage rev, relative to normal. */
+const DUCKED = 0.35
 
 /**
  * The menu/garage soundtrack. One looping <audio> element streamed through the
@@ -16,6 +18,7 @@ const FADE_OUT = 0.55
 export class MenuMusic {
   private readonly ctx: AudioContext
   private readonly out: GainNode
+  private readonly duck: GainNode
   private readonly audio: HTMLAudioElement
   private url = ''
   private enabled = true
@@ -29,7 +32,8 @@ export class MenuMusic {
     this.onPlayingChange = onPlayingChange
     this.out = ctx.createGain()
     this.out.gain.value = 0
-    this.out.connect(destination)
+    this.duck = ctx.createGain()
+    this.out.connect(this.duck).connect(destination)
 
     this.audio = new Audio()
     this.audio.loop = true
@@ -58,6 +62,15 @@ export class MenuMusic {
     this.enabled = enabled
     if (enabled) this.play()
     else this.stop()
+  }
+
+  /** Garage revving: the music dips to DUCKED so the engine and pops come through. */
+  setDucked(ducked: boolean): void {
+    const now = this.ctx.currentTime
+    const gain = this.duck.gain
+    gain.cancelScheduledValues(now)
+    gain.setValueAtTime(gain.value, now)
+    gain.setTargetAtTime(ducked ? DUCKED : 1, now, ducked ? 0.08 : 0.6)
   }
 
   /** Menu/garage = true, race = false. */
