@@ -1,9 +1,10 @@
+import type { AiDifficulty } from './AiProfiles'
 /**
  * Coins: what a race pays and what a car costs. Pure (numbers in, numbers out) so it's unit
  * tested and can move to a server that pays out trusted results.
  *
- * Scarce on purpose. A 3-lap win pays ~300, a mid-field finish ~120, and the dearest car costs
- * 30,000: about a hundred wins. Past DAILY_SOFT_CAP coins in a day, races pay a quarter, so
+ * Scarce on purpose. A 3-lap win against Legend rivals pays ~500, a mid-field finish ~250
+ * (Mythic and Impossible pay more), and the dearest car costs 30,000: about sixty wins. Past DAILY_SOFT_CAP coins in a day, races pay a quarter, so
  * grinding one track all night doesn't buy the garage.
  */
 
@@ -23,7 +24,7 @@ export interface QuickRaceResult {
   /** Your best lap this race, and your best ever on this track (null: first time here). */
   bestLapMs: number | null
   previousBestLapMs: number | null
-  difficulty: 'relaxed' | 'challenging' | 'intense' | 'legend'
+  difficulty: AiDifficulty
 }
 
 export interface TrialResult {
@@ -51,7 +52,7 @@ export const STARTING_COINS = 500
 const FINISH = 60
 const PER_LAP = 20
 const PODIUM = [150, 80, 40]
-const DIFFICULTY = { relaxed: 0.75, challenging: 1, intense: 1.3, legend: 2 } as const
+const DIFFICULTY: Record<AiDifficulty, number> = { legend: 2, mythic: 2.6, impossible: 3.5 }
 const LAP_RECORD = 75
 const FIRST_LAP_RECORD = 25
 const TRIAL_PER_LAP = 15

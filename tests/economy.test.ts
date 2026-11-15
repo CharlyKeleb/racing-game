@@ -4,7 +4,7 @@ import { mergeSnapshots } from '../src/cloud/saveData'
 import { readWallet, walletStore, WALLET_KEY } from '../src/stores/walletStore'
 
 const total = (lines: { coins: number }[]) => lines.reduce((s, l) => s + l.coins, 0)
-const quick = { mode: 'quick' as const, field: 4, laps: 3, bestLapMs: 90_000, previousBestLapMs: 89_000, difficulty: 'challenging' as const }
+const quick = { mode: 'quick' as const, field: 4, laps: 3, bestLapMs: 90_000, previousBestLapMs: 89_000, difficulty: 'legend' as const }
 
 describe('race rewards', () => {
   it('pays a win most, then the podium, then a finish', () => {
@@ -13,8 +13,8 @@ describe('race rewards', () => {
     expect(win).toBeGreaterThan(second)
     expect(second).toBeGreaterThan(third)
     expect(third).toBeGreaterThan(fourth)
-    expect(win).toBeGreaterThan(250)
-    expect(win).toBeLessThan(400)
+    expect(win).toBeGreaterThan(450)
+    expect(win).toBeLessThan(600)
   })
 
   it('pays a lap record, a smaller first time, nothing for a slower lap', () => {
@@ -30,7 +30,7 @@ describe('race rewards', () => {
   })
 
   it('pays harder rivals more, and no podium without rivals', () => {
-    expect(total(raceReward({ ...quick, position: 1, difficulty: 'intense' }))).toBeGreaterThan(total(raceReward({ ...quick, position: 1, difficulty: 'relaxed' })))
+    expect(total(raceReward({ ...quick, position: 1, difficulty: 'impossible' }))).toBeGreaterThan(total(raceReward({ ...quick, position: 1, difficulty: 'mythic' })))
     expect(raceReward({ ...quick, position: 1, field: 1 }).some((l) => /Victory|podium/.test(l.label))).toBe(false)
   })
 
@@ -46,9 +46,9 @@ describe('race rewards', () => {
     expect(capPayout(400, DAILY_SOFT_CAP + 10)).toBe(100)
   })
 
-  it('prices the fastest car at about a hundred wins', () => {
+  it('prices the fastest car at about sixty Legend wins', () => {
     const win = total(raceReward({ ...quick, position: 1 }))
-    expect(carPrice('koenigsegg') / win).toBeGreaterThan(80)
+    expect(carPrice('koenigsegg') / win).toBeGreaterThan(50)
     expect(STARTER_CARS).toContain('porsche911')
   })
 })
