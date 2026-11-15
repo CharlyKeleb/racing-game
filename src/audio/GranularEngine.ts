@@ -52,6 +52,16 @@ const MAX_NORMALIZE = 1.5
  * as a real idle is), so the grains still overlap.
  */
 const MAX_SPACING = 1.3
+/**
+ * Furthest a grain is packed above its recording's pitch before it's also sped up. Packed
+ * tighter, a grain (cut to MAX_GRAIN_PERIODS) holds under one of the recording's own firing
+ * cycles: at ~3x up a 911 grain held 0.4 of one, mostly window shape, and the sound sank
+ * below its own firing note (spectral centroid 0.4x f0) into a dull buzz as it revved.
+ * Past this ratio it plays faster (brighter, as a high-revving engine is), so each grain
+ * carries a whole cycle of the real engine. MAX_SPEEDUP caps the chipmunk.
+ */
+const MAX_PACKING = 1.5
+const MAX_SPEEDUP = 2.5
 
 export class GranularEngine {
   private readonly pcm: Float32Array
@@ -161,13 +171,16 @@ export class GranularEngine {
     const before = marks[c] - marks[c - 1]
     const after = marks[c + 1] - marks[c]
     const srcPeriodOut = (before + after) / 2 / this.step
-    // Far below the recording, slow the grain down so it still spans MAX_SPACING's overlap.
-    const rate = Math.min(1, (MAX_SPACING * srcPeriodOut) / period)
+    // Far below the recording, slow the grain down so it still spans MAX_SPACING's overlap;
+    // far above it, speed it up so it still holds a whole firing cycle (MAX_PACKING).
+    const ratio = srcPeriodOut / period
+    const rate = ratio < 1 ? Math.min(1, MAX_SPACING * ratio) : Math.min(MAX_SPEEDUP, Math.max(1, ratio / MAX_PACKING))
     // Advance by real time: a target period's worth of the source, never more than a mark.
     let next = pos + this.dir[li] * Math.min(1, (period * rate) / srcPeriodOut)
     if (next >= last) { next = last; this.dir[li] = -1 } else if (next <= 1) { next = 1; this.dir[li] = 1 }
     this.cursor[li] = last <= 1 ? 1 : next
-    const lenOut = (2 * Math.min(srcPeriodOut, MAX_GRAIN_PERIODS * period)) / rate
+    // A sped-up grain's source periods pass faster: cap on its heard length, not the source's.
+    const lenOut = rate > 1 ? 2 * Math.min(srcPeriodOut / rate, MAX_GRAIN_PERIODS * period) : (2 * Math.min(srcPeriodOut, MAX_GRAIN_PERIODS * period)) / rate
     // Hann grains at hop = period sum to (len / period) / 2; scale that back to 1.
     const normalize = Math.min(MAX_NORMALIZE, period / (lenOut / 2))
 
