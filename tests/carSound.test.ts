@@ -23,6 +23,27 @@ describe('CarSoundModel', () => {
     expect(m.spool).toBeLessThan(0.05)
   })
 
+  it('blows off when the pedal ramps down over several frames (the engine gets a ramped pedal)', () => {
+    const m = new CarSoundModel()
+    run(m, { rpm: 6000, throttle: 1 }, 2)
+    let fired = 0
+    // The pedal falls 1 → 0 over ~0.2 s: no single frame goes from on to lifted.
+    for (let p = 1; p >= 0; p -= 0.08) {
+      m.update({ ...base, rpm: 6000, throttle: Math.max(0, p) }, DT)
+      fired = Math.max(fired, m.blowOff)
+    }
+    m.update({ ...base, rpm: 6000, throttle: 0 }, DT)
+    fired = Math.max(fired, m.blowOff)
+    expect(fired).toBeGreaterThan(0.8)
+    // A slow roll-off, long after being on the throttle, isn't a lift.
+    const slow = new CarSoundModel()
+    run(slow, { rpm: 6000, throttle: 1 }, 2)
+    run(slow, { rpm: 6000, throttle: 0.4 }, 1.5)
+    let late = 0
+    for (let k = 0; k < 10; k++) { slow.update({ ...base, rpm: 6000, throttle: 0 }, DT); late = Math.max(late, slow.blowOff) }
+    expect(late).toBe(0)
+  })
+
   it('no boost and no blow-off at low rpm', () => {
     const m = new CarSoundModel()
     run(m, { rpm: 1800, throttle: 1 }, 2)

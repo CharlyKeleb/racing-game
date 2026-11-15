@@ -98,6 +98,9 @@ export class AudioManager {
   private synthGain!: GainNode
 
   private sampled: AudioWorkletNode | null = null
+  /** A loop bank's engine: the recording itself, its playback rate following the rpm. */
+  private looped: AudioBufferSourceNode | null = null
+  private loopRpm = 1
   private ignition: AudioBuffer | null = null
   private loading: Promise<void> | null = null
   private lastTime = 0
@@ -162,6 +165,7 @@ export class AudioManager {
     this.sampled?.disconnect()
     this.sampled?.port.close()
     this.sampled = null
+    this.stopLoop()
     this.ignition = null
     this.sound.setLiftOffClip(null)
     this.synthGain.gain.value = 0.35
@@ -274,6 +278,24 @@ export class AudioManager {
       this.ignition = await decode(ignition)
       sound.setLiftOffClip(await decode(liftOff))
 
+      if (bank.loop) {
+        // A loop bank: play the recording itself, looped, its speed set from the rpm each frame.
+        if (this.carAudioUrl !== base) return
+        const buffer = ctx.createBuffer(1, pcm.length, bank.sampleRate)
+        buffer.getChannelData(0).set(pcm)
+        const src = ctx.createBufferSource()
+        src.buffer = buffer
+        src.loop = true
+        src.connect(sound.engineIn)
+        src.start()
+        this.looped = src
+        this.loopRpm = bank.loop.rpm
+        this.engineBank = { pcm, bank }
+        this.bankCache.set(base, Promise.resolve(this.engineBank))
+        this.synthGain.gain.value = 0
+        return
+      }
+
       const node = new AudioWorkletNode(ctx, 'granular-engine', { numberOfInputs: 0, outputChannelCount: [1] })
       const msg: EngineBankMessage = { pcm, bank }
       node.port.postMessage(msg)
@@ -291,6 +313,12 @@ export class AudioManager {
     } catch (err) {
       console.warn('[AudioManager] car audio unavailable, using the synth engine', err)
     }
+  }
+
+  private stopLoop(): void {
+    try { this.looped?.stop() } catch { /* never started */ }
+    this.looped?.disconnect()
+    this.looped = null
   }
 
   /** Race start: crank the engine. The loop fades in once it has caught. */
@@ -634,7 +662,9 @@ export class AudioManager {
     this.sound.update(state, dt)
     if (tyres) this.tyres?.update(tyreBrakeLevels(tyres, this.noiseProfile), dt)
     const rpm = this.sound.engineRpm
-    if (this.sampled) {
+    if (this.looped) {
+      this.looped.playbackRate.setTargetAtTime((Math.max(rpm, 600) * this.voice.pitch) / this.loopRpm, t, 0.012)
+    } else if (this.sampled) {
       this.sampled.parameters.get('rpm')!.setTargetAtTime(rpm * this.voice.pitch, t, 0.01)
     } else {
       // Firing frequency = rpm/60 × pulses per rev (flat-six 3, V8 4).
@@ -785,6 +815,7 @@ export class AudioManager {
     this.raceMusic = null
     this.sampled?.disconnect()
     this.sampled?.port.close()
+    this.stopLoop()
     this.master?.disconnect()
     this.limiter?.disconnect()
     this.duck?.disconnect()

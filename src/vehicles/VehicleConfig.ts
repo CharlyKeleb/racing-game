@@ -104,6 +104,12 @@ export interface NitroConfig {
   perfectDrainScale: number
 }
 
+export interface BackfireConfig {
+  overrun: number
+  upshift: number
+  flame: number
+}
+
 export interface VehicleConfig {
   id: string
   name: string
@@ -161,6 +167,13 @@ export interface VehicleConfig {
   /** Share of downforce on the front axle (aero balance), 0..1. */
   downforceFrontShare: number
   nitro: NitroConfig
+  /**
+   * Exhaust pops and fireballs (see Backfire): how this car's exhaust behaves, 1 = the default
+   * race-car spit. `overrun`: how often a lift at high revs crackles, and how long the burst;
+   * `upshift`: the odds of a bang on a hard upshift; `flame`: fireball size. A road car with
+   * catalysts and filters barely pops; a straight-piped race car spits fire.
+   */
+  backfire: BackfireConfig
   /**
    * Brake-disc glow (#92): the wheel material that is the disc, and a glow
    * strength scale. Without a material (or on an LOD that dropped it) a ring is
@@ -248,6 +261,7 @@ export const DEFAULT_VEHICLE_CONFIG: VehicleConfig = {
   downforceFrontShare: 0.42,
   drift: DEFAULT_DRIFT,
   launch: DEFAULT_LAUNCH,
+  backfire: { overrun: 1, upshift: 1, flame: 1 },
   nitro: {
     durationSec: 4,
     fillRate: 0.25,
@@ -283,6 +297,7 @@ export function resolveVehicleConfig(partial: Partial<VehicleConfig> | undefined
     nitro: { ...d.nitro, ...partial.nitro },
     launch: { ...d.launch, ...partial.launch },
     drift: { ...d.drift, ...partial.drift },
+    backfire: { ...d.backfire, ...partial.backfire },
     wheels: partial.wheels ?? d.wheels,
   }
 }

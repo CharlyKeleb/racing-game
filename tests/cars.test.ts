@@ -7,10 +7,10 @@ import { getCar, selectableCars, stepCar } from '../src/vehicles/carRegistry'
 describe('car picker', () => {
   it('offers only cars with a model, and steps through them wrapping around', () => {
     const ids = selectableCars().map((c) => c.id)
-    expect(ids).toEqual(['porsche911', 'koenigsegg', 'bmw', 'diablo', 'amg', 'charger'])
+    expect(ids).toEqual(['porsche911', 'koenigsegg', 'bmw', 'diablo', 'amg', 'charger', 'gt3rs', 'r33', 'demon', 'g63', 'rs6gt', 'rs6r'])
     expect(stepCar('porsche911', 1).id).toBe('koenigsegg')
-    expect(stepCar('charger', 1).id).toBe('porsche911')
-    expect(stepCar('porsche911', -1).id).toBe('charger')
+    expect(stepCar('rs6r', 1).id).toBe('porsche911')
+    expect(stepCar('porsche911', -1).id).toBe('rs6r')
     // Unknown ids (stale saves) step from the first car.
     expect(stepCar('nope', 1).id).toBe('koenigsegg')
   })

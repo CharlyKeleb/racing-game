@@ -1,0 +1,16 @@
+{
+  "comment": "Dodge Challenger SRT Demon: JorisDJN's CC0 'Dodge Challenger SRT' (Freesound #760645), a parked Challenger SRT idling and blipped (see public/audio/demon/CREDITS.md). V8: four firing pulses a revolution.",
+  "firingPerRev": 4,
+  "segments": [
+    ["idle", "srt.wav", 130.0, 132.0, 600],
+    ["750", "srt.wav", 43.0, 44.6, 750],
+    ["1030", "srt.wav", 79.5, 80.5, 1030],
+    ["1160", "srt.wav", 119.6, 120.4, 1160],
+    ["2050", "srt.wav", 154.0, 154.35, 2050],
+    ["2180", "srt.wav", 64.4, 64.75, 2180],
+    ["2320", "srt.wav", 155.0, 155.3, 2310],
+    ["2390", "srt.wav", 158.0, 158.3, 2390],
+    ["2470", "srt.wav", 110.0, 110.3, 2470],
+    ["2590", "srt.wav", 158.5, 158.75, 2590]
+  ]
+}

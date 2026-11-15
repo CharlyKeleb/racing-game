@@ -1,0 +1,153 @@
+{
+  "id": "demon",
+  "name": "Dodge Challenger SRT Demon",
+  "massKg": 1910,
+  "chassisHalfExtents": [
+    1.01,
+    0.33,
+    2.45
+  ],
+  "chassisCenter": [
+    0,
+    0.66,
+    -0.08
+  ],
+  "centerOfMass": [
+    0,
+    0.4,
+    -0.18
+  ],
+  "wheels": [
+    {
+      "id": "FL",
+      "position": [
+        0.822,
+        0.678,
+        1.473
+      ],
+      "radius": 0.358,
+      "width": 0.349,
+      "steered": true,
+      "driven": false,
+      "handbrake": false
+    },
+    {
+      "id": "FR",
+      "position": [
+        -0.822,
+        0.678,
+        1.473
+      ],
+      "radius": 0.358,
+      "width": 0.349,
+      "steered": true,
+      "driven": false,
+      "handbrake": false
+    },
+    {
+      "id": "RL",
+      "position": [
+        0.823,
+        0.678,
+        -1.473
+      ],
+      "radius": 0.358,
+      "width": 0.344,
+      "steered": false,
+      "driven": true,
+      "handbrake": true
+    },
+    {
+      "id": "RR",
+      "position": [
+        -0.823,
+        0.678,
+        -1.473
+      ],
+      "radius": 0.358,
+      "width": 0.344,
+      "steered": false,
+      "driven": true,
+      "handbrake": true
+    }
+  ],
+  "engine": {
+    "idleRpm": 800,
+    "redlineRpm": 6500,
+    "torqueCurve": [
+      [
+        800,
+        500
+      ],
+      [
+        2500,
+        860
+      ],
+      [
+        4300,
+        1044
+      ],
+      [
+        5300,
+        1020
+      ],
+      [
+        6100,
+        982
+      ],
+      [
+        6500,
+        880
+      ]
+    ],
+    "gearRatios": [
+      -3.3,
+      4.71,
+      3.14,
+      2.11,
+      1.67,
+      1.29,
+      1.0,
+      0.84,
+      0.67
+    ],
+    "finalDrive": 3.09,
+    "efficiency": 0.85,
+    "shiftUpRpm": 6300,
+    "shiftDownRpm": 3200,
+    "shiftTimeSec": 0.1
+  },
+  "exhausts": [
+    [
+      0.34,
+      0.36,
+      -2.62
+    ],
+    [
+      -0.34,
+      0.36,
+      -2.62
+    ]
+  ],
+  "tires": {
+    "grip": 1.6,
+    "corneringStiffness": 9,
+    "shape": 1.7,
+    "handbrakeGripScale": 0.38,
+    "rollingResistance": 0.014,
+    "tractionControl": true
+  },
+  "brakeForce": 36000,
+  "steerFalloffSpeed": 9,
+  "yawStability": 6.5,
+  "driftAssist": 0.28,
+  "maxDriftAngle": 0.6,
+  "dragCoefficient": 0.5,
+  "downforceCoefficient": 0.3,
+  "downforceFrontShare": 0.45,
+  "backfire": {
+    "overrun": 0.55,
+    "upshift": 0.7,
+    "flame": 1.05
+  }
+}

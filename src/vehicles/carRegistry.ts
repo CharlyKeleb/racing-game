@@ -64,6 +64,7 @@ export const CARS: CarEntry[] = [
     // tight, bright crackle on the overrun.
     voice: {
       pitch: 1, boomHz: 120, boomDb: 5, raspHz: 2600, raspDb: 4.5, drive: 1, airDb: 0.5, sub: 1, turbo: 1, burble: 0,
+      whistle: { lowHz: 2900, highHz: 5600, gain: 0.8 },
       whine: { ratio: 0, gain: 0 },
       pops: { pitch: 1.1, crackle: 1, bang: 0.8, thump: 0.7, toneHz: 9500 },
     },
@@ -91,6 +92,7 @@ export const CARS: CarEntry[] = [
     // whistle and dump, and anti-lag-style bangs.
     voice: {
       pitch: 1, boomHz: 95, boomDb: 6, raspHz: 2000, raspDb: 5.5, drive: 1.2, airDb: 1, sub: 0.9, turbo: 1.8, burble: 0.1,
+      whistle: { lowHz: 2300, highHz: 5000, gain: 1.8 },
       whine: { ratio: 0, gain: 0 },
       pops: { pitch: 0.95, crackle: 1.3, bang: 1.25, thump: 1, toneHz: 7500 },
     },
@@ -197,6 +199,160 @@ export const CARS: CarEntry[] = [
       pitch: 0.85, boomHz: 70, boomDb: 9, raspHz: 1500, raspDb: 2, drive: 1.25, airDb: -3, sub: 1.6, turbo: 0, burble: 0.7,
       whine: { ratio: 9, gain: 0.05 },
       pops: { pitch: 0.7, crackle: 0.8, bang: 1.5, thump: 1.8, toneHz: 4500 },
+    },
+  },
+  {
+    id: 'gt3rs',
+    name: 'Porsche 911 GT3 RS',
+    modelUrl: '/models/cars/gt3rs/gt3rs.glb',
+    modelUrlLow: '/models/cars/gt3rs/gt3rs_low.glb',
+    configUrl: '/models/cars/gt3rs/vehicle-config.json',
+    // The Carrera's flat-six recording, re-voiced as the GT3 RS's 9000 rpm atmospheric engine.
+    audioUrl: '/audio/porsche911/',
+    firingPerRev: 3,
+    selectable: true,
+    stats: { power: 0.6, grip: 0.95, handling: 0.95, braking: 0.9 },
+    specs: { powerHp: 528, torqueNm: 465, zeroToHundred: 3.2, topSpeedKmh: 296, drivetrain: 'RWD', weightKg: 1450 },
+    // Michelin Cup 2 R semi-slicks: a short, gritty squeal. Carbon-ceramic brakes with ABS.
+    noise: {
+      tyres: { squealHz: 820, tonal: 0.5, scrubHz: 720 },
+      brakes: { hissHz: 3900, squealHz: 0, grind: 0.35, abs: true },
+    },
+    // Naturally aspirated 4.0 flat-six to 9000 rpm: no turbos, a raw metallic shriek that
+    // climbs and climbs, a tight bright crackle on the overrun.
+    voice: {
+      pitch: 1.22, boomHz: 150, boomDb: 4, raspHz: 3300, raspDb: 6.5, drive: 1.15, airDb: 3, sub: 0.75, turbo: 0, burble: 0,
+      whine: { ratio: 0, gain: 0 },
+      pops: { pitch: 1.3, crackle: 0.9, bang: 0.55, thump: 0.45, toneHz: 11000 },
+    },
+  },
+  {
+    id: 'r33',
+    name: 'Nissan Skyline GT-R R33 LM',
+    modelUrl: '/models/cars/r33/r33.glb',
+    modelUrlLow: '/models/cars/r33/r33_low.glb',
+    configUrl: '/models/cars/r33/vehicle-config.json',
+    // Its own recording: a real RB26 Skyline revving, and its real turbo flutter on lift-off.
+    audioUrl: '/audio/r33/',
+    firingPerRev: 3,
+    selectable: true,
+    stats: { power: 0.66, grip: 0.86, handling: 0.88, braking: 0.82 },
+    specs: { powerHp: 615, torqueNm: 640, zeroToHundred: 3.4, topSpeedKmh: 315, drivetrain: 'RWD', weightKg: 1250 },
+    // Race slicks: scrub more than squeal. Race brakes: a soft hiss, a little grind.
+    noise: {
+      tyres: { squealHz: 600, tonal: 0.3, scrubHz: 660 },
+      brakes: { hissHz: 3500, squealHz: 0, grind: 0.15, abs: false },
+    },
+    // RB26 twin-turbo straight-six, matched to an NFS Heat Skyline reel: its own recording
+    // looped as recorded (no added colour), a loud single-tone turbo whistle around 2 kHz on
+    // boost, and on every lift or brake on boost a deep, slow "stuuu-stuuu-stuuu" flutter
+    // (plus the recording's own lift-off above 4200 rpm).
+    voice: {
+      pitch: 1, boomHz: 125, boomDb: 0.5, raspHz: 2900, raspDb: 0.5, drive: 0.75, airDb: 0, sub: 0.3, turbo: 1.6, flutter: 1, liftOff: 2.2, burble: 0,
+      whistle: { lowHz: 1700, highHz: 2400, gain: 5 },
+      whine: { ratio: 0, gain: 0 },
+      pops: { pitch: 1.15, crackle: 1.25, bang: 1.05, thump: 0.7, toneHz: 8800 },
+    },
+  },
+  {
+    id: 'demon',
+    name: 'Dodge Challenger SRT Demon',
+    modelUrl: '/models/cars/demon/demon.glb',
+    modelUrlLow: '/models/cars/demon/demon_low.glb',
+    configUrl: '/models/cars/demon/vehicle-config.json',
+    // Its own recording: a real Challenger SRT's supercharged HEMI (see public/audio/demon/CREDITS.md).
+    audioUrl: '/audio/demon/',
+    firingPerRev: 4,
+    selectable: true,
+    stats: { power: 0.9, grip: 0.55, handling: 0.5, braking: 0.58 },
+    specs: { powerHp: 841, torqueNm: 1044, zeroToHundred: 2.6, topSpeedKmh: 270, drivetrain: 'RWD', weightKg: 1910 },
+    // Drag radials: a deep howl when they let go. Big Brembos with ABS.
+    noise: {
+      tyres: { squealHz: 760, tonal: 0.8, scrubHz: 700 },
+      brakes: { hissHz: 4100, squealHz: 2900, grind: 0.1, abs: true },
+    },
+    // Supercharged 6.2 HEMI V8, from a real Challenger SRT recording left largely as recorded:
+    // its own deep, lumpy rumble and heavy thuds, under the twin-screw blower's "cat" whine:
+    // mostly rushing air at ~12× crank speed (~600 Hz at 3000 rpm, ~1.3 kHz near redline) and its
+    // octave, with a little tone, loudest on the throttle.
+    voice: {
+      pitch: 1, boomHz: 70, boomDb: 2.5, raspHz: 1500, raspDb: 1, drive: 1, airDb: 0, sub: 1, turbo: 0, burble: 0.3,
+      whine: { ratio: 13.6, gain: 0.07, air: 0.3 },
+      pops: { pitch: 0.68, crackle: 0.7, bang: 1.65, thump: 1.95, toneHz: 4200 },
+    },
+  },
+  {
+    id: 'g63',
+    name: 'Mercedes-AMG G63',
+    modelUrl: '/models/cars/g63/g63.glb',
+    modelUrlLow: '/models/cars/g63/g63_low.glb',
+    configUrl: '/models/cars/g63/vehicle-config.json',
+    audioUrl: '/audio/koenigsegg/',
+    firingPerRev: 4,
+    selectable: true,
+    stats: { power: 0.7, grip: 0.4, handling: 0.3, braking: 0.42 },
+    specs: { powerHp: 581, torqueNm: 850, zeroToHundred: 4.5, topSpeedKmh: 240, drivetrain: 'AWD', weightKg: 2560 },
+    // Tall SUV tyres: a low, rubbery squeal. Heavy-duty brakes with ABS.
+    noise: {
+      tyres: { squealHz: 700, tonal: 0.7, scrubHz: 620 },
+      brakes: { hissHz: 3800, squealHz: 2600, grind: 0.15, abs: true },
+    },
+    // 4.0 biturbo hot-V V8 through side pipes: a thick, booming rumble, a soft turbo
+    // whoosh and AMG's famous loud crackle and bang on the overrun.
+    voice: {
+      pitch: 0.9, boomHz: 105, boomDb: 8.5, raspHz: 2400, raspDb: 3.5, drive: 1.35, airDb: -2, sub: 1.5, turbo: 0.9, burble: 0.45,
+      whistle: { lowHz: 1800, highHz: 3400, gain: 0.7 },
+      whine: { ratio: 0, gain: 0 },
+      pops: { pitch: 0.85, crackle: 1.7, bang: 1.55, thump: 1.4, toneHz: 6400 },
+    },
+  },
+  {
+    id: 'rs6gt',
+    name: 'Audi RS6 GT Avant',
+    modelUrl: '/models/cars/rs6gt/rs6gt.glb',
+    modelUrlLow: '/models/cars/rs6gt/rs6gt_low.glb',
+    configUrl: '/models/cars/rs6gt/vehicle-config.json',
+    audioUrl: '/audio/koenigsegg/',
+    firingPerRev: 4,
+    selectable: true,
+    stats: { power: 0.74, grip: 0.7, handling: 0.66, braking: 0.72 },
+    specs: { powerHp: 630, torqueNm: 850, zeroToHundred: 3.3, topSpeedKmh: 305, drivetrain: 'AWD', weightKg: 2075 },
+    // Performance road tyres, carbon-ceramic brakes with ABS.
+    noise: {
+      tyres: { squealHz: 1020, tonal: 0.8, scrubHz: 880 },
+      brakes: { hissHz: 4000, squealHz: 0, grind: 0.25, abs: true },
+    },
+    // 4.0 TFSI twin-turbo V8: a smooth, cultured burble, strong turbo whistle and whoosh,
+    // and a measured crackle.
+    voice: {
+      pitch: 1.06, boomHz: 120, boomDb: 7, raspHz: 2900, raspDb: 3.5, drive: 1.15, airDb: -1, sub: 1.25, turbo: 1.3, burble: 0.3,
+      whistle: { lowHz: 2500, highHz: 4600, gain: 1.0 },
+      whine: { ratio: 0, gain: 0 },
+      pops: { pitch: 0.95, crackle: 1.1, bang: 1.1, thump: 1.15, toneHz: 7200 },
+    },
+  },
+  {
+    id: 'rs6r',
+    name: 'ABT Audi RS6-R',
+    modelUrl: '/models/cars/rs6r/rs6r.glb',
+    modelUrlLow: '/models/cars/rs6r/rs6r_low.glb',
+    configUrl: '/models/cars/rs6r/vehicle-config.json',
+    audioUrl: '/audio/koenigsegg/',
+    firingPerRev: 4,
+    selectable: true,
+    stats: { power: 0.8, grip: 0.72, handling: 0.68, braking: 0.74 },
+    specs: { powerHp: 730, torqueNm: 920, zeroToHundred: 3.1, topSpeedKmh: 320, drivetrain: 'AWD', weightKg: 2075 },
+    noise: {
+      tyres: { squealHz: 980, tonal: 0.75, scrubHz: 860 },
+      brakes: { hissHz: 4050, squealHz: 0, grind: 0.25, abs: true },
+    },
+    // ABT's tuned twin-turbo V8 and sport exhaust: louder and rawer than the RS6 GT, harder
+    // driven, more boost, and a sharper, angrier crackle.
+    voice: {
+      pitch: 1.13, boomHz: 140, boomDb: 8, raspHz: 2500, raspDb: 5, drive: 1.4, airDb: 0, sub: 1.3, turbo: 1.6, flutter: 0.35, burble: 0.4,
+      whistle: { lowHz: 2100, highHz: 4200, gain: 1.5 },
+      whine: { ratio: 0, gain: 0 },
+      pops: { pitch: 1.05, crackle: 1.6, bang: 1.35, thump: 1.0, toneHz: 8200 },
     },
   },
   {

@@ -125,3 +125,22 @@ describe('backfire loudness', () => {
     expect(BackfireSound.level(BANG, 0.5)).toBeLessThan(BackfireSound.level(BANG, 1))
   })
 })
+
+describe('per-car exhaust (VehicleConfig.backfire)', () => {
+  /** Pops over `lifts` lifts at high revs: on the throttle, then snapped shut. */
+  const pops = (overrun: number, upshift: number, lifts = 200) => {
+    const b = new Backfire({ overrun, upshift })
+    let n = 0
+    for (let k = 0; k < lifts; k++) {
+      for (let i = 0; i < 30; i++) { b.update(1 / 60, { throttle: 1, revs: 0.9, gear: 3, burnout: 0, nitroLit: false }); if (b.popped) n++ }
+      for (let i = 0; i < 60; i++) { b.update(1 / 60, { throttle: 0, revs: 0.9, gear: 3, burnout: 0, nitroLit: false }); if (b.popped) n++ }
+    }
+    return n
+  }
+
+  it('a quiet road exhaust pops far less than the default, a race exhaust more', () => {
+    const road = pops(0.4, 0.3), stock = pops(1, 1), race = pops(1.4, 1.1)
+    expect(road).toBeLessThan(stock * 0.4)
+    expect(race).toBeGreaterThan(stock * 1.15)
+  })
+})

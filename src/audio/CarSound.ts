@@ -53,6 +53,11 @@ export class CarSound {
   private readonly air: BiquadFilterNode
   private readonly whine: OscillatorNode
   private readonly whineGain: GainNode
+  /** The whine's pure tone, and its airy bands (a blower's rush) at the fundamental and octave. */
+  private readonly whineTone: GainNode
+  private readonly whineAir: GainNode
+  private readonly whineBand1: BiquadFilterNode
+  private readonly whineBand2: BiquadFilterNode
   private readonly exhaustGain: GainNode
   private readonly sub: OscillatorNode
   private readonly subGain: GainNode
@@ -122,7 +127,23 @@ export class CarSound {
     this.whine = ctx.createOscillator()
     this.whine.type = 'triangle'
     this.whineGain = gain(ctx, 0)
-    this.whine.connect(biquad(ctx, 'highpass', 300, 0.7, 0)).connect(this.whineGain).connect(this.bus)
+    this.whineGain.connect(this.bus)
+    this.whineTone = gain(ctx, 1)
+    this.whine.connect(biquad(ctx, 'highpass', 300, 0.7, 0)).connect(this.whineTone).connect(this.whineGain)
+    // A blower's whine is air, not a beep: noise through narrow bands at the rotor pitch and its octave.
+    const whineNoise = ctx.createBufferSource()
+    whineNoise.buffer = this.noise
+    whineNoise.loop = true
+    this.whineBand1 = biquad(ctx, 'bandpass', 600, 16, 0)
+    this.whineBand2 = biquad(ctx, 'bandpass', 1200, 16, 0)
+    this.whineAir = gain(ctx, 0)
+    const octave = gain(ctx, 0.45)
+    whineNoise.connect(this.whineBand1).connect(this.whineAir)
+    whineNoise.connect(this.whineBand2).connect(octave).connect(this.whineAir)
+    // Narrow bands pass little energy: make it up so `air` 1 matches the tone's loudness.
+    this.whineAir.connect(gain(ctx, 20)).connect(this.whineGain)
+    whineNoise.start()
+    this.sources.push(whineNoise)
 
     // Sub rumble: a flat-six's strong half order (1.5 per rev), felt more than heard.
     this.sub = ctx.createOscillator()
@@ -152,6 +173,11 @@ export class CarSound {
   /** The car's engine voice (see EngineVoice): its exhaust, character and pops. */
   setVoice(voice: EngineVoice): void {
     this.voice = voice
+    // A supercharger's scream is bright and buzzy; straight-cut gears and gentler blowers hum.
+    this.whine.type = voice.whine.scream ? 'sawtooth' : 'triangle'
+    const air = Math.max(0, Math.min(1, voice.whine.air ?? 0))
+    this.whineTone.gain.value = 1 - air
+    this.whineAir.gain.value = air
     this.boom.frequency.value = voice.boomHz
     this.boom.gain.value = voice.boomDb
     this.raspEq.frequency.value = voice.raspHz
@@ -217,19 +243,28 @@ export class CarSound {
     set(this.lopeLfo.frequency, halfOrder, t, 0.03)
     set(this.lopeDepth.gain, 0.5 * v.burble * (1 - 0.6 * rpmT), t, 0.08)
     set(this.lope.gain, 1 - 0.5 * v.burble * (1 - 0.6 * rpmT), t, 0.08)
-    set(this.whine.frequency, (Math.max(m.rpm, 600) / 60) * v.whine.ratio, t, 0.02)
+    const whineHz = (Math.max(m.rpm, 600) / 60) * v.whine.ratio
+    set(this.whine.frequency, whineHz, t, 0.02)
+    set(this.whineBand1.frequency, Math.max(40, whineHz), t, 0.02)
+    set(this.whineBand2.frequency, Math.max(80, whineHz * 2), t, 0.02)
     set(this.whineGain.gain, running * v.whine.gain * (0.25 + 0.75 * on) * (0.3 + 0.7 * rpmT), t, 0.04)
 
-    set(this.whistle.frequency, 2600 + 4200 * m.spool, t, 0.08)
-    set(this.whistleGain.gain, 0.01 * m.spool * m.spool * v.turbo, t, 0.06)
+    const w = v.whistle
+    set(this.whistle.frequency, w ? w.lowHz + (w.highHz - w.lowHz) * m.spool : 2600 + 4200 * m.spool, t, 0.08)
+    set(this.whistleGain.gain, 0.01 * m.spool * m.spool * (w ? w.gain : v.turbo), t, 0.06)
     set(this.whooshGain.gain, 0.03 * m.spool * v.turbo, t, 0.06)
 
     set(this.nitroRushGain.gain, 0.07 * Math.min(s.nitro, 1.6), t, 0.08)
 
-    if (m.blowOff > 0 && v.turbo > 0) this.blowOffAt(t, m.blowOff * Math.min(v.turbo, 1.6))
+    if (m.blowOff > 0 && v.turbo > 0) {
+      const flutter = v.flutter ?? 0
+      const strength = m.blowOff * Math.min(v.turbo, 1.6)
+      if (flutter > 0) this.flutterAt(t, strength * flutter)
+      if (flutter < 1) this.blowOffAt(t, strength * (1 - 0.8 * flutter))
+    }
     if (m.shiftUp) this.upshiftAt(t, rpmT)
     if (m.shiftDown) this.downshiftAt(t, rpmT)
-    if (m.liftOff && this.liftOffClip) this.playClip(this.liftOffClip, 0.3 + 0.3 * rpmT, t, v.pitch)
+    if (m.liftOff && this.liftOffClip) this.playClip(this.liftOffClip, (0.3 + 0.3 * rpmT) * (v.liftOff ?? 1), t, v.pitch)
     if (m.nitroStart) this.nitroWhooshAt(t)
     if (m.perfectStart) this.perfectBoomAt(t)
     this.scheduleCrackles(t, m.crackle)
@@ -282,6 +317,36 @@ export class CarSound {
     env.gain.exponentialRampToValueAtTime(0.0001, when + 0.38)
     src.connect(hp).connect(bp).connect(env).connect(this.bus)
     src.start(when, Math.random(), 0.4)
+  }
+
+  /**
+   * Compressor surge ("stuuu-stuuu-stuuu"): with nowhere to vent, the boost chatters back
+   * through the compressor in deep, breathy surges, about 11 a second slowing to 7 as the
+   * pressure drains over a second or so (measured off an RB26's). More boost, longer and louder.
+   */
+  private flutterAt(when: number, strength: number): void {
+    const ctx = this.ctx
+    const s = Math.min(strength, 1.6)
+    const span = 0.7 + 0.6 * Math.min(s, 1)
+    let at = when + 0.02
+    let period = 0.085
+    for (let i = 0; at < when + span; i++) {
+      const fade = Math.max(0, 1 - (at - when) / span) ** 0.8
+      const src = ctx.createBufferSource()
+      src.buffer = this.noise
+      // Each surge: a deep rush of air, its body around 150 Hz, its breath around 650 Hz.
+      const bp = biquad(ctx, 'bandpass', (680 - 18 * i) * (0.92 + Math.random() * 0.16), 1.1, 0)
+      const body = biquad(ctx, 'lowshelf', 180, 0.7, 9)
+      const env = gain(ctx, 0)
+      const len = period * 0.8
+      env.gain.setValueAtTime(0, at)
+      env.gain.linearRampToValueAtTime(0.75 * s * fade, at + 0.012)
+      env.gain.exponentialRampToValueAtTime(0.0001, at + len)
+      src.connect(bp).connect(body).connect(env).connect(this.bus)
+      src.start(at, Math.random() * 1.5, len + 0.01)
+      at += period
+      period *= 1.06
+    }
   }
 
   /** Upshift: the model dips the note for the ignition cut; the pipes give one crack. */
