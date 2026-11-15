@@ -67,6 +67,8 @@ export interface Settings {
   commentaryVersion: 1
   /** Set once the golden-hour rain default has been applied to saved settings. */
   conditionsVersion: 1
+  /** Set once Legend has been applied to saved settings as the default rival difficulty. */
+  difficultyVersion: 1
   narrator: 'off' | 'duo' | 'camille' | 'alex'
   narratorVolume: number
   callouts: boolean
@@ -189,6 +191,7 @@ const defaultSettings: Settings = {
   spotterVisual: true,
   commentaryVersion: 1,
   conditionsVersion: 1,
+  difficultyVersion: 1,
   narrator: 'duo',
   narratorVolume: .8,
   callouts: true,
@@ -233,7 +236,7 @@ function sanitizeSettings(merged: Settings): Settings {
   if (!['drift', 'timeTrial', 'freeRoam'].includes(merged.mode)) merged.mode = 'quick'
   if (typeof merged.roamHud !== 'boolean') merged.roamHud = defaultSettings.roamHud
   if (typeof merged.roamGuide !== 'boolean') merged.roamGuide = defaultSettings.roamGuide
-  if (!isAiDifficulty(merged.difficulty)) merged.difficulty = 'legend'
+  if (!isAiDifficulty(merged.difficulty)) merged.difficulty = defaultSettings.difficulty
   merged.opponents = [0, 1, 3, 7].includes(merged.opponents) ? merged.opponents : 3
   if (!isTimeOfDay(merged.timeOfDay)) merged.timeOfDay = defaultSettings.timeOfDay
   if (merged.weather !== 'rain') merged.weather = 'dry'
@@ -262,6 +265,9 @@ function loadSettings(): Settings {
       merged.weather = defaultSettings.weather
     }
     merged.conditionsVersion = 1
+    // Legend became the default rival difficulty: move saved settings onto it once, then respect changes.
+    if (saved.difficultyVersion !== 1) merged.difficulty = defaultSettings.difficulty
+    merged.difficultyVersion = 1
     return sanitizeSettings(merged)
   } catch {
     return defaultSettings

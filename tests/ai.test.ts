@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import { describe, expect, it, vi } from 'vitest'
 import { startingGrid } from '../src/racing/StartingGrid'
 import { RACE_INTRO_SECONDS } from '../src/camera/RaceIntroCamera'
-import { AI_DIFFICULTIES, DRIVER_PROFILES } from '../src/racing/AiProfiles'
+import { AI_DIFFICULTIES, CATCH_UP, DRIVER_PROFILES } from '../src/racing/AiProfiles'
 import { steeringLimit } from '../src/vehicles/SteeringLimit'
 import { AiDriver } from '../src/racing/AiDriver'
 import { RaceStandings, type RaceEntry } from '../src/racing/RaceStandings'
@@ -25,14 +25,15 @@ describe('AI numeric control', () => {
     expect(driver.input.steer).toBeGreaterThan(0)
     const speed = driver.targetSpeed
     driver.update(1 / 60, pose, [], 1, 100000, 2)
-    expect(driver.targetSpeed).toBeCloseTo(speed * 1.08)
+    // Far behind: capped at the full catch-up. Far ahead: Legend never eases off.
+    expect(driver.targetSpeed).toBeCloseTo(speed * (1 + CATCH_UP.legend.catchUp))
     driver.update(1 / 60, pose, [], 1, -100000, 2)
-    expect(driver.targetSpeed).toBeCloseTo(speed * 0.98 / 1.08 * 1.08)
+    expect(driver.targetSpeed).toBeCloseTo(speed * (1 - CATCH_UP.legend.easeOff))
     for (const v of [driver.input.steer, driver.input.throttle, driver.input.brake]) expect(Number.isFinite(v)).toBe(true)
     expect(Math.abs(driver.input.steer)).toBeLessThanOrEqual(1)
   })
   it('plans corner speed from each preset’s grip share and the car’s own tires', () => {
-    for (const difficulty of ['relaxed','challenging','intense'] as const) {
+    for (const difficulty of ['legend','mythic','impossible'] as const) {
       for (const grip of [1.25,1.7,1.95]) {
         const driver = new AiDriver(circle,{...config,grip},1,DRIVER_PROFILES[0],difficulty)
         expect(driver.speeds[0]).toBeCloseTo(Math.sqrt(AI_DIFFICULTIES[difficulty].cornerGripShare*grip*9.81*80),5)
@@ -53,7 +54,7 @@ describe('AI numeric control', () => {
     const {readFile}=await import('node:fs/promises')
     const manifest=JSON.parse(await readFile('public/models/tracks/nurburgring/track.json','utf8')) as {line:[number,number,number][]}
     const line=manifest.line.map(([x,y,z])=>({x,y,z}))
-    for(const difficulty of ['relaxed','challenging','intense'] as const){
+    for(const difficulty of ['legend','mythic','impossible'] as const){
       const driver=new AiDriver(line,{...config,grip:1.95,brakeDecel:3},1,DRIVER_PROFILES[2],difficulty)
       let peak=0
       for(let i=0;i<line.length;i++){
@@ -120,12 +121,12 @@ it('drives a complete checkpoint-validated procedural lap using real vehicle phy
   } finally { opponent.dispose(); track.dispose(); physics.dispose() }
 }, 30000)
 
-it.each(['bmw', 'porsche911', 'koenigsegg', 'mixed', 'mixed relaxed', 'mixed intense', 'mixed legend', 'drift-park', 'drift-park relaxed', 'drift-park intense', 'drift-park legend', 'bayview', 'bayview legend'])('races a three-car %s field over track collision for two laps', async (scenario) => {
+it.each(['bmw', 'porsche911', 'koenigsegg', 'mixed', 'mixed mythic', 'mixed impossible', 'drift-park', 'drift-park mythic', 'drift-park impossible', 'bayview'])('races a three-car %s field over track collision for two laps', async (scenario) => {
   const [field, preset] = scenario.split(' ')
   const driftPark = field === 'drift-park'
   const city = field === 'bayview' ? 'u2city' : null
   const car = driftPark || city ? 'mixed' : field
-  const difficulty = (preset ?? 'challenging') as import('../src/racing/AiProfiles').AiDifficulty
+  const difficulty = (preset ?? 'legend') as import('../src/racing/AiProfiles').AiDifficulty
   const { readFile } = await import('node:fs/promises')
   const { GLTFLoader } = await import('three/examples/jsm/loaders/GLTFLoader.js')
   const { MeshoptDecoder } = await import('three/examples/jsm/libs/meshopt_decoder.module.js')

@@ -46,12 +46,17 @@ mass, grip, forces or position.
 - Viper takes more cornering risk and can use a brief handbrake rotation on a
   clear, medium-speed bend, using the same drift system as the player.
 
-Relaxed reduces pace, brakes earlier, reacts more slowly and varies pace more.
-Challenging balances those factors. Intense raises pace slightly, reacts sooner,
-and is more consistent. Corner/braking planning shares of each car’s tire grip
-are 55%/50% for Relaxed, 80%/75% for Challenging and 88%/82% for Intense.
-Personality, pace and catch-up still modify the plan. The raw braking plan is
-capped by available brake force after the personality’s braking modifier. These change driving decisions, not vehicle physics.
+There are three difficulties: Legend (the default), Mythic and Impossible.
+Each plans corners and braking at 95–98% of the car's tire grip, with no pace
+variation. Personality, pace and catch-up still modify the plan. The raw braking
+plan is capped by available brake force after the personality’s braking modifier.
+
+Every tier also gives rivals' cars an edge over stock (`RIVAL_EDGE`: more
+torque, grip and brakes), makes every rival a front-runner and never eases off
+when ahead. Legend is +14% torque, +5% grip and +12% brakes. Mythic is
++24%/+8%/+18%, with harder catch-up. Impossible is +36%/+12%/+25%, with the
+strongest catch-up and quickest reactions. Race pay is 2×, 2.6× and 3.5× the
+base rate in `Economy.ts`.
 Difficulty is chosen in Race setup and applied when the next field is created.
 
 `racing/Overtaking.ts` owns follow/draft/pass/yield decisions. It holds a target
@@ -131,8 +136,7 @@ Run `npm test`, `npm run build`, and `npm run lint`. Use `npm run test:ai`
 to print each driver’s car, difficulty, two checkpoint-validated lap times and
 actual recovery count. All fields must finish both laps with zero respawns.
 The mixed-field presets exercise the same parked obstruction and starting grid.
-During tuning, 98%/92% corner/braking shares caused a recovery in the Intense
-mixed field; 88%/82% retains a margin below that setting. AI tests include a complete
+AI tests include a complete
 Papaya lap and three-car fields driving two Nürburgring laps for every selectable
 handling configuration against the shipped collision mesh, including mixed
 models, all three difficulties, the intro timing, the new starting slots and a
