@@ -57,6 +57,13 @@ when ahead. Legend is +14% torque, +5% grip and +12% brakes. Mythic is
 +24%/+8%/+18%, with harder catch-up. Impossible is +36%/+12%/+25%, with the
 strongest catch-up and quickest reactions. Race pay is 2×, 2.6× and 3.5× the
 base rate in `Economy.ts`.
+Pace and catch-up speed up the corners, not the braking zones in front of them
+(`AiDriver.pacedSpeed`). Scaling the whole speed plan by a pace k also asked for k²
+the braking. At speed, with downforce, much of that is real, but into Bayview's
+slow, walled corners Impossible rivals were asked for ~27 m/s² of braking from a
+car that has ~12. They ran wide and wedged until reset. Braking zones are now
+precomputed for paces 1 to 1.65: braking grows with pace only up to the car's own
+limit at that speed (its brakes, or its tyre grip with downforce, at 95%).
 Difficulty is chosen in Race setup and applied when the next field is created.
 
 `racing/Overtaking.ts` owns follow/draft/pass/yield decisions. It holds a target

@@ -20,6 +20,11 @@ const REFERENCE_GRIP = 1.25
 /** Straight-line speed the plan allows, m/s (×profile.straight); the engine caps it before this. */
 const STRAIGHT_CAP = 88
 /** Longest an AI handbrake rotation is held before it resumes grip steering. */
+/** Share of the car's physical braking (brakes or tyres) a rival plans to use at most. */
+const BRAKE_LIMIT_MARGIN = 0.95
+/** Paces precomputed for pacedSpeed: 1 to 1 + PACE_LEVELS·PACE_STEP (1.65), blended between. */
+const PACE_STEP = 0.05
+const PACE_LEVELS = 13
 const MAX_DRIFT_SECONDS = 1.5
 
 /** Numeric, deterministic controller. Owns inputs, never moves a rigid body. */
@@ -28,6 +33,12 @@ export class AiDriver {
   readonly progress: TrackProgress
   readonly distances: Float64Array
   readonly speeds: Float64Array
+  /** Each point's corner speed alone, before braking for the corners ahead (see speeds). */
+  readonly corners: Float64Array
+  /** Planned braking, m/s²: what the speeds' braking zones assume. */
+  readonly braking: number
+  /** Target speeds at paces 1, 1 + PACE_STEP, ... (see pacedSpeed). */
+  private readonly paced: Float64Array[]
   readonly length: number
   readonly passing = new Overtaking()
   readonly profile: DriverProfile
@@ -64,6 +75,7 @@ export class AiDriver {
     const n = line.length
     this.distances = new Float64Array(n + 1)
     this.speeds = new Float64Array(n)
+    this.corners = new Float64Array(n)
     for (let i = 0; i < n; i++) {
       const a = line[i], b = line[(i + 1) % n]
       this.distances[i + 1] = this.distances[i] + Math.hypot(b.x - a.x, b.z - a.z)
@@ -84,13 +96,56 @@ export class AiDriver {
       const lateral = preset.cornerGripShare * grip * 9.81 * profile.corner
       const room = Math.max(curvature, 0.001) - lateral * downforce
       this.speeds[i] = clamp(room > 0 ? Math.sqrt(lateral / room) : Infinity, 9, STRAIGHT_CAP * profile.straight)
+      this.corners[i] = this.speeds[i]
     }
+    this.braking = braking
+    this.paced = this.buildPaced(config, grip, downforce)
     // Two backward passes propagate braking through the closed seam.
     for (let k = n * 2 - 1; k >= 0; k--) {
       const i = k % n, next = (i + 1) % n
       const ds = this.distances[i + 1] - this.distances[i]
       this.speeds[i] = Math.min(this.speeds[i], Math.sqrt(this.speeds[next] ** 2 + 2 * braking * ds))
     }
+  }
+
+  /**
+   * Target speed at `index` with pace `k`: every corner taken k times faster, braked for as
+   * late as the car can really manage. Scaling `speeds` by k also scaled its braking zones to
+   * k² the planned braking (1.56x at Impossible's ~1.25). At speed, with downforce, much of
+   * that is real (late braking is a fast rival's edge), but into Bayview's slow, walled corners
+   * it asked ~27 m/s² of a car with ~12: rivals ran wide and wedged until reset. The braking
+   * zones are precomputed for a ladder of paces (see buildPaced); this blends the two nearest.
+   */
+  pacedSpeed(index: number, k: number): number {
+    if (k <= 1) return this.speeds[index] * k
+    const at = Math.min((k - 1) / PACE_STEP, this.paced.length - 1.000001)
+    const lo = Math.floor(at), t = at - lo
+    const hi = Math.min(lo + 1, this.paced.length - 1)
+    return this.paced[lo][index] * (1 - t) + this.paced[hi][index] * t
+  }
+
+  /**
+   * Speeds at pace 1, 1 + PACE_STEP, ...: corners k times faster, braking k² the plan but never
+   * past the car's own limit at that speed (brakes, or tyre grip with downforce), whichever is less.
+   */
+  private buildPaced(config: SteeringConfig, grip: number, downforce: number): Float64Array[] {
+    const n = this.corners.length
+    const levels: Float64Array[] = []
+    for (let level = 0; level <= PACE_LEVELS; level++) {
+      const k = 1 + level * PACE_STEP
+      const v = new Float64Array(n)
+      for (let i = 0; i < n; i++) v[i] = this.corners[i] * k
+      for (let pass = n * 2 - 1; pass >= 0; pass--) {
+        const i = pass % n, next = (i + 1) % n
+        const ds = this.distances[i + 1] - this.distances[i]
+        const after = v[next]
+        const limit = BRAKE_LIMIT_MARGIN * Math.min(config.brakeDecel ?? Infinity, grip * 9.81 * (1 + downforce * after * after))
+        const braking = Math.max(this.braking, Math.min(this.braking * k * k, limit))
+        v[i] = Math.min(v[i], Math.sqrt(after * after + 2 * braking * ds))
+      }
+      levels.push(v)
+    }
+    return levels
   }
 
   reset(): void {
@@ -149,7 +204,8 @@ export class AiDriver {
     this.input.steer += (wantedSteer - this.input.steer) * Math.min(1, dt / difficulty.reaction)
     const catchUp = CATCH_UP[this.difficulty]
     const rubber = 1 + clamp((gap / catchUp.metres) * catchUp.catchUp, -catchUp.easeOff, catchUp.catchUp)
-    this.targetSpeed = Math.min(this.speeds[index] * this.pace * rubber * difficulty.pace * (1 - difficulty.variation * (0.5 + 0.5 * Math.sin(this.elapsed * 0.37 + id * 2))), trafficSpeed)
+    const paced = this.pacedSpeed(index, this.pace * rubber * difficulty.pace)
+    this.targetSpeed = Math.min(paced * (1 - difficulty.variation * (0.5 + 0.5 * Math.sin(this.elapsed * 0.37 + id * 2))), trafficSpeed)
     if (distanceFromLine > 5 || Math.abs(error) > 0.8) this.targetSpeed = Math.min(this.targetSpeed, 10)
     const delta = this.targetSpeed - pose.speed
     this.input.throttle = delta > 0 ? clamp(delta * 0.45, 0, 1) : 0
