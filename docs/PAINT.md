@@ -6,6 +6,11 @@ unperturbed clearcoat. Glints come from direct and environment lighting, rather
 than emissive dots. The grains follow the panels as the car moves; derivative
 filtering fades grains that become smaller than a pixel.
 
+Flakes are about 1.7 mm cells in metres (`PAINT_FLAKE_DENSITY`), not in the
+mesh's own units. Meshopt quantization stores positions in a scaled integer
+space, and flakes sized in it came out as 1 cm squares that looked like
+blocky pixels on the paint.
+
 Pearl combines a weaker flake layer with angle-dependent base-colour channel
 mixing and the physical material's thin-film iridescence. Projected stripes,
 numbers and decals retain their chosen colours. Gloss and Matte disable both

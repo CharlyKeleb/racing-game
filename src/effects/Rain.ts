@@ -4,7 +4,7 @@ import { backend } from '../engine/backend'
 import type { QualityPreset } from '../stores/gameStore'
 
 /** Streaks drawn per preset (the box around the camera is the same; density changes). */
-export const RAIN_STREAKS: Record<QualityPreset, number> = { low: 3000, medium: 7000, high: 11000 }
+export const RAIN_STREAKS: Record<QualityPreset, number> = { low: 3000, medium: 7000, high: 11000, ultra: 11000 }
 const MAX_STREAKS = RAIN_STREAKS.high
 /** The box of rain that travels with the camera, metres (x, y, z). */
 export const RAIN_BOX = new THREE.Vector3(44, 24, 44)

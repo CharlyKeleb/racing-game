@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { AdaptiveResolution } from '../src/engine/AdaptiveResolution'
+import { AdaptiveResolution, msaaSamples } from '../src/engine/AdaptiveResolution'
 import { readRenderDiagnostics } from '../src/engine/renderDiagnostics'
 
 function seconds(controller: AdaptiveResolution, count: number, fps: number) {
@@ -16,6 +16,20 @@ describe('adaptive resolution', () => {
     seconds(lowDpr, 30, 30)
     expect(lowDpr.ratio).toBe(.5)
     expect(new AdaptiveResolution('low', 3).ratio).toBe(.8)
+  })
+  it('renders Ultra at the native resolution (4K on a 4K screen), never below one pixel per CSS pixel', () => {
+    const ultra = new AdaptiveResolution('ultra', 2)
+    expect(ultra.ratio).toBe(2)
+    expect(new AdaptiveResolution('ultra', 4).max).toBe(3)
+    expect(new AdaptiveResolution('ultra', 1).ratio).toBe(1)
+    seconds(ultra, 60, 20)
+    expect(ultra.ratio).toBe(1)
+  })
+  it('uses MSAA only on Ultra, and only where the pixels are big', () => {
+    expect(msaaSamples('ultra', 1)).toBe(4)
+    expect(msaaSamples('ultra', 2)).toBe(0)
+    expect(msaaSamples('high', 1)).toBe(0)
+    expect(msaaSamples('low', 1)).toBe(0)
   })
   it('renders the garage sharper on Medium and High, but not on Low or beyond the display', () => {
     const medium = new AdaptiveResolution('medium', 2, true)

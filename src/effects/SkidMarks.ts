@@ -86,7 +86,7 @@ export class SkidMarks {
   }
 
   setQuality(quality: QualityPreset): void {
-    const pixels = quality === 'high' ? 512 : quality === 'medium' ? 384 : 256
+    const pixels = quality === 'low' ? 256 : quality === 'medium' ? 384 : 512
     if (pixels === this.tilePixels) return
     this.tilePixels = pixels
     this.target.setSize(pixels * TILE_COUNT, pixels * TILE_COUNT)

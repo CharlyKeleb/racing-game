@@ -24,4 +24,15 @@ export default {
   lowError: 0.02,
   lowDrop: /Interior|SeatBelt|Grille[0-9]|Badge|ManufacturerPlate|Textured_Geo/,
   textureSize: 1024,
+  // Full model (Medium and up, the garage): round tyres and whole spokes, light decimation elsewhere.
+  full: {
+    simplify: [
+      [/Interior_Geo/, 0.35, 0.005],
+      [/Light_Geo/, 0.7],
+      [/Carbon1/, 0.7],
+      [/Coloured_Geo/, 0.75],
+    ],
+    textureSize: 2048,
+    textureQuality: 90,
+  },
 }

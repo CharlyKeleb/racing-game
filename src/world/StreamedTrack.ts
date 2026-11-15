@@ -52,6 +52,7 @@ const BUDGET: Record<QualityPreset, { radii: StreamRadii; tier: Tier; veg: boole
   low: { radii: { lod0: 120, lod1: 420, hysteresis: 40 }, tier: 'low', veg: false, shadows: false, concurrency: 1 },
   medium: { radii: { lod0: 200, lod1: 600, hysteresis: 50 }, tier: 'high', veg: true, shadows: false, concurrency: 2 },
   high: { radii: { lod0: 320, lod1: 900, hysteresis: 60 }, tier: 'high', veg: true, shadows: true, concurrency: 3 },
+  ultra: { radii: { lod0: 320, lod1: 900, hysteresis: 60 }, tier: 'high', veg: true, shadows: true, concurrency: 3 },
 }
 
 /** Stub name the pipeline gives merged far-LOD meshes (see build-track.mjs). */

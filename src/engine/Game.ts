@@ -2726,7 +2726,7 @@ export class Game {
     setTrackLook(s.trackLook)
     this.renderer.applyQuality(s.quality, s.postfx)
     this.effects?.setQuality(s.quality)
-    this.environment?.setShadowMapSize(s.quality === 'high' ? 2048 : 1024)
+    this.environment?.setShadowMapSize(s.quality === 'ultra' ? 4096 : s.quality === 'high' ? 2048 : 1024)
     if (this.track) {
       void this.track.setQuality(s.quality)
       const view = this.track.viewDistance(s.quality)

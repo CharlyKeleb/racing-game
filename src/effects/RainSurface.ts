@@ -44,7 +44,7 @@ export class RainSurface {
   }
 
   setQuality(quality: QualityPreset): void {
-    const size = quality === 'high' ? 256 : 128
+    const size = quality === 'low' || quality === 'medium' ? 128 : 256
     this.target.setSize(size, size)
     this.interval = quality === 'low' ? .2 : quality === 'medium' ? .12 : .08
     this.elapsed = Infinity

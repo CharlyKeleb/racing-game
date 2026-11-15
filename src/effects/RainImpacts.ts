@@ -5,7 +5,7 @@ import { backend } from '../engine/backend'
 import { RAIN_SURFACE_GLSL, type RainSurfaceUniforms } from './RainSurface'
 import type { QualityPreset } from '../stores/gameStore'
 
-export const IMPACT_COUNTS: Record<QualityPreset, number> = { low: 480, medium: 1400, high: 2200 }
+export const IMPACT_COUNTS: Record<QualityPreset, number> = { low: 480, medium: 1400, high: 2200, ultra: 2200 }
 
 /** Short, sparse splash crowns on the topmost exposed geometry, including slopes and roofs. */
 export class RainImpacts {

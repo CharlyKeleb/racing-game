@@ -7,7 +7,7 @@ export function readRenderDiagnostics(search: string) {
   const ratio = Number(query.get('perfDpr'))
   const fxQuality = query.get('perfFxQuality')
   return {
-    postfxQuality: enabled && (fxQuality === 'low' || fxQuality === 'medium' || fxQuality === 'high') ? fxQuality as QualityPreset : null,
+    postfxQuality: enabled && (fxQuality === 'low' || fxQuality === 'medium' || fxQuality === 'high' || fxQuality === 'ultra') ? fxQuality as QualityPreset : null,
     fixedDpr: enabled && Number.isFinite(ratio) && ratio >= .5 && ratio <= 2 ? ratio : null,
     shadowsOff: enabled && query.get('perfShadows') === '0',
     postfxOff: enabled && query.get('perfPostfx') === '0',

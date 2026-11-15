@@ -23,4 +23,13 @@ export default {
   lowError: 0.02,
   lowDrop: /InteriorA|InteriorTill|Grille[0-9]|BadgeA|Manufacturer|CalliperBadg/,
   textureSize: 1024,
+  // Full model (Medium and up, the garage): round tyres and whole spokes, light decimation elsewhere.
+  full: {
+    simplify: [
+      [/InteriorA/, 0.4, 0.005],
+      [/Coloured_/, 0.8],
+    ],
+    textureSize: 2048,
+    textureQuality: 90,
+  },
 }
