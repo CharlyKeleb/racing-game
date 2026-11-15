@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
-import { GiCheckeredFlag, GiStopwatch, GiDeathSkull, GiPadlock, GiTrophyCup } from 'react-icons/gi'
+import { GiCheckeredFlag, GiStopwatch, GiDeathSkull, GiPadlock, GiTrophyCup, GiCoins } from 'react-icons/gi'
+import { careerWinBonus } from '../racing/Economy'
 import { AI_DIFFICULTIES } from '../racing/AiProfiles'
 import { CAREER, CAREER_RUNGS, SUMMIT, careerEvent, careerStatus, formatLap, type CareerEvent, type CareerStatus } from '../racing/Career'
 import { getCar } from '../vehicles/carRegistry'
@@ -39,6 +40,9 @@ export function CareerLadder() {
   const st = status(event.id)
   const Icon = KIND_ICON[event.kind]
 
+  const prize = (e: CareerEvent) => careerWinBonus(e.rung, e.difficulty, e.id === SUMMIT)
+  const totalPrize = CAREER.reduce((sum, e) => sum + prize(e), 0)
+  const earned = CAREER.reduce((sum, e) => sum + (won.has(e.id) ? prize(e) : 0), 0)
   const links = CAREER.flatMap((from) => from.next.map((to) => ({ from, to: careerEvent(to)! })).filter((l) => l.to))
   const height = CAREER_RUNGS * CELL
 
@@ -47,7 +51,7 @@ export function CareerLadder() {
       <header className="career__head">
         <span className="eyebrow">Career · RS6-R &amp; Skyline</span>
         <h2>The Ladder</h2>
-        <p><b>{won.size}</b> / {CAREER.length} events won{won.has(SUMMIT) ? ' · Summit reached' : ''}</p>
+        <p><b>{won.size}</b> / {CAREER.length} events won · <GiCoins aria-hidden="true" /> {earned.toLocaleString()} / {totalPrize.toLocaleString()}{won.has(SUMMIT) ? ' · Summit reached' : ''}</p>
       </header>
       <div className="career__body">
         <div className="career__ladder" style={{ gridTemplateRows: `repeat(${CAREER_RUNGS}, minmax(64px, 1fr))` }} role="listbox" aria-label="Career events, summit at the top">
@@ -88,6 +92,7 @@ export function CareerLadder() {
             <dt>Rivals</dt><dd>{event.kind === 'timeTrial' ? 'Their lap, as the target' : `${event.rivals} · ${AI_DIFFICULTIES[event.difficulty].label}`}</dd>
             <dt>Laps</dt><dd>{event.laps}</dd>
             <dt>Goal</dt><dd className="career__goal">{goal(event)}</dd>
+            <dt>Prize</dt><dd className={`career__prize${st === 'won' ? ' is-paid' : ''}`}><GiCoins aria-hidden="true" /> {careerWinBonus(event.rung, event.difficulty, event.id === SUMMIT).toLocaleString()}{st === 'won' ? ' · paid' : ' · first win'}</dd>
           </dl>
           <p className="career__note">
             {event.kind === 'timeTrial' ? `${AI_DIFFICULTIES[event.difficulty].label} AI's best lap in this car here. ` : ''}

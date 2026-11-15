@@ -26,7 +26,7 @@ import { BrakingGuide } from '../racing/BrakingGuide'
 import { performanceCapture } from './PerformanceCapture'
 import { hudCoversPoint } from '../stores/hudLayoutStore'
 import { driftEvent, driftMedal, readDriftRecord, saveDriftRecord } from '../racing/driftEvents'
-import { raceReward, type RaceResult } from '../racing/Economy'
+import { careerWinBonus, raceReward, type RaceResult } from '../racing/Economy'
 import { walletStore } from '../stores/walletStore'
 import { DriftZones } from '../effects/DriftZones'
 import { CheckpointGates } from '../effects/CheckpointGates'
@@ -61,7 +61,7 @@ import { RaceCallouts } from '../racing/RaceCallouts'
 import { COUNTDOWN_SEC, RaceManager, START_LIGHTS, startLightsLit } from '../racing/RaceManager'
 import { draftingStrength } from '../racing/Drafting'
 import { Opponent } from '../racing/Opponent'
-import { careerEvent, eliminationDue, type CareerEvent, type CareerOutcome } from '../racing/Career'
+import { careerEvent, eliminationDue, SUMMIT, type CareerEvent, type CareerOutcome } from '../racing/Career'
 import { careerStore } from '../stores/careerStore'
 import { MISSED_GATE_METRES, RaceStandings, type RaceEntry } from '../racing/RaceStandings'
 import { RecoveryMonitor } from '../racing/RecoveryMonitor'
@@ -2564,7 +2564,14 @@ export class Game {
       const medal = ['Unranked', 'Bronze', 'Silver', 'Gold'].indexOf(driftMedal(score, driftEvent(event).targets)) as 0 | 1 | 2 | 3
       result = { mode, score, medal }
     } else return
-    wallet.award(raceReward(result))
+    const lines = raceReward(result)
+    // A career event's first win: its prize, once.
+    const career = careerStore.getState().lastResult
+    if (this.careerRun && career?.eventId === this.careerRun.id && career.firstWin) {
+      const run = this.careerRun
+      lines.push({ label: run.id === SUMMIT ? `Career: ${run.name} (the top)` : `Career: ${run.name} won`, coins: careerWinBonus(run.rung, run.difficulty, run.id === SUMMIT), uncapped: true })
+    }
+    wallet.award(lines)
   }
 
   /** The launch grade, felt: a sound for every grade; tyre smoke and a lens punch for a clean getaway. */

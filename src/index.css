@@ -1880,6 +1880,9 @@ html, body { overscroll-behavior: none; }
 .career__detail dt { color: var(--muted); text-transform: uppercase; font-size: 11px; letter-spacing: .12em; align-self: center; }
 .career__detail dd { margin: 0; }
 .career__goal { color: var(--accent); font-weight: 700; }
+.career__prize { display: flex; align-items: center; gap: 5px; color: var(--accent); font-weight: 700; }
+.career__prize.is-paid { color: var(--muted); font-weight: 400; }
+.career__head p svg { vertical-align: -2px; color: var(--accent); }
 .career__note { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.4; }
 .career__detail .ui-btn { margin-top: auto; }
 .career-result { padding: 10px 14px 12px; margin-bottom: 4px; border-left: 4px solid #ff4060; background: #2a0d14cc; }

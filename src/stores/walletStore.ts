@@ -82,9 +82,12 @@ export const walletStore = createStore<WalletState>()((set, get) => ({
     const day = today()
     const earnedToday = s.day === day ? s.earnedToday : 0
     const earned = lines.reduce((sum, l) => sum + l.coins, 0)
-    const paid = capPayout(earned, earnedToday)
+    // One-off prizes skip the daily cap and don't count toward it.
+    const prize = lines.reduce((sum, l) => sum + (l.uncapped ? l.coins : 0), 0)
+    const capped = capPayout(earned - prize, earnedToday)
+    const paid = capped + prize
     const payout = { lines, earned, paid }
-    set({ coins: s.coins + paid, day, earnedToday: earnedToday + paid, lastPayout: payout })
+    set({ coins: s.coins + paid, day, earnedToday: earnedToday + capped, lastPayout: payout })
     save(get())
     return payout
   },

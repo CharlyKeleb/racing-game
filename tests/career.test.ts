@@ -6,7 +6,8 @@ import { RaceManager } from '../src/racing/RaceManager'
 import { selectableCars } from '../src/vehicles/carRegistry'
 import { isAiDifficulty } from '../src/racing/AiProfiles'
 import { NURBURGRING, MARINA_BAY, BAYVIEW, PARIS, CANYON_DAM } from '../src/world/tracks'
-import { carPrice } from '../src/racing/Economy'
+import { carPrice, careerWinBonus, CAREER_SUMMIT_PRIZE, DAILY_SOFT_CAP } from '../src/racing/Economy'
+import { walletStore } from '../src/stores/walletStore'
 
 const ids = (list: readonly { id: string }[]) => list.map((e) => e.id)
 
@@ -138,5 +139,32 @@ describe('career progress', () => {
     const snap = (won: string[]) => ({ version: 1 as const, entries: { [CAREER_KEY]: JSON.stringify({ won }) } })
     const merged = mergeSnapshots(snap(['paris-sprint', 'first-cut']), snap(['paris-sprint', 'bayview-hotlap']))
     expect(JSON.parse(merged.entries[CAREER_KEY]).won.sort()).toEqual(['bayview-hotlap', 'first-cut', 'paris-sprint'])
+  })
+})
+
+describe('career prizes', () => {
+  it('pay more up the ladder and for harder rivals, with a prize for the summit', () => {
+    expect(careerWinBonus(1, 'legend')).toBeGreaterThan(careerWinBonus(0, 'legend'))
+    expect(careerWinBonus(3, 'mythic')).toBeGreaterThan(careerWinBonus(3, 'legend'))
+    expect(careerWinBonus(3, 'impossible')).toBeGreaterThan(careerWinBonus(3, 'mythic'))
+    const summit = careerEvent(SUMMIT)!
+    expect(careerWinBonus(summit.rung, summit.difficulty, true)).toBe(careerWinBonus(summit.rung, summit.difficulty) + CAREER_SUMMIT_PRIZE)
+    // Clearing the ladder pays for both hypercars, but not many times over.
+    const total = CAREER.reduce((sum, e) => sum + careerWinBonus(e.rung, e.difficulty, e.id === SUMMIT), 0)
+    expect(total).toBeGreaterThan(carPrice('koenigsegg'))
+    expect(total).toBeLessThan(3 * carPrice('koenigsegg'))
+  })
+
+  it('a prize is paid in full past the daily cap, and leaves the cap for races', () => {
+    const data = new Map<string, string>()
+    vi.stubGlobal('localStorage', { getItem: (k: string) => data.get(k) ?? null, setItem: (k: string, v: string) => data.set(k, v), removeItem: (k: string) => data.delete(k) })
+    walletStore.getState().reloadSaved()
+    const start = walletStore.getState().coins
+    walletStore.getState().award([{ label: 'Races', coins: DAILY_SOFT_CAP }])
+    const payout = walletStore.getState().award([{ label: 'Victory', coins: 400 }, { label: 'Career: The Summit', coins: 16600, uncapped: true }])
+    // The race line is over today's cap (a quarter); the prize is whole.
+    expect(payout.paid).toBe(100 + 16600)
+    expect(walletStore.getState().coins).toBe(start + DAILY_SOFT_CAP + 100 + 16600)
+    expect(walletStore.getState().earnedToday).toBe(DAILY_SOFT_CAP + 100)
   })
 })
