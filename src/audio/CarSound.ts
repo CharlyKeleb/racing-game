@@ -10,8 +10,13 @@ export interface CarSoundState extends CarSoundInput {
 const RPM_SCALE = 7500
 /** How far ahead crackle pops are scheduled, seconds (covers a frame hitch). */
 const LOOKAHEAD = 0.12
-/** Make-up gain after the glue compressor (~+4.6 dB). */
-const MAKEUP = 1.7
+/** Make-up gain after the glue compressor (~+7.6 dB): the speaker tone below frees the room for it. */
+const MAKEUP = 2.4
+/** Speaker tone on the car bus (see the constructor): rumble high-pass, low shelf, body and presence. */
+const RUMBLE_HZ = 40
+const LOW_SHELF_DB = -5
+const BODY_DB = 3
+const PRESENCE_DB = 8
 
 /**
  * The car's sound as a Web Audio graph on any BaseAudioContext (live or
@@ -91,7 +96,16 @@ export class CarSound {
     limiter.attack.value = 0.001
     limiter.release.value = 0.08
     this.bus = gain(ctx, 1)
-    this.bus.connect(comp).connect(gain(ctx, MAKEUP)).connect(limiter).connect(out)
+    // Speaker tone, ahead of the compressor. The recordings are dark and the boom and sub
+    // layers pile on bass: at full throttle ~60% of the bus sat under 150 Hz, which laptop
+    // and phone speakers barely play, yet the compressor and limiters still turned the whole
+    // car down for it. Trim the rumble and lift the presence band, so the room goes to what
+    // you hear.
+    const rumble = biquad(ctx, 'highpass', RUMBLE_HZ, 0.7, 0)
+    const lows = biquad(ctx, 'lowshelf', 150, 0.7, LOW_SHELF_DB)
+    const body = biquad(ctx, 'peaking', 650, 0.8, BODY_DB)
+    const presence = biquad(ctx, 'peaking', 2000, 0.7, PRESENCE_DB)
+    this.bus.connect(rumble).connect(lows).connect(body).connect(presence).connect(comp).connect(gain(ctx, MAKEUP)).connect(limiter).connect(out)
 
     this.engineIn = gain(ctx, 0)
 

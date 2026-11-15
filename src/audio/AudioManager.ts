@@ -195,7 +195,11 @@ export class AudioManager {
     limiter.ratio.value = 20
     limiter.attack.value = 0.001
     limiter.release.value = 0.12
-    this.master.connect(limiter).connect(ctx.destination)
+    // The limiter's 1 ms attack lets a pop's or a crash's first samples overshoot full
+    // scale by ~1 dB (measured); a soft ceiling rounds them off instead of clipping.
+    const ceiling = ctx.createWaveShaper()
+    ceiling.curve = softCeiling()
+    this.master.connect(limiter).connect(ceiling).connect(ctx.destination)
     this.setVolume(volume)
     this.carBus = ctx.createGain()
     // Engine and tyres duck under a crash (see impact), so the hit cuts
@@ -758,10 +762,11 @@ export class AudioManager {
     if (this.paused || kind === 0 || (this.scene !== 'race' && !this.menuEngine)) return
     const played = (car < 0 ? this.backfires : this.rivals[car]?.backfires)?.pop(kind, strength)
     // Your own pops: the engine dips for a moment so they punch through rather
-    // than being squashed into it by the limiter. A bang deeply, a crackle a little.
+    // than being squashed into it by the limiter. More gain only meant more limiting:
+    // the dip is what makes them stand out. A bang deeply, a crackle less.
     if (played && car < 0) {
-      if (kind === BANG) this.duckEngine(0.6 * strength, 0.09)
-      else this.duckEngine(0.3 * strength, 0.04)
+      if (kind === BANG) this.duckEngine(0.75 * strength, 0.11)
+      else this.duckEngine(0.5 * strength, 0.05)
     }
   }
 
@@ -831,4 +836,14 @@ export class AudioManager {
     if (this.ctx && this.ctx !== Howler.ctx) void this.ctx.close()
     this.ctx = null
   }
+}
+
+/** Linear up to 0.85 of full scale, then eased into 1: the last stage before the speakers. */
+function softCeiling(): Float32Array<ArrayBuffer> {
+  const n = 2048, knee = 0.85, curve = new Float32Array(n)
+  for (let i = 0; i < n; i++) {
+    const x = (i / (n - 1)) * 2 - 1, a = Math.abs(x)
+    curve[i] = Math.sign(x) * (a <= knee ? a : knee + (1 - knee) * Math.tanh((a - knee) / (1 - knee)))
+  }
+  return curve
 }

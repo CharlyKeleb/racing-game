@@ -3,12 +3,14 @@ import { createStore } from 'zustand/vanilla'
 /** Narrator media bypasses the game mixer, so ducking the game never ducks speech. */
 export const narrationMix = createStore<{ voices: number }>(() => ({ voices: 0 }))
 /**
- * Under a line: engine, rivals, ambience and music drop ~10 dB, crashes ~4 dB.
- * Start lights, callout chimes and the finish sting aren't ducked: the line is
- * about them, so they must land together.
+ * Under a line: engine, rivals and ambience drop ~6 dB, crashes and pops ~2 dB; the race
+ * music dips further on its own (RaceMusic), to ~14 dB in all. The commentary talks for
+ * about a quarter of a race, and at ~10 dB the car spent all that time sounding tiny.
+ * Start lights, callout chimes and the finish sting aren't ducked: the line is about
+ * them, so they must land together.
  */
-export const NARRATION_BED_LEVEL = .32
-export const NARRATION_HIT_LEVEL = .6
+export const NARRATION_BED_LEVEL = .5
+export const NARRATION_HIT_LEVEL = .8
 
 /** A release belongs to one playback; overlapping previews cannot unduck each other. */
 export function beginNarration(): () => void {
