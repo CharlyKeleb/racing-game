@@ -1,3 +1,4 @@
+import { recordTrack } from './routeVersions'
 import { noteLocalSave } from '../stores/accountStore'
 /** Scored course events. Finish every gate; no countdown timer ends a run. */
 export type DriftEventId = 'flow' | 'sprint' | 'endurance'
@@ -15,10 +16,10 @@ export function driftMedal(score: number, targets: readonly number[] = DRIFT_EVE
 export interface DriftRecord { score:number; chain:number }
 export function readDriftRecord(track:string,event:DriftEventId='flow'): DriftRecord {
   try {
-    const v=JSON.parse(localStorage.getItem(`racing-game:drift:${track}:${event}:course-v1`) ?? '{}')
+    const v=JSON.parse(localStorage.getItem(`racing-game:drift:${recordTrack(track)}:${event}:course-v1`) ?? '{}')
     return {score:Number.isFinite(v.score) && v.score>0 ? v.score : 0, chain:Number.isFinite(v.chain) && v.chain>0 ? v.chain : 0}
   } catch { return {score:0,chain:0} }
 }
 export function saveDriftRecord(track:string,record:DriftRecord,event:DriftEventId='flow'): void {
-  try { localStorage.setItem(`racing-game:drift:${track}:${event}:course-v1`,JSON.stringify(record)); noteLocalSave() } catch { /* Private browsing: the run still finishes. */ }
+  try { localStorage.setItem(`racing-game:drift:${recordTrack(track)}:${event}:course-v1`,JSON.stringify(record)); noteLocalSave() } catch { /* Private browsing: the run still finishes. */ }
 }

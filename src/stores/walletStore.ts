@@ -1,4 +1,5 @@
 import { createStore } from 'zustand/vanilla'
+import { recordTrack } from '../racing/routeVersions'
 import { capPayout, carPrice, STARTER_CARS, STARTING_COINS, type RewardLine } from '../racing/Economy'
 
 /** Coins, owned cars and the last race's payout. Saved (and cloud-synced) as racing-game:wallet. */
@@ -88,7 +89,8 @@ export const walletStore = createStore<WalletState>()((set, get) => ({
     save(get())
     return payout
   },
-  recordLap(track, lapMs) {
+  recordLap(id, lapMs) {
+    const track = recordTrack(id)
     const s = get()
     const previous = s.bestLaps[track] ?? null
     if (previous === null || lapMs < previous) {

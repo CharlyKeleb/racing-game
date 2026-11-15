@@ -78,6 +78,31 @@ export default {
   ],
   checkpointRadius: 16,
 
+  /**
+   * The race route as shipped (derive-from-chunks.mjs, runtime coordinates): ~3.1 km. The first
+   * route above was a 2.4 km lap round the district's edge; this one is a figure of eight through
+   * it. Start on the boulevard heading south-east, round the old lap's east, south and west sides
+   * and its north-west corner, then back through the middle: south-west down the cross street,
+   * across the west side, south-east along the long diagonal and up the curving street to the
+   * boulevard. The lap crosses itself twice at street level.
+   */
+  reroute: {
+    gates: [
+      [125, 98], // start/finish: the boulevard, heading south-east
+      [180.6, 310.9], // avenue south of the five-way junction
+      [70.4, 548], // avenue, lower bend
+      [-86.5, 601.3], // back north-west
+      [-285.8, 377.4], // inner street
+      [-286.6, 265], // up the west side
+      [-313.7, 121.4], // west side, north-west
+      [-345.1, -170.5], // north-west corner
+      [-197.9, -104.3], // boulevard heading east
+      [-170, 70], // south-west down the cross street
+      [-135, 265], // across the west side, south-east along the long diagonal
+      [30, 200], // north up the curving street to the boulevard
+    ],
+  },
+
   /** Gates snap to (and the centreline is traced over) the street lanes. */
   gateSurface: /^RDP_(LANEA_YS_AA|LANEB_WD_AA|INTERSECT)/,
   lineSurface: /^RDP_(LANEA_YS_AA|LANEB_WD_AA|INTERSECT)/,

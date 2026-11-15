@@ -9,7 +9,15 @@
 //    grass, sand, gravel), run-length encoded to surface.bin. The game reads it
 //    for tire grip / rolling drag and for sand / dust effects.
 //
-// Rewrites track.json (line, lineLength, surface) in place.
+// cfg.reroute: { gates: [[x, z], ...], via?: { [gate]: [[x, z], ...] }, radius?, lineSurface? }
+// in runtime coordinates (metres from the
+// start line as built) replaces the race route: the gates become the manifest's checkpoints
+// (gate 0 is the start/finish), the centreline is traced through them, then each gate is snapped
+// onto the line (position, height, direction) and the spawn put cfg.spawnBehind m behind gate 0.
+// Plan one with route-map.mjs. A route that jumps between levels (off a bridge onto the street under
+// it) is refused; ALLOW_JUMPS=1 writes it anyway, to look at where.
+//
+// Rewrites track.json (line, lineLength, surface; with reroute also checkpoints, spawn) in place.
 import { NodeIO } from '@gltf-transform/core'
 import { ALL_EXTENSIONS } from '@gltf-transform/extensions'
 import { MeshoptDecoder } from 'meshoptimizer'
@@ -70,25 +78,64 @@ for (const c of manifest.chunks) {
 console.log(`read ${manifest.chunks.length} chunks, ${prims.length} road/ground primitives`)
 
 // ── 1. Centreline ───────────────────────────────────────────────────────────
+if (cfg.reroute) {
+  manifest.checkpoints = cfg.reroute.gates.map(([x, z], index) => ({ index, position: [x, 0, z], tangent: [1, 0, 0], radius: cfg.reroute.radius ?? cfg.checkpointRadius ?? 16 }))
+}
 const toRuntime = ([x, z, ...snap]) => [x - ox, z - oz, ...snap]
 const waypoints = manifest.checkpoints.flatMap((g, i) => [
   [g.position[0], g.position[2]],
-  ...(cfg.lineVia?.[i] ?? []).map(toRuntime),
+  ...(cfg.reroute ? cfg.reroute.via?.[i] ?? [] : (cfg.lineVia?.[i] ?? []).map(toRuntime)),
 ])
 // A flattened/cleared corridor was shaped around build-track's line: keep that
 // one, a re-trace over the reshaped chunks would wander off it.
 if (cfg.flattenCorridor) {
   console.log(`centreline kept from build-track (${manifest.line.length} points)`)
 } else {
-  const line = traceCenterline(prims, cfg.lineSurface, waypoints, { spacing: cfg.lineSpacing ?? 4 })
+  const line = traceCenterline(prims, cfg.reroute?.lineSurface ?? cfg.lineSurface, waypoints, { spacing: cfg.lineSpacing ?? 4 })
   const round = (v) => Math.round(v * 100) / 100
+  // The line starts at the start/finish (gate 0), wherever that is.
+  const [sx, , sz] = manifest.checkpoints[0].position
   let start = 0
   for (let i = 1; i < line.points.length; i++) {
-    if (Math.hypot(line.points[i][0], line.points[i][2]) < Math.hypot(line.points[start][0], line.points[start][2])) start = i
+    if (Math.hypot(line.points[i][0] - sx, line.points[i][2] - sz) < Math.hypot(line.points[start][0] - sx, line.points[start][2] - sz)) start = i
   }
   manifest.line = [...line.points.slice(start), ...line.points.slice(0, start)].map((p) => p.map(round))
   manifest.lineLength = Math.round(line.length)
   console.log(`centreline ${manifest.line.length} points, ${(line.length / 1000).toFixed(2)} km`)
+  if (cfg.reroute) snapRoute()
+}
+
+/** Gates onto the traced line (position, height, direction of travel); spawn behind gate 0. */
+function snapRoute() {
+  const L = manifest.line, n = L.length
+  const round = (v) => Math.round(v * 100) / 100
+  const tangentAt = (i) => {
+    const a = L[(i - 2 + n) % n], b = L[(i + 2) % n]
+    const dx = b[0] - a[0], dz = b[2] - a[2], l = Math.hypot(dx, dz) || 1
+    return [round(dx / l), 0, round(dz / l)]
+  }
+  for (const g of manifest.checkpoints) {
+    let best = 0
+    for (let i = 1; i < n; i++) if (Math.hypot(L[i][0] - g.position[0], L[i][2] - g.position[2]) < Math.hypot(L[best][0] - g.position[0], L[best][2] - g.position[2])) best = i
+    const moved = Math.hypot(L[best][0] - g.position[0], L[best][2] - g.position[2])
+    g.position = L[best].map(round)
+    g.tangent = tangentAt(best)
+    console.log(`gate ${g.index}: line point ${best} (${(best * (cfg.lineSpacing ?? 4) / 1000).toFixed(2)} km), moved ${moved.toFixed(1)} m`)
+  }
+  // A step this big between neighbouring points is the trace dropping off a bridge onto the street
+  // under it (or climbing onto one) where the two cross in plan: no car can follow that.
+  const MAX_STEP = 1.5
+  for (let i = 0; i < n; i++) {
+    const a = L[i], b = L[(i + 1) % n]
+    if (Math.abs(b[1] - a[1]) > MAX_STEP && !process.env.ALLOW_JUMPS) throw new Error(`the route jumps ${(b[1] - a[1]).toFixed(1)} m between line points ${i} and ${(i + 1) % n} at (${a[0]}, ${a[2]}): it changes level where two roads cross. Move or add a gate to keep it on one road.`)
+  }
+  // Gates must come in race order along the line.
+  const at = manifest.checkpoints.map((g) => L.findIndex((p) => p[0] === g.position[0] && p[2] === g.position[2]))
+  for (let i = 1; i < at.length; i++) if (at[i] <= at[i - 1]) throw new Error(`gate ${i} comes before gate ${i - 1} along the traced line: the route doubles back`)
+  const back = Math.max(1, Math.round((cfg.spawnBehind ?? 14) / (cfg.lineSpacing ?? 4)))
+  const sp = L[(n - back) % n], t = tangentAt((n - back) % n)
+  manifest.spawn = { position: [round(sp[0]), round(sp[1] + 0.8), round(sp[2])], heading: round(Math.atan2(t[0], t[2])) }
+  console.log(`spawn ${JSON.stringify(manifest.spawn)}`)
 }
 
 // ── 2. Surface map ──────────────────────────────────────────────────────────
