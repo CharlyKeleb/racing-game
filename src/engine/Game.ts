@@ -68,6 +68,7 @@ import { gameStore, type GamePhase, type Settings } from '../stores/gameStore'
 import { telemetryStore } from '../stores/telemetryStore'
 import { rivalTagStore, type RivalTag } from '../stores/rivalTagStore'
 import { applyCarBuild, samePerformance, type CarBuild } from '../vehicles/CarBuild'
+import { Backfire, type BackfireInput } from '../vehicles/Backfire'
 import { pickRivals } from '../racing/rivalField'
 import { moddedVoice } from '../audio/SoundMods'
 import { CarLivery } from '../vehicles/CarLivery'
@@ -316,6 +317,10 @@ export class Game {
   /** Engine sound override during a garage swap (the parked car's physics idles). */
   private revHeld = false
   private revRpm = 0
+  /** The garage rev's exhaust pops: the parked car's own controller never revs, so this one follows revRpm. */
+  private garagePops: Backfire | null = null
+  private garagePopsKey = ''
+  private readonly garagePopInput: BackfireInput = { throttle: 0, revs: 0, gear: 1, burnout: 0, nitroLit: false }
   private showroomRev: { rpm: number; throttle: number } | null = null
   /**
    * Where the parked garage car is held. With only the rear handbrake on, the tyres let it creep
@@ -1947,6 +1952,7 @@ export class Game {
     this.revRpm = THREE.MathUtils.damp(Math.max(idle, this.revRpm), target, this.revHeld ? 3 : 4, dt)
     const revAudible = audition && (this.revHeld || this.revRpm > idle + 50)
     this.audio.setMenuEngine(this.showroomRev !== null || revAudible)
+    if (audition) this.updateGaragePops(dt)
     if (phase === 'menu' || phase === 'garage') {
       const wheel = phase === 'garage' && (this.showroomFocus === 'wheel' || this.showroomFocus.startsWith('wheel-'))
       const plateFocus = phase === 'garage' && (this.showroomFocus === 'plate-front' || this.showroomFocus === 'plate-rear')
@@ -2227,6 +2233,25 @@ export class Game {
       h.wall = Math.max(h.wall, dv)
       h.touching = true
     }
+  }
+
+  /**
+   * Hold to rev, let go: the overrun crackles and bangs as on track, with the
+   * exhaust fitted in the garage (applyCarBuild scales how often it pops).
+   */
+  private updateGaragePops(dt: number): void {
+    const build = gameStore.getState().build
+    const key = this.carId + ':' + build.exhaust
+    if (key !== this.garagePopsKey || !this.garagePops) {
+      this.garagePopsKey = key
+      this.garagePops = new Backfire(applyCarBuild(this.baseConfig, build).backfire)
+    }
+    const input = this.garagePopInput
+    input.throttle = this.revHeld ? 1 : 0
+    input.revs = this.revRpm / this.vehicle.config.engine.redlineRpm
+    const pops = this.garagePops
+    pops.update(Math.min(dt, 0.1), input)
+    if (pops.popped) this.audio.backfire(-1, pops.popped, pops.strength)
   }
 
   /**
