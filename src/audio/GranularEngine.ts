@@ -44,6 +44,14 @@ const MAX_GRAINS = 48
 const MAX_GRAIN_PERIODS = 0.8
 /** Never stretch a grain's loudness more than this when spacing them wider. */
 const MAX_NORMALIZE = 1.5
+/**
+ * Furthest a grain is spaced below its recording's pitch before it's also slowed down.
+ * A grain is two source periods long; spaced further apart than that they leave gaps:
+ * at idle (~840 rpm) the V8 bank (lowest recording ~1840 rpm) was near-silent 34% of
+ * the time, a choppy, broken idle. Past this ratio the grain plays slower (and darker,
+ * as a real idle is), so the grains still overlap.
+ */
+const MAX_SPACING = 1.3
 
 export class GranularEngine {
   private readonly pcm: Float32Array
@@ -67,6 +75,8 @@ export class GranularEngine {
   private readonly gLen = new Float64Array(MAX_GRAINS)
   private readonly gAge = new Float64Array(MAX_GRAINS)
   private readonly gGain = new Float32Array(MAX_GRAINS)
+  /** Playback rate through the source, 1 = its own speed (below 1 only far below the recording). */
+  private readonly gRate = new Float64Array(MAX_GRAINS)
   private readonly gLive = new Uint8Array(MAX_GRAINS)
   private untilNext = 0
 
@@ -103,7 +113,7 @@ export class GranularEngine {
           this.gLive[g] = 0
           continue
         }
-        const pos = this.gSrc[g] + age * this.step
+        const pos = this.gSrc[g] + age * this.step * this.gRate[g]
         const i = pos | 0
         const frac = pos - i
         const s = pcm[i] + (pcm[i + 1] - pcm[i]) * frac
@@ -151,11 +161,13 @@ export class GranularEngine {
     const before = marks[c] - marks[c - 1]
     const after = marks[c + 1] - marks[c]
     const srcPeriodOut = (before + after) / 2 / this.step
+    // Far below the recording, slow the grain down so it still spans MAX_SPACING's overlap.
+    const rate = Math.min(1, (MAX_SPACING * srcPeriodOut) / period)
     // Advance by real time: a target period's worth of the source, never more than a mark.
-    let next = pos + this.dir[li] * Math.min(1, period / srcPeriodOut)
+    let next = pos + this.dir[li] * Math.min(1, (period * rate) / srcPeriodOut)
     if (next >= last) { next = last; this.dir[li] = -1 } else if (next <= 1) { next = 1; this.dir[li] = 1 }
     this.cursor[li] = last <= 1 ? 1 : next
-    const lenOut = 2 * Math.min(srcPeriodOut, MAX_GRAIN_PERIODS * period)
+    const lenOut = (2 * Math.min(srcPeriodOut, MAX_GRAIN_PERIODS * period)) / rate
     // Hann grains at hop = period sum to (len / period) / 2; scale that back to 1.
     const normalize = Math.min(MAX_NORMALIZE, period / (lenOut / 2))
 
@@ -169,8 +181,9 @@ export class GranularEngine {
     this.gLive[g] = 1
     this.gAge[g] = 0
     this.gLen[g] = lenOut
-    this.gSrc[g] = layer.start + marks[c] - (lenOut / 2) * this.step
+    this.gSrc[g] = layer.start + marks[c] - (lenOut / 2) * this.step * rate
     this.gGain[g] = gain * normalize
+    this.gRate[g] = rate
   }
 
   /** Grains currently sounding (for tests and debugging). */
