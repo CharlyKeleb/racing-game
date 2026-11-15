@@ -1,8 +1,8 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { gameStore } from '../src/stores/gameStore'
 import { buildStats, carClass, DEFAULT_BUILD, performanceRank } from '../src/vehicles/CarBuild'
-import { getCar, selectableCars, stepCar } from '../src/vehicles/carRegistry'
+import { getCar, rivalModelUrl, selectableCars, stepCar } from '../src/vehicles/carRegistry'
 
 describe('car picker', () => {
   it('offers only cars with a model, and steps through them wrapping around', () => {
@@ -61,6 +61,21 @@ describe('car card specs', () => {
       expect(car.specs.weightKg).toBe(cfg.massKg)
       const drivenFront = cfg.wheels.some((w: { id: string; driven: boolean }) => w.id.startsWith('F') && w.driven)
       expect(car.specs.drivetrain).toBe(drivenFront ? 'AWD' : 'RWD')
+    }
+  })
+})
+
+describe('rival models', () => {
+  it('loads the rival LOD on Low and the Low model elsewhere', () => {
+    const car = getCar('bmw')
+    expect(rivalModelUrl(car, 'low')).toBe('/models/cars/bmw/bmw_rival.glb')
+    expect(rivalModelUrl(car, 'medium')).toBe(car.modelUrlLow)
+    expect(rivalModelUrl({ ...car, modelUrlRival: undefined }, 'low')).toBe(car.modelUrlLow)
+  })
+  it('ships a rival LOD for every selectable car with a Low model', () => {
+    for (const car of selectableCars().filter(c => c.modelUrlLow)) {
+      expect(car.modelUrlRival, car.id).toBeDefined()
+      expect(existsSync(`public${car.modelUrlRival}`), car.id).toBe(true)
     }
   })
 })

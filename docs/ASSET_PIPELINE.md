@@ -107,6 +107,23 @@ Wheel mounts sit at axle height plus `restLength` (0.32 m). Then add the car to
 `src/vehicles/carRegistry.ts` with its `firingPerRev`, its `stats`, and
 `selectable: true`, so it appears in the garage's ‹ › car picker.
 
+### Rival LOD
+
+AI rivals on the Low preset load `<id>_rival.glb`, so a grid of 8 still fits a
+phone's frame. Build it from the Low model (all cars, or the ids you pass):
+
+```bash
+node scripts/cars/build-rival-lod.mjs [id ...]
+```
+
+It keeps the contract nodes, the paint (a texture livery keeps its texture and
+UVs) and the lamp materials, bakes every other body material into one
+vertex-coloured `trim`, see-through parts into one `glass`, each wheel into one
+`wheel`, then decimates: about 9 draw calls and 6–14k triangles a car. Add the
+file to the car's row as `modelUrlRival`. Rivals never use physical
+`transmission` glass (`cheapForRivals` in `RivalPaint.ts`): one transmissive
+mesh makes three.js draw the whole opaque scene a second time.
+
 ## Track contract
 
 Tracks don't need hand-authored names: `scripts/track/build-track.mjs`

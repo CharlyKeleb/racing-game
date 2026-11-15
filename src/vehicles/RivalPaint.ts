@@ -25,6 +25,32 @@ export function paintKind(name: string, carId: string): 'plain' | 'livery' | nul
  * else is a plain clone.
  */
 export function rivalMaterial(source: THREE.Material, carId: string, colour: number): THREE.Material {
+  return cheapForRivals(paintedCopy(source, carId, colour))
+}
+
+/**
+ * Rivals' glass is see-through blending, not physical transmission. One
+ * transmissive mesh anywhere makes three.js draw every opaque object (the whole
+ * track) a second time into a transmission buffer, and a double-sided
+ * transparent mesh is drawn twice (back faces, then front). On rivals neither
+ * shows, so: tinted alpha glass, one pass.
+ */
+export function cheapForRivals(material: THREE.Material): THREE.Material {
+  if (material instanceof THREE.MeshPhysicalMaterial && material.transmission > 0) {
+    // Glass that let ~all light through reads as a light tint, never invisible.
+    const opacity = THREE.MathUtils.clamp(1 - material.transmission * 0.7, 0.25, material.opacity)
+    material.transmission = 0
+    material.transmissionMap = null
+    material.thickness = 0
+    material.transparent = true
+    material.opacity = opacity
+    material.depthWrite = false
+  }
+  if (material.transparent) material.forceSinglePass = true
+  return material
+}
+
+function paintedCopy(source: THREE.Material, carId: string, colour: number): THREE.Material {
   const kind = source instanceof THREE.MeshStandardMaterial ? paintKind(source.name, carId) : null
   if (!kind) {
     const own = source.clone()
