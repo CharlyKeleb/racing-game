@@ -52,8 +52,16 @@ export class GranularEngine {
   private readonly outRate: number
   /** Source samples per output sample (bank rate / context rate). */
   private readonly step: number
-  /** Next pitch-mark index per layer; grains walk through each segment in order. */
-  private readonly cursor: Int32Array
+  /**
+   * Where each layer's grains are read from, in pitch marks (fractional), and which way it walks.
+   * It moves through the recording at the recording's own pace, whatever the target rpm, and
+   * bounces at the ends: stepping one mark per grain ran a 0.3 s segment through in under 0.1 s
+   * at 3-4x its rpm and jumped back to its start, a ~12 Hz flutter with a click on every jump.
+   */
+  private readonly cursor: Float64Array
+  private readonly dir: Int8Array
+  /** Small deterministic random walk so a bounce never repeats exactly. */
+  private seed = 0x9e3779b9
   // Grain pool, struct-of-arrays so render() never allocates.
   private readonly gSrc = new Float64Array(MAX_GRAINS)
   private readonly gLen = new Float64Array(MAX_GRAINS)
@@ -68,7 +76,8 @@ export class GranularEngine {
     this.firingPerRev = bank.firingPerRev
     this.outRate = outRate
     this.step = bank.sampleRate / outRate
-    this.cursor = new Int32Array(this.layers.length).fill(1)
+    this.cursor = new Float64Array(this.layers.length).fill(1)
+    this.dir = new Int8Array(this.layers.length).fill(1)
   }
 
   /**
@@ -129,16 +138,23 @@ export class GranularEngine {
     if (gain < 0.01) return
     const layer = this.layers[li]
     const marks = layer.marks
-    let c = this.cursor[li]
-    if (c < 1 || c >= marks.length - 1) c = 1
-    this.cursor[li] = c + 1 >= marks.length - 1 ? 1 : c + 1
-
+    const last = marks.length - 2
+    let pos = this.cursor[li]
+    if (!(pos >= 1 && pos <= last)) pos = 1
+    // One mark of jitter either way breaks the bounce's period.
+    this.seed = (Math.imul(this.seed, 1664525) + 1013904223) >>> 0
+    const jitter = this.seed / 4294967296 < 0.5 ? 0 : (this.seed & 1 ? 1 : -1)
+    const c = Math.max(1, Math.min(last, Math.round(pos) + jitter))
     // Two source periods around the mark, played at the source's own speed.
     // Pitching far up, the grain is cut to a few target periods: otherwise its
     // own ringing outweighs the new firing rate and the pitch goes vague.
     const before = marks[c] - marks[c - 1]
     const after = marks[c + 1] - marks[c]
     const srcPeriodOut = (before + after) / 2 / this.step
+    // Advance by real time: a target period's worth of the source, never more than a mark.
+    let next = pos + this.dir[li] * Math.min(1, period / srcPeriodOut)
+    if (next >= last) { next = last; this.dir[li] = -1 } else if (next <= 1) { next = 1; this.dir[li] = 1 }
+    this.cursor[li] = last <= 1 ? 1 : next
     const lenOut = 2 * Math.min(srcPeriodOut, MAX_GRAIN_PERIODS * period)
     // Hann grains at hop = period sum to (len / period) / 2; scale that back to 1.
     const normalize = Math.min(MAX_NORMALIZE, period / (lenOut / 2))
