@@ -4,6 +4,8 @@ import { ImpactSound } from './ImpactSound'
 import { BackfireSound } from './BackfireSound'
 import type { CarNoiseProfile, TyreBrakeLevels } from './TyreBrakeModel'
 import { DEFAULT_VOICE, type EngineVoice } from './EngineVoice'
+import { CarSoundModel, type CarSoundInput } from './CarSoundModel'
+import { makeNoise, turboLift } from './TurboSounds'
 
 /** Speed of sound, m/s, for the doppler shift. */
 const SOUND_SPEED = 343
@@ -18,6 +20,8 @@ const ROLLOFF = 0.9
  * 13 dB under, so 30 m back it was gone).
  */
 const ENGINE_LEVEL = 3
+/** Its turbo's blow-off or flutter, level with yours alongside (yours runs through CarSound's make-up). */
+const TURBO_LEVEL = 2.5
 
 export interface RivalSoundState {
   /** Engine rpm and pedal, 0..1. */
@@ -69,6 +73,11 @@ export class OpponentAudio {
   private readonly windGain: GainNode
   private doppler = 1
   private lastTime = 0
+  /** Spool and lifts, as for your car: a rival Skyline flutters when it lifts too. */
+  private readonly model = new CarSoundModel()
+  private readonly modelIn: CarSoundInput = { rpm: 0, throttle: 0, gear: 1, nitroActive: false, nitroPerfect: false }
+  private readonly turboNoise: AudioBuffer
+  private readonly turboOut: GainNode
 
   constructor(ctx: AudioContext, destination: AudioNode, firing: number, noise: CarNoiseProfile, voice: EngineVoice = DEFAULT_VOICE) {
     this.ctx = ctx
@@ -114,6 +123,11 @@ export class OpponentAudio {
     this.tyreAir.type = 'lowpass'
     this.tyreAir.frequency.value = 12000
     this.tyres.output.connect(this.tyreAir).connect(this.panner)
+
+    // Turbo: through the tyres' air filter (a breathy sound, dulled by distance more gently).
+    this.turboNoise = makeNoise(ctx)
+    this.turboOut = ctx.createGain()
+    this.turboOut.connect(this.tyreAir)
 
     this.impacts = new ImpactSound(ctx, this.panner)
     this.backfires = new BackfireSound(ctx, this.panner)
@@ -173,6 +187,11 @@ export class OpponentAudio {
     this.lopeDepth.gain.setTargetAtTime(lope, t, 0.08)
     this.lope.gain.setTargetAtTime(1 - lope, t, 0.08)
 
+    this.modelIn.rpm = s.rpm
+    this.modelIn.throttle = s.active ? s.throttle : 0
+    this.model.update(this.modelIn, dt)
+    if (s.active && this.model.blowOff > 0) turboLift(this.ctx, this.turboNoise, this.turboOut, t, this.model.blowOff, this.voice, TURBO_LEVEL)
+
     this.tyres.update(s.active ? s.tyres : SILENT, dt, this.doppler)
     // Wind: a rush only when a fast car is right there (it falls off much
     // faster than the engine), so it marks the moment it goes by.
@@ -198,6 +217,7 @@ export class OpponentAudio {
     this.tyreAir.disconnect()
     this.engineGain.disconnect()
     this.windGain.disconnect()
+    this.turboOut.disconnect()
     this.panner.disconnect()
   }
 }

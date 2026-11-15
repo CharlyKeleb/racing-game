@@ -1,5 +1,6 @@
 import { CarSoundModel, type CarSoundInput } from './CarSoundModel'
 import { DEFAULT_VOICE, type EngineVoice } from './EngineVoice'
+import { makeNoise, turboLift } from './TurboSounds'
 
 export interface CarSoundState extends CarSoundInput {
   /** Nitro intensity, 0..~1.6. */
@@ -17,6 +18,8 @@ const RUMBLE_HZ = 40
 const LOW_SHELF_DB = -5
 const BODY_DB = 3
 const PRESENCE_DB = 8
+/** Every lift-off recording is levelled to this RMS before the car's own `liftOff`. */
+const LIFT_OFF_RMS = 0.3
 
 /**
  * The car's sound as a Web Audio graph on any BaseAudioContext (live or
@@ -78,6 +81,7 @@ export class CarSound {
   /** Engine held silent until this time (ignition cranking). */
   private startAt = 0
   private liftOffClip: AudioBuffer | null = null
+  private liftOffNorm = 1
 
   constructor(ctx: BaseAudioContext, out: AudioNode) {
     this.ctx = ctx
@@ -204,9 +208,10 @@ export class CarSound {
     this.firingPerRev = n
   }
 
-  /** The car's lift-off burble recording (optional). */
+  /** The car's lift-off burble recording (optional). Levelled to LIFT_OFF_RMS: the recordings differ by ~6 dB. */
   setLiftOffClip(buffer: AudioBuffer | null): void {
     this.liftOffClip = buffer
+    this.liftOffNorm = buffer ? clipNorm(buffer) : 1
   }
 
   /** Engine rpm as heard: rev inertia and shift dynamics applied (see CarSoundModel). */
@@ -245,10 +250,13 @@ export class CarSound {
     const level = running * ((0.45 + 0.55 * rpmT) * (1 - 0.5 * m.cut) + 0.12 * m.blip)
     set(this.engineIn.gain, level, t, running ? 0.015 : 0.01)
     set(this.intakeFilter.frequency, 2500 + on * 7000 + rpmT * 4000, t, 0.02)
-    set(this.intakeGain.gain, 0.7 + 0.35 * on, t, 0.025)
-    set(this.drive.gain, (0.45 + 1.1 * on * (0.4 + 0.6 * rpmT)) * v.drive, t, 0.02)
+    // The overrun (m.crackle: high on a lift, fading over ~1 s) holds the note up: lifting
+    // used to drop the car ~4.5 dB at once (measured), so the burble and crackle sat in a hole.
+    const overrun = m.crackle * (1 - on)
+    set(this.intakeGain.gain, 0.7 + 0.35 * on + 0.3 * overrun, t, 0.025)
+    set(this.drive.gain, (0.45 + 1.1 * on * (0.4 + 0.6 * rpmT) + 0.7 * overrun) * v.drive, t, 0.02)
     set(this.raspEq.gain, on * (1.5 + 3 * rpmT) * (v.raspDb / 4.5), t, 0.025)
-    set(this.exhaustGain.gain, 0.1 + 0.22 * on + 0.08 * rpmT, t, 0.025)
+    set(this.exhaustGain.gain, 0.1 + 0.22 * on + 0.08 * rpmT + 0.22 * overrun, t, 0.025)
 
     const halfOrder = (Math.max(m.rpm, 600) / 60) * (this.firingPerRev / 2) // the engine's half order
     set(this.sub.frequency, halfOrder, t, 0.03)
@@ -270,15 +278,10 @@ export class CarSound {
 
     set(this.nitroRushGain.gain, 0.07 * Math.min(s.nitro, 1.6), t, 0.08)
 
-    if (m.blowOff > 0 && v.turbo > 0) {
-      const flutter = v.flutter ?? 0
-      const strength = m.blowOff * Math.min(v.turbo, 1.6)
-      if (flutter > 0) this.flutterAt(t, strength * flutter)
-      if (flutter < 1) this.blowOffAt(t, strength * (1 - 0.8 * flutter))
-    }
+    turboLift(this.ctx, this.noise, this.bus, t, m.blowOff, v)
     if (m.shiftUp) this.upshiftAt(t, rpmT)
     if (m.shiftDown) this.downshiftAt(t, rpmT)
-    if (m.liftOff && this.liftOffClip) this.playClip(this.liftOffClip, (0.3 + 0.3 * rpmT) * (v.liftOff ?? 1), t, v.pitch)
+    if (m.liftOff && this.liftOffClip) this.playClip(this.liftOffClip, (0.6 + 0.5 * rpmT) * this.liftOffNorm * (v.liftOff ?? 1), t, v.pitch)
     if (m.nitroStart) this.nitroWhooshAt(t)
     if (m.perfectStart) this.perfectBoomAt(t)
     this.scheduleCrackles(t, m.crackle)
@@ -310,57 +313,10 @@ export class CarSound {
     const env = gain(ctx, 0)
     const len = (big ? 0.06 : 0.018 + Math.random() * 0.02) / Math.sqrt(p.pitch)
     env.gain.setValueAtTime(0, when)
-    env.gain.linearRampToValueAtTime(level * (big ? 0.9 * p.bang : 0.6 * p.crackle), when + 0.002)
+    env.gain.linearRampToValueAtTime(level * (big ? 1.3 * p.bang : 0.9 * p.crackle), when + 0.002)
     env.gain.exponentialRampToValueAtTime(0.0001, when + len)
     src.connect(bp).connect(env).connect(this.bus)
     src.start(when, Math.random() * 1.5, len + 0.01)
-  }
-
-  /** Turbo blow-off valve: a bright "pssh" that fades over ~0.35 s. */
-  private blowOffAt(when: number, strength: number): void {
-    const ctx = this.ctx
-    const src = ctx.createBufferSource()
-    src.buffer = this.noise
-    const hp = biquad(ctx, 'highpass', 1800, 0.7, 0)
-    const bp = biquad(ctx, 'bandpass', 4200, 0.9, 0)
-    bp.frequency.setValueAtTime(4200, when)
-    bp.frequency.exponentialRampToValueAtTime(2200, when + 0.35)
-    const env = gain(ctx, 0)
-    env.gain.setValueAtTime(0, when)
-    env.gain.linearRampToValueAtTime(0.28 * strength, when + 0.012)
-    env.gain.exponentialRampToValueAtTime(0.0001, when + 0.38)
-    src.connect(hp).connect(bp).connect(env).connect(this.bus)
-    src.start(when, Math.random(), 0.4)
-  }
-
-  /**
-   * Compressor surge ("stuuu-stuuu-stuuu"): with nowhere to vent, the boost chatters back
-   * through the compressor in deep, breathy surges, about 11 a second slowing to 7 as the
-   * pressure drains over a second or so (measured off an RB26's). More boost, longer and louder.
-   */
-  private flutterAt(when: number, strength: number): void {
-    const ctx = this.ctx
-    const s = Math.min(strength, 1.6)
-    const span = 0.7 + 0.6 * Math.min(s, 1)
-    let at = when + 0.02
-    let period = 0.085
-    for (let i = 0; at < when + span; i++) {
-      const fade = Math.max(0, 1 - (at - when) / span) ** 0.8
-      const src = ctx.createBufferSource()
-      src.buffer = this.noise
-      // Each surge: a deep rush of air, its body around 150 Hz, its breath around 650 Hz.
-      const bp = biquad(ctx, 'bandpass', (680 - 18 * i) * (0.92 + Math.random() * 0.16), 1.1, 0)
-      const body = biquad(ctx, 'lowshelf', 180, 0.7, 9)
-      const env = gain(ctx, 0)
-      const len = period * 0.8
-      env.gain.setValueAtTime(0, at)
-      env.gain.linearRampToValueAtTime(0.75 * s * fade, at + 0.012)
-      env.gain.exponentialRampToValueAtTime(0.0001, at + len)
-      src.connect(bp).connect(body).connect(env).connect(this.bus)
-      src.start(at, Math.random() * 1.5, len + 0.01)
-      at += period
-      period *= 1.06
-    }
   }
 
   /** Upshift: the model dips the note for the ignition cut; the pipes give one crack. */
@@ -466,9 +422,12 @@ function softClip(k: number): Float32Array<ArrayBuffer> {
   return curve
 }
 
-function makeNoise(ctx: BaseAudioContext): AudioBuffer {
-  const buffer = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate)
+
+/** Gain that brings a clip's RMS to LIFT_OFF_RMS, kept within ±12 dB. */
+function clipNorm(buffer: AudioBuffer): number {
   const data = buffer.getChannelData(0)
-  for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1
-  return buffer
+  let sum = 0
+  for (let i = 0; i < data.length; i++) sum += data[i] * data[i]
+  const rms = Math.sqrt(sum / Math.max(1, data.length))
+  return rms > 0 ? Math.min(4, Math.max(0.25, LIFT_OFF_RMS / rms)) : 1
 }
